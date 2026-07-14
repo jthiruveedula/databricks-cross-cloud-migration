@@ -1,0 +1,98 @@
+---
+title: 'Decision framework'
+layout: ../../layouts/Layout.astro
+description: 'A structured approach to choosing migration strategy, sequencing, and cutover model.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+
+# Decision framework
+
+Use this framework to move from a business goal to a concrete migration approach. Each decision constrains the next, so do not skip steps.
+
+## Step 1: Anchor on the business driver
+
+| Driver | Implication |
+|--------|-------------|
+| Cloud standardization | Full cross-cloud migration; identity reset required. |
+| M&A | Likely multi-tenant consolidation; data sovereignty may dictate region. |
+| Regulatory isolation | Region and network boundaries dominate; blue-green recommended. |
+| Cost optimization | Same-cloud move or storage-tier change; egress math is critical. |
+| Regional expansion | Same-cloud new region or cross-cloud; data copy is unavoidable. |
+| Security posture | Identity, networking, and encryption are first-class workstreams. |
+
+## Step 2: Determine data gravity
+
+Estimate data size, mutation rate, and downstream dependencies. Large or rapidly changing data sets favor incremental sync and blue-green cutover. Static or small data sets can use lift-and-shift within a single maintenance window.
+
+## Step 3: Choose the migration archetype
+
+See [Migration archetypes](/overview/migration-archetypes). The most common enterprise choice is **workspace + metastore** with a phased wave plan.
+
+## Step 4: Decide on Unity Catalog strategy
+
+<Callout variant="tip" title="UC-first">
+  If the source is not on Unity Catalog, combine the migration with UC adoption. Do not migrate into a legacy Hive metastore on the target.
+</Callout>
+
+Choices:
+
+- **Federate first:** Register source storage as a foreign catalog, then upgrade tables in place.
+- **Clone and upgrade:** Deep clone Delta tables into a target-managed catalog, preserving history.
+- **Rebuild:** Recreate schemas and load data with CTAS / COPY INTO for non-Delta sources.
+
+## Step 5: Define cutover model
+
+| Model | Downtime | Risk | Cost | Use case |
+|-------|----------|------|------|----------|
+| Big-bang | Hours to days | High | Low | Small estate, tolerant users |
+| Incremental | Minimal | Medium | Medium | Large tables, daily sync |
+| Blue-green | Near-zero | Low | High | Mission-critical workloads |
+
+## Validation
+
+- Capture each decision in a decision register with owner, date, and assumptions.
+- Revisit the framework after discovery if the estate is larger or more complex than expected.
+
+## Rollback
+
+The framework itself has no rollback, but every decision should have a contingency. For example, if blue-green cost is rejected, have an incremental fallback ready.
+
+## Automation opportunity
+
+Store the decision register and wave plan in a version-controlled YAML file. Example:
+
+<CodeBlock language="yaml" filename="migration-config.yaml" code={`migration:
+  source:
+    cloud: azure
+    account_id: <SOURCE_ACCOUNT_ID>
+    region: westus2
+    metastore_id: <SOURCE_METASTORE_ID>
+  target:
+    cloud: aws
+    account_id: <TARGET_ACCOUNT_ID>
+    region: us-west-2
+    metastore_id: <TARGET_METASTORE_ID>
+  archetype: workspace_plus_metastore
+  cutover: blue_green
+  waves:
+    - id: wave-1
+      name: Pilot workloads
+      criteria: non-production, no PII, <1 TB
+    - id: wave-2
+      name: Analytics workloads
+      criteria: SQL dashboards and batch jobs
+    - id: wave-3
+      name: Critical pipelines
+      criteria: requires dual-run sign-off
+}`} />
+
+<Checklist title="Decision checkpoints" items={[
+  { id: 'driver', label: 'Business driver documented and approved' },
+  { id: 'data-gravity', label: 'Data size and change rate estimated' },
+  { id: 'archetype', label: 'Migration archetype selected and signed off' },
+  { id: 'uc-strategy', label: 'Unity Catalog strategy chosen' },
+  { id: 'cutover', label: 'Cutover model agreed with business' },
+]} />

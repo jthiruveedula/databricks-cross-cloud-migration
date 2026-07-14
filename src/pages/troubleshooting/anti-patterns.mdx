@@ -1,0 +1,51 @@
+---
+title: 'Anti-patterns'
+layout: ../../layouts/Layout.astro
+description: 'Avoid these common mistakes during Databricks cross-cloud migration.'
+---
+
+import Callout from '../../components/Callout.tsx';
+
+# Anti-patterns
+
+Avoid these patterns. They create hidden debt, increase risk, and extend hypercare.
+
+## Lifting legacy Hive metastore
+
+Re-creating a legacy Hive metastore in the target wastes the migration opportunity. It perpetuates workspace-local governance, DBFS dependencies, and unsupported access modes.
+
+**Instead:** Adopt Unity Catalog as part of the migration.
+
+## Copying data without validation
+
+Moving petabytes without reconciliation is a gamble. Hidden schema drift, partition differences, or permission gaps only surface after cutover.
+
+**Instead:** Reconcile row counts, checksums, partitions, and permissions for every table.
+
+## Hardcoding paths in notebooks
+
+`dbfs:/mnt/...` or cloud-specific paths embedded in notebooks require manual fixes and are easy to miss.
+
+**Instead:** Use configuration tables, environment variables, or volume references.
+
+## Migrating with personal access tokens
+
+PATs tied to users do not survive identity changes and are difficult to rotate.
+
+**Instead:** Use OAuth service principals and managed identities for automation.
+
+## Skipping the pilot
+
+Jumping straight to production migration leaves tooling and process gaps undiscovered until it is too late.
+
+**Instead:** Run a pilot wave, validate the full runbook, and iterate.
+
+## Partial cutover without dual-run
+
+Moving some users to target while others remain on source creates split-brain and reconciliation nightmares.
+
+**Instead:** Use a clear freeze window or blue-green cutover with a single system of record.
+
+<Callout variant="warning" title="Document every exception">
+  If an anti-pattern is unavoidable, document the reason, risk owner, and remediation date. Do not let exceptions become permanent.
+</Callout>

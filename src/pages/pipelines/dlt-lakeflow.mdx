@@ -1,0 +1,75 @@
+---
+title: 'DLT and Lakeflow'
+layout: ../../layouts/Layout.astro
+description: 'Migrate Delta Live Tables and Lakeflow pipelines across clouds.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# DLT and Lakeflow
+
+Delta Live Tables (DLT) and Lakeflow pipelines are declarative streaming and batch pipelines. They must be recreated in the target workspace because pipelines are bound to the workspace, storage, and metastore.
+
+## Migration scope
+
+- Pipeline definitions (JSON or Python notebooks).
+- Target schemas, catalogs, and storage locations.
+- Compute configuration and photon settings.
+- Data quality expectations and notifications.
+- Permissions and ownership.
+
+## Recreating a pipeline
+
+<CodeBlock language="bash" code={`# Export pipeline definition
+databricks pipelines get --pipeline-id <PIPELINE_ID> --output json > pipeline.json
+
+# Edit target_catalog, target_schema, storage, cluster, and expectations
+# Then create in target
+databricks pipelines create --json-file pipeline-target.json}`} />
+
+## Source and target differences
+
+| Consideration | Action |
+|---------------|--------|
+| Catalog names | Update to target catalog |
+| Storage path | Use target external location |
+| Cluster policy | Use UC-compatible cluster policy |
+| Photon | Re-evaluate based on target pricing |
+| Continuous vs. triggered | Match source unless cost drives a change |
+
+## Data catch-up
+
+For pipelines with streaming sources:
+
+- Identify checkpoint locations; decide whether to copy checkpoints or start fresh.
+- Starting fresh may reprocess historical data; ensure idempotency.
+- If copying checkpoints, update paths to target storage.
+
+<Callout variant="warning" title="Checkpoints are not portable">
+  DLT checkpoints contain absolute paths and offsets. Recreating them in the target without validation can cause data duplication or loss.
+</Callout>
+
+## Validation
+
+- Run the target pipeline and compare output row counts and quality metrics.
+- Verify expectations and alerts.
+- Measure latency and cost against source.
+
+## Rollback
+
+If the target pipeline produces incorrect output, stop it, fix the definition, and re-run. Keep the source pipeline available until validated.
+
+## Automation opportunity
+
+- Store pipeline definitions as code and deploy via CI/CD.
+- Parameterize catalog and storage so the same code targets source or target.
+
+<Checklist title="DLT and Lakeflow" items={[
+  { id: 'defs', label: 'Export all pipeline definitions' },
+  { id: 'rewrite', label: 'Rewrite catalog, storage, and cluster references' },
+  { id: 'checkpoints', label: 'Plan checkpoint strategy' },
+  { id: 'create', label: 'Create pipelines in target' },
+  { id: 'run', label: 'Run and validate pipeline output' },
+]} />

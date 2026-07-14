@@ -1,0 +1,122 @@
+---
+title: 'Terraform patterns'
+layout: ../../layouts/Layout.astro
+description: 'Reusable Terraform modules for target Databricks foundations.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+
+# Terraform patterns
+
+Use infrastructure as code to create repeatable target foundations. These patterns are cloud-agnostic in structure but use cloud-specific resources.
+
+## AWS target foundation
+
+<CodeBlock language="hcl" filename="aws-target.tf" code={`terraform {
+  required_providers {
+    databricks = {
+      source  = "databricks/databricks"
+      version = ">= 1.36"
+    }
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "databricks" {
+  alias    = "mws"
+  host     = "https://accounts.cloud.databricks.com"
+  account_id = var.databricks_account_id
+  username = var.databricks_account_user
+  password = var.databricks_account_password
+}
+
+resource "databricks_mws_vpc_endpoint" "backend" {
+  provider                   = databricks.mws
+  account_id                 = var.databricks_account_id
+  aws_vpc_endpoint_id        = aws_vpc_endpoint.backend.id
+  vpc_endpoint_name          = "\${var.prefix}-backend"
+  region                     = var.region
+  depends_on                 = [aws_vpc_endpoint.backend]
+}
+
+resource "databricks_mws_storage_credentials" "uc" {
+  provider     = databricks.mws
+  account_id   = var.databricks_account_id
+  credentials_name = "\${var.prefix}-uc-storage"
+  aws_iam_role {
+    role_arn = aws_iam_role.uc_storage.arn
+  }
+}
+
+resource "databricks_metastore" "this" {
+  provider      = databricks.mws
+  name          = "\${var.prefix}-metastore"
+  storage_root  = "s3://\${aws_s3_bucket.metastore.id}/metastore"
+  region        = var.region
+  force_destroy = true
+}}`} />
+
+## Azure target foundation
+
+<CodeBlock language="hcl" filename="azure-target.tf" code={`resource "azurerm_databricks_access_connector" "uc" {
+  name                = "\${var.prefix}-uc-connector"
+  resource_group_name = azurerm_resource_group.this.name
+  location            = var.region
+  identity {
+    type = "SystemAssigned"
+  }
+}
+
+resource "azurerm_role_assignment" "uc_storage" {
+  scope                = azurerm_storage_account.uc.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_databricks_access_connector.uc.identity[0].principal_id
+}
+
+resource "databricks_metastore" "this" {
+  name         = "\${var.prefix}-metastore"
+  storage_root = "abfss://\${azurerm_storage_container.uc.name}@\${azurerm_storage_account.uc.name}.dfs.core.windows.net/metastore"
+  region       = var.region
+}
+
+resource "databricks_metastore_data_access" "uc" {
+  metastore_id = databricks_metastore.this.id
+  name         = "\${var.prefix}-uc-access"
+  azure_managed_identity {
+    access_connector_id = azurerm_databricks_access_connector.uc.id
+  }
+  is_default = true
+}}`} />
+
+## GCP target foundation
+
+<CodeBlock language="hcl" filename="gcp-target.tf" code={`resource "google_service_account" "uc" {
+  account_id   = "\${var.prefix}-uc-sa"
+  display_name = "Databricks UC Storage"
+}
+
+resource "google_storage_bucket_iam_member" "uc" {
+  bucket = google_storage_bucket.uc.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:\${google_service_account.uc.email}"
+}
+
+resource "google_service_account_iam_member" "databricks_token_creator" {
+  service_account_id = google_service_account.uc.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:\${var.databricks_google_service_account}"
+}
+
+resource "databricks_metastore" "this" {
+  name         = "\${var.prefix}-metastore"
+  storage_root = "gs://\${google_storage_bucket.uc.name}/metastore"
+  region       = var.region
+}}`} />
+
+<Callout variant="tip" title="Modularize">
+  Keep cloud-specific modules separate and use a common variables interface. This makes multi-cloud migrations easier to maintain and review.
+</Callout>

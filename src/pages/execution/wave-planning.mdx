@@ -1,0 +1,101 @@
+---
+title: 'Wave planning'
+layout: ../../layouts/Layout.astro
+description: 'Organize migration into phased waves with entry and exit criteria.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Accordion from '../../components/Accordion.tsx';
+
+# Wave planning
+
+Divide the migration into waves that move related workloads together. Waves reduce blast radius, let teams learn, and make rollback simpler.
+
+## Wave design principles
+
+- Group by business domain, not by cloud primitive.
+- Keep dependencies together: a job and its input tables should move in the same wave.
+- Start with low-risk, non-production workloads.
+- Reserve the final wave for the most critical or tightly coupled systems.
+
+## Sample wave structure
+
+<Accordion items={[
+  {
+    title: 'Wave 0: Pilot',
+    content: 'One or two non-production workloads. Validate tooling, IAM, networking, and runbook timing.'
+  },
+  {
+    title: 'Wave 1: Analytics and BI',
+    content: 'Read-only dashboards and batch SQL. Low risk, high visibility. Builds confidence.'
+  },
+  {
+    title: 'Wave 2: Batch pipelines',
+    content: 'Databricks Workflows and DLT jobs. Requires data validation and SLA sign-off.'
+  },
+  {
+    title: 'Wave 3: Streaming and ML',
+    content: 'Real-time pipelines, model serving, and feature stores. Highest operational risk.'
+  },
+  {
+    title: 'Wave 4: Decommission',
+    content: 'Retire source workspaces, metastores, and infrastructure after hypercare.'
+  }
+]} />
+
+## Wave scoring matrix
+
+| Criterion | Weight | Notes |
+|-----------|--------|-------|
+| Business criticality | High | Critical workloads go late or use blue-green |
+| Data size | Medium | Large data drives longer sync windows |
+| Dependency count | High | High-dependency workloads need careful sequencing |
+| Risk tolerance | High | Low-tolerance workloads need more validation |
+| Owner readiness | Medium | Teams must be available during cutover |
+
+## Wave plan template
+
+<CodeBlock language="yaml" filename="wave-plan.yaml" code={`waves:
+  - id: wave-0
+    name: Pilot
+    workspaces:
+      - workspace_id: <WS_ID>
+        target_workspace_id: <TWS_ID>
+    catalogs:
+      - pilot_analytics
+    criteria:
+      entry:
+        - discovery complete
+        - target foundation ready
+      exit:
+        - smoke tests pass
+        - business sign-off received
+    rollback:
+      - re-enable source jobs
+      - redirect users to source workspace
+}`} />
+
+## Validation
+
+- Each wave must have clear entry and exit criteria.
+- Dependencies across waves must be documented and signed off.
+- A wave should not start until the previous wave exits successfully.
+
+## Rollback
+
+Rollback is performed per wave. If a wave fails, revert the workloads in that wave and keep earlier waves in the target.
+
+## Automation opportunity
+
+- Generate wave manifests from dependency graphs.
+- Use orchestration tools to trigger validation and cutover steps per wave.
+
+<Checklist title="Wave planning" items={[
+  { id: 'domains', label: 'Group workloads by domain and dependency' },
+  { id: 'criteria', label: 'Define entry/exit criteria per wave' },
+  { id: 'owners', label: 'Assign wave owners and support roster' },
+  { id: 'schedule', label: 'Build timeline with maintenance windows' },
+  { id: 'rollback', label: 'Document per-wave rollback steps' },
+]} />

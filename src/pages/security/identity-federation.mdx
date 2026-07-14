@@ -1,0 +1,62 @@
+---
+title: 'Identity federation'
+layout: ../../layouts/Layout.astro
+description: 'Configure SSO, SCIM, and group provisioning for cross-cloud migration.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Identity federation
+
+Databricks accounts support SSO via SAML 2.0 and OIDC, and user/group provisioning via SCIM. Federation must be reconfigured in the target account because the cloud identity provider changes or is scoped differently.
+
+## SSO configuration
+
+| Source IdP | Target IdP | Notes |
+|------------|------------|-------|
+| Azure AD / Entra ID | Same Entra ID | Easiest if tenant is shared; otherwise reconfigure SAML app |
+| AWS IAM Identity Center | Same IAM IC | Use IAM IC SCIM endpoint for the target account |
+| Google Workspace | Same Workspace | Reconfigure OIDC/SAML app in target account |
+
+<Callout variant="prerequisite" title="Account admin access">
+  Configure federation as the first step in the target account. If you lock yourself out, use the Databricks account recovery process.
+</Callout>
+
+## SCIM provisioning
+
+- Create a new Databricks account-level SCIM application in the target identity provider.
+- Map groups that should be account-level groups. Do not provision workspace-local groups.
+- Use nested groups carefully; not all providers flatten them the same way.
+
+## Workspace-local to account groups
+
+Before migrating, convert workspace-local groups to account-level groups. This ensures grants and workspace attachments work correctly.
+
+- Export workspace-local groups from the source workspace.
+- Create matching account-level groups.
+- Reassign ownership and grants.
+- Remove or archive workspace-local groups after validation.
+
+## Validation
+
+- Test SSO login to the target account with a non-admin user.
+- Verify group membership and account-level permissions.
+- Confirm service principals can authenticate with OAuth tokens.
+
+## Rollback
+
+If federation fails, keep a local account admin account enabled for break-glass access. Reconfigure the SAML/OIDC application and retest.
+
+## Automation opportunity
+
+- Use the Databricks Account SCIM API to create groups and assign users.
+- Store group-to-permission mappings in a configuration file and apply them idempotently.
+
+<Checklist title="Identity federation" items={[
+  { id: 'sso', label: 'Configure target account SSO' },
+  { id: 'scim', label: 'Enable SCIM provisioning for target groups' },
+  { id: 'groups', label: 'Convert workspace-local groups to account-level' },
+  { id: 'sp', label: 'Create target service principals and OAuth credentials' },
+  { id: 'breakglass', label: 'Create break-glass admin account' },
+]} />

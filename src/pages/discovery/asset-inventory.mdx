@@ -1,0 +1,84 @@
+---
+title: 'Asset inventory'
+layout: ../../layouts/Layout.astro
+description: 'Catalog every migratable Databricks asset type and its migration approach.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+
+# Asset inventory
+
+A Databricks estate contains dozens of asset types, each with different portability, migration method, and validation needs. This page provides a master catalog. Domain-specific guides later in the runbook expand on each area.
+
+## Asset catalog
+
+| Asset | Why it matters | Discovery | Export / migrate | Validate |
+|-------|---------------|-----------|------------------|----------|
+| Workspaces | User access point | Accounts API | Recreate in target | Login, API, SCIM |
+| Unity Catalog metastores | Governance boundary | Account API | Create in target region | Attachment, grants |
+| Catalogs / schemas / tables | Data organization | Information schema | DDL export, clone, CTAS | Row counts, schema, partitions |
+| External locations | Storage mapping | `SHOW EXTERNAL LOCATIONS` | Recreate with target storage | Path access, grants |
+| Storage credentials | Cloud identity for UC | Account API | Recreate with target IAM | Test credential |
+| Volumes | Non-tabular data | Information schema | Copy via cloud tools or DBFS | File count, checksum |
+| DBFS root / mounts | Legacy storage | `dbutils.fs.mounts()` | Migrate to volumes / external locations | Path resolution |
+| Notebooks | Code assets | Workspace API / Repos | Export `.dbc` or Git sync | Execute smoke tests |
+| Repos / Git folders | Version control | Workspace API | Re-clone from Git | Sync status |
+| Jobs / Workflows | Orchestration | Jobs API | Export/import JSON or recreate | Run success, SLA |
+| Delta Live Tables | Streaming pipelines | Pipelines API | Recreate pipeline definition | Data output parity |
+| SQL warehouses | Query compute | SQL API | Recreate with matching config | Query latency, concurrency |
+| Clusters | Interactive compute | Clusters API | Recreate with mapped node types | Startup, libraries |
+| Cluster policies | Cost and compliance | Policies API | Recreate | Policy enforcement |
+| Pools | Warm compute | Instance Pools API | Recreate | Pre-warmed nodes |
+| Instance profiles / managed identities / service accounts | Cloud access | Cloud IAM APIs | Map to target IAM model | Functional access tests |
+| Secret scopes | Credentials | Secret scopes API | Migrate to target secret backend | Secret resolution |
+| MLflow experiments | ML lineage | MLflow API | Export/import or re-register | Artifact parity |
+| Model registry | Model governance | MLflow Registry API | Copy models and transitions | Serving validation |
+| Dashboards / queries / alerts | BI layer | Lakeview / SQL API | Export definitions | Visual parity |
+| Permissions / grants | Access control | Information schema / Grants API | Replay grants with mapped principals | Permission tests |
+| Init scripts | Bootstrap logic | DBFS / workspace files | Copy to target storage | Cluster startup |
+| Libraries | Dependencies | Cluster API / DBFS | Reinstall from Maven/PyPI or internal repo | Import checks |
+| Partner integrations | External tools | Admin console | Reconfigure with target endpoints | Integration smoke tests |
+
+## Discovery queries
+
+<CodeBlock language="sql" filename="catalog-discovery.sql" code={`-- Catalogs, schemas, tables, and volumes
+SELECT catalog_name, schema_name, table_name, table_type, data_source_format, storage_location
+FROM system.information_schema.tables
+WHERE table_schema NOT IN ('information_schema');
+
+-- Grants at catalog level
+SELECT grantee, privilege_type, catalog_name
+FROM system.information_schema.catalog_privileges;
+
+-- External locations
+SHOW EXTERNAL LOCATIONS;}`} />
+
+## Pitfalls
+
+- **Hardcoded paths:** Tables, notebooks, and jobs often contain `dbfs:/mnt/...` or cloud-specific paths.
+- **Implicit dependencies:** A job may depend on a cluster policy, an init script, and a secret scope that are owned by different teams.
+- **Stale assets:** Old experiments, deleted tables, and obsolete dashboards still consume grants and storage.
+
+## Validation
+
+- Ensure every asset has a `migration_status`: move, recreate, retire, or defer.
+- Cross-check high-risk assets (secrets, IAM roles) with security before migration.
+
+## Rollback
+
+Asset inventory is read-only. If assets are missed, add them to the next wave or extend discovery.
+
+## Automation opportunity
+
+- Use UCX to scan legacy Hive and DBFS usage.
+- Use the Databricks CLI to export workspace objects and job definitions in bulk.
+
+<Checklist title="Asset inventory" items={[
+  { id: 'tables', label: 'Inventory all catalogs, schemas, tables, and views' },
+  { id: 'grants', label: 'Export grants and ownership for all objects' },
+  { id: 'compute', label: 'Inventory clusters, warehouses, pools, and policies' },
+  { id: 'jobs', label: 'Export all job and pipeline definitions' },
+  { id: 'secrets', label: 'Inventory secret scopes and key references' },
+]} />

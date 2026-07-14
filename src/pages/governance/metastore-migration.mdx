@@ -1,0 +1,121 @@
+---
+title: 'Metastore migration'
+layout: ../../layouts/Layout.astro
+description: 'Move catalogs, schemas, tables, views, functions, and grants to the target metastore.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Tabs from '../../components/Tabs.tsx';
+
+# Metastore migration
+
+Metastore migration moves the metadata layer—catalogs, schemas, tables, views, functions, volumes, and grants—from the source to the target. This is the foundation for all downstream data work.
+
+## Pre-migration prerequisites
+
+- Target metastore exists and target workspace is attached.
+- Account-level groups and service principals are created in the target account.
+- Storage credentials and external locations are configured for target storage.
+- Source and target can access the required storage (directly or via cross-cloud replication).
+
+## Table upgrade strategies
+
+## Table upgrade strategies
+
+### Foreign catalog (federate)
+
+Register source storage as a foreign catalog in the target metastore. No data copy is required for the initial cutover.
+
+<CodeBlock language="sql" code={`CREATE FOREIGN CATALOG <catalog_name>
+USING CONNECTION <connection_name>
+OPTIONS (host '<source_metastore_host>', port 443);`} />
+
+<p className="text-xs text-[var(--ink-subtle)]">Requires Delta Sharing or a supported connection.</p>
+
+### In-place upgrade
+
+For foreign tables already registered, upgrade them to managed or external in the target metastore.
+
+<CodeBlock language="sql" code={`ALTER TABLE <catalog>.<schema>.<table> SET MANAGED;
+-- or
+ALTER TABLE <catalog>.<schema>.<table> SET EXTERNAL;`} />
+
+<p className="text-xs text-[var(--ink-subtle)]">Not available in all scenarios; verify with Databricks documentation.</p>
+
+### Deep clone
+
+Copy a Delta table with history to target storage. Preserves transaction log and time travel.
+
+<CodeBlock language="sql" code={`CREATE TABLE <target_catalog>.<schema>.<table>
+DEEP CLONE <source_catalog>.<schema>.<table>
+LOCATION 's3://<target-bucket>/<path>';`} />
+
+### CTAS / INSERT OVERWRITE
+
+Create table as select or insert overwrite for non-Delta sources or when history is not required.
+
+<CodeBlock language="sql" code={`CREATE TABLE <target_catalog>.<schema>.<table>
+AS SELECT * FROM <source_catalog>.<schema>.<table>;`} />
+
+
+## Migrating grants and ownership
+
+Grants are not portable across accounts because principals are account-scoped. Use a mapping table to replay grants:
+
+<CodeBlock language="sql" filename="grant-export.sql" code={`-- Export source grants
+SELECT table_catalog, table_schema, table_name, grantee, privilege_type, is_grantable
+FROM system.information_schema.table_privileges
+WHERE table_schema NOT IN ('information_schema');}`} />
+
+<CodeBlock language="python" filename="replay-grants.py" code={`import pandas as pd
+from databricks.sdk import WorkspaceClient
+
+grants = pd.read_csv("grants.csv")
+
+w = WorkspaceClient(host="<TARGET_HOST>", token="<TOKEN>")
+
+for _, row in grants.iterrows():
+    target_grantee = principal_map[row["grantee"]]  # Map source to target principal
+    sql = f"""GRANT {row['privilege_type']} ON TABLE {row['table_catalog']}.{row['table_schema']}.{row['table_name']} TO \`{target_grantee}\`"""
+    w.statement_execution.execute_statement(sql, warehouse_id="<WAREHOUSE_ID>")
+}`} />
+
+## Handling non-table objects
+
+- **Views:** Recreate views after base tables are migrated. Views with cross-catalog references must be rewritten.
+- **Functions:** Re-register functions in the target. Python UDFs may require dependency updates.
+- **Models:** ML models registered in UC must be re-registered or referenced via model artifacts.
+- **Volumes:** Copy files using cloud-native tools or Databricks `COPY INTO` / `cp` commands.
+
+## Validation
+
+- Compare catalog, schema, table, and view counts between source and target.
+- Run row-count and checksum reconciliation on migrated tables.
+- Verify grants for a representative set of users and service principals.
+
+## Rollback
+
+If metadata migration fails before cutover:
+
+- Drop incomplete target objects.
+- Re-export source metadata.
+- Fix the mapping or credential issue and re-run.
+
+The source remains authoritative until the final cutover.
+
+## Automation opportunity
+
+- Use UCX for large-scale Unity Catalog upgrades and migration readiness assessment.
+- Generate DDL and GRANT replay scripts from the information schema.
+- Run grants reconciliation as part of a CI pipeline.
+
+<Checklist title="Metastore migration" items={[
+  { id: 'ddl', label: 'Export catalog/schema DDL from source' },
+  { id: 'create', label: 'Create catalogs and schemas in target' },
+  { id: 'tables', label: 'Migrate tables using chosen strategy' },
+  { id: 'views', label: 'Recreate views and verify dependencies' },
+  { id: 'grants', label: 'Replay grants with mapped principals' },
+  { id: 'reconcile', label: 'Reconcile metadata and data counts' },
+]} />

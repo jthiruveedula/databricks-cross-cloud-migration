@@ -1,0 +1,73 @@
+---
+title: 'Legacy Hive transition'
+layout: ../../layouts/Layout.astro
+description: 'Upgrade legacy Hive metastore assets to Unity Catalog during migration.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Legacy Hive transition
+
+A migration is the ideal time to retire the legacy Hive metastore. Databricks guidance recommends moving Hive assets to Unity Catalog rather than carrying forward workspace-local metastores and DBFS dependencies.
+
+## Why retire Hive now?
+
+- Workspace-local metastores do not share governance across workspaces.
+- DBFS-backed managed tables are tied to a workspace and are not portable.
+- Legacy runtimes and access modes will not work with Unity Catalog compute.
+
+## Assessment with UCX
+
+<Callout variant="tip" title="Use UCX for scale">
+  UCX scans the legacy metastore, identifies upgrade candidates, maps grants, and generates upgrade notebooks. It is especially useful for large estates.
+</Callout>
+
+Install UCX in a dedicated workspace and run the assessment:
+
+<CodeBlock language="bash" code={`# Install UCX (follow official Databricks documentation for latest version)
+databricks labs install ucx
+
+# Run assessment workflow
+databricks labs ucx install
+# Assessment reports are written to the installed workspace as Delta tables and dashboards.}`} />
+
+## Upgrade paths
+
+| Source table type | Target type | Method |
+|-------------------|-------------|--------|
+| Hive managed (DBFS) | UC managed | `CREATE TABLE target DEEP CLONE hive_table` |
+| Hive external | UC external | `CREATE EXTERNAL TABLE target LOCATION '...'` |
+| Hive view | UC view | Recreate view after base tables |
+
+## Coexistence and federation
+
+If a full upgrade is not possible before cutover:
+
+- Use Hive metastore federation to query Hive tables from UC-enabled clusters.
+- Gradually migrate tables wave by wave.
+- Avoid creating new Hive assets in the source during the migration.
+
+## Validation
+
+- Run UCX assessment and resolve critical findings before migration.
+- Confirm all UC-bound compute uses a supported access mode and DBR 13.3 LTS or above.
+- Validate that upgraded tables are queryable with Unity Catalog clusters.
+
+## Rollback
+
+Keep the original Hive tables until target tables are validated. Do not drop Hive assets until hypercare is complete.
+
+## Automation opportunity
+
+- Use UCX-generated notebooks for bulk upgrades.
+- Schedule upgrade jobs per schema and validate with reconciliation queries.
+
+<Checklist title="Legacy Hive transition" items={[
+  { id: 'ucx', label: 'Run UCX assessment and review findings' },
+  { id: 'critical', label: 'Resolve critical blockers (unsupported runtimes, DBFS paths)' },
+  { id: 'upgrade', label: 'Upgrade tables to UC per wave' },
+  { id: 'views', label: 'Recreate views on UC base tables' },
+  { id: 'grants', label: 'Map Hive grants to UC grants' },
+]} />

@@ -1,0 +1,41 @@
+---
+title: 'FAQ'
+layout: ../../layouts/Layout.astro
+description: 'Frequently asked questions about Databricks cross-cloud migration.'
+---
+
+import Callout from '../../components/Callout.tsx';
+
+# FAQ
+
+## Can I move a Unity Catalog metastore across regions?
+
+No. Metastores are region-scoped. Cross-region or cross-cloud migration requires creating a new metastore in the target and migrating catalogs, schemas, tables, and grants.
+
+## Do I need to copy all data, or can I federate?
+
+It depends. If the source storage is accessible from the target, you can use foreign catalogs or Delta Sharing to avoid an initial full copy. Most production migrations eventually copy at least critical data to the target for performance and residency reasons.
+
+## How do I preserve Delta table history?
+
+Use `CREATE TABLE ... DEEP CLONE` to copy the table and its transaction log to target storage. This preserves time travel and table history within the target's retention settings.
+
+## What happens to DBFS mounts?
+
+Migrate files from DBFS mounts to Unity Catalog external locations and volumes. Update all code references, then unmount and remove legacy mounts.
+
+## Is UCX required?
+
+No, but Databricks recommends UCX for large-scale Unity Catalog upgrades. It automates assessment, dependency mapping, and upgrade notebook generation.
+
+## Can I keep the same workspace URL?
+
+No. The target workspace will have a new URL. You can redirect users via documentation, bookmarks, or proxy/DNS changes if you control the custom domain.
+
+## How do I handle users who leave during the migration?
+
+Use account-level groups and SCIM provisioning. Users who leave the identity provider will be deprovisioned automatically in the target if configured correctly.
+
+<Callout variant="tip" title="Still have questions?">
+  If your scenario is not covered here, open a discussion in the repository or raise it in the migration steering committee.
+</Callout>

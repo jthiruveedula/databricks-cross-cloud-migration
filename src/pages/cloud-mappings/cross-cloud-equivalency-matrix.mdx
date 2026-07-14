@@ -1,0 +1,95 @@
+---
+title: 'Cross-cloud equivalency matrix'
+layout: ../../layouts/Layout.astro
+description: 'Map Azure, AWS, and GCP Databricks constructs to each other.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Tabs from '../../components/Tabs.tsx';
+
+# Cross-cloud equivalency matrix
+
+Databricks abstracts the control plane, but the underlying cloud primitives differ. Use this matrix to translate Azure, AWS, and GCP constructs during planning and implementation.
+
+## Account and identity
+
+| Concept | Azure Databricks | AWS Databricks | GCP Databricks |
+|---------|------------------|----------------|----------------|
+| Top-level boundary | Azure AD tenant + Databricks account | AWS account + Databricks account | GCP project + Databricks account |
+| Billing | Azure subscription | AWS account | GCP project |
+| Workspace identity | Managed identity / service principal | IAM role / instance profile | Service account |
+| User federation | Entra ID (Azure AD) | IAM Identity Center / SSO | Google Cloud IAM / Workspace SSO |
+| Service principal | Entra ID app registration | IAM role with external ID | Service account with key or impersonation |
+| SCIM provisioning | Entra ID provisioning | IAM Identity Center SCIM | Google Workspace / Cloud Identity SCIM |
+
+## Storage
+
+| Concept | Azure Databricks | AWS Databricks | GCP Databricks |
+|---------|------------------|----------------|----------------|
+| Object storage | ADLS Gen2 | S3 | Cloud Storage (GCS) |
+| Filesystem prefix | `abfss://container@account.dfs.core.net` | `s3://bucket/path` | `gs://bucket/path` |
+| UC external location | Storage credential + ADLS path | Storage credential + S3 path | Storage credential + GCS path |
+| Access delegation | Managed identity / SAS token | IAM role on cluster / instance profile | Service account attached to cluster |
+| Encryption | SSE with Microsoft-managed or CMK in Key Vault | SSE-S3 / SSE-KMS | Customer-managed encryption keys (CMEK) |
+
+## Networking
+
+| Concept | Azure Databricks | AWS Databricks | GCP Databricks |
+|---------|------------------|----------------|----------------|
+| Virtual network | VNet | VPC | VPC |
+| Private control plane | Private Link | PrivateLink | Private Service Connect (PSC) |
+| Subnets | Public + private subnet delegation | Public + private subnets | Subnet with private Google Access |
+| NAT / egress | Azure NAT Gateway | NAT Gateway | Cloud NAT |
+| DNS | Azure Private DNS | Route53 private | Cloud DNS |
+| Secure cluster connectivity | No public IPs / secure cluster connectivity | No public IP | Private Google Access |
+
+## Secrets and keys
+
+| Concept | Azure Databricks | AWS Databricks | GCP Databricks |
+|---------|------------------|----------------|----------------|
+| Secret backend | Azure Key Vault | AWS Secrets Manager / Parameter Store | Secret Manager |
+| Key management | Azure Key Vault | AWS KMS | Cloud KMS |
+| UC storage credential secret | Key Vault-backed scope | Secrets Manager-backed scope | Secret Manager-backed scope |
+
+## Compute and orchestration
+
+| Concept | Azure Databricks | AWS Databricks | GCP Databricks |
+|---------|------------------|----------------|----------------|
+| VM instances | Azure VM | EC2 | Compute Engine |
+| Spot / preemptible | Spot VMs / spot eviction | Spot Instances | Preemptible VMs |
+| Scheduler | Databricks Workflows | Databricks Workflows | Databricks Workflows |
+| External orchestrator | Azure Data Factory, Airflow | Glue, Airflow, Step Functions | Cloud Composer, Airflow |
+| Container registry | ACR | ECR | Artifact Registry |
+
+## Monitoring and audit
+
+| Concept | Azure Databricks | AWS Databricks | GCP Databricks |
+|---------|------------------|----------------|----------------|
+| Control-plane logs | Diagnostic logs | Account log delivery | Cloud Logging |
+| Audit | Azure Monitor / Log Analytics | CloudWatch / S3 | Cloud Logging / BigQuery |
+| Billing export | Cost Management | CUR | Cloud Billing export |
+| System tables | Enabled at account | Enabled at account | Enabled at account |
+
+## Common transformations
+
+<Callout variant="tip" title="Path rewrite is unavoidable">
+  Every table, notebook, and job that references a cloud storage path must be rewritten. Use a centralized mapping file and apply it with scripts, not manual edits.
+</Callout>
+
+<Callout variant="warning" title="Identity is not one-to-one">
+  A managed identity in Azure does not map directly to an IAM role in AWS. You must redesign the least-privilege model for the target cloud.
+</Callout>
+
+## Validation
+
+- Confirm every source primitive has a target equivalent and that configuration limits are understood (e.g., S3 bucket policies, GCS uniform bucket-level access).
+- Test identity mappings with a small read-only workload before bulk migration.
+
+## Rollback
+
+Keep the source cloud resources running until the target is validated. Do not decommission source IAM roles or storage accounts until the post-migration hypercare period ends.
+
+## Automation opportunity
+
+- Maintain a cloud-agnostic configuration layer (YAML) that maps to cloud-specific Terraform modules.
+- Use a path-rewrite function in your migration scripts to convert `abfss://` ↔ `s3://` ↔ `gs://` based on the target cloud.

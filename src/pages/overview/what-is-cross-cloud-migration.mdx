@@ -1,0 +1,97 @@
+---
+title: 'What is cross-cloud migration?'
+layout: ../../layouts/Layout.astro
+description: 'Define cross-cloud migration for Databricks, common drivers, and the scope of this runbook.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Card from '../../components/Card.tsx';
+import { ArrowRight, Cloud, Shield, Scale, Globe } from 'lucide-react';
+
+# What is cross-cloud migration?
+
+A **Databricks cross-cloud migration** moves a Databricks deployment from one public cloud environment to another, or from one landing zone to another within the same cloud. It includes the workspaces, metastores, data, compute, identity, networking, governance, pipelines, and operational tooling that together make the platform usable.
+
+Unlike a simple data copy, a Databricks migration is a **platform reset**:
+
+- Account boundaries are different on each cloud (Azure tenant/subscription, AWS account, GCP project).
+- Identity is federated differently (Azure AD / Entra ID, AWS IAM, GCP IAM).
+- Storage protocols change (ADLS Gen2, S3, GCS) and so do path semantics.
+- Networking constructs (VNet, VPC, private endpoints, PSC) are not portable.
+- Unity Catalog is the cross-cloud governance layer, but metastores are region-specific and account-scoped.
+
+This runbook treats migration as a **program of work**, not a single operation. It covers planning, discovery, execution, validation, cutover, and hypercare.
+
+## Why migrations happen
+
+<Card title="Cloud standardization" description="Consolidate onto a single cloud after M&A, procurement, or enterprise strategy changes." icon={Cloud} />
+
+<Card title="Regulatory isolation" description="Move data and compute to a sovereign or boundary-controlled region to meet residency and compliance requirements." icon={Shield} />
+
+<Card title="Cost optimization" description="Rebalance spend, leverage committed use, or exit an expensive region or contract." icon={Scale} />
+
+<Card title="Regional expansion" description="Deploy closer to users and data sources by landing in a new cloud region or provider." icon={Globe} />
+
+<Card title="Security posture" description="Move to a landing zone with stronger network isolation, CMK, or identity controls." icon={Shield} />
+
+<Card title="Platform consolidation" description="Retire duplicate or legacy Databricks instances and centralize on a single account." icon={Cloud} />
+
+## What is in scope
+
+This runbook covers migration of the Databricks platform and its runtime dependencies:
+
+- Workspaces, accounts, regions, and subscriptions/accounts/projects.
+- Unity Catalog metastores, catalogs, schemas, tables, views, volumes, functions, and grants.
+- Legacy Hive metastore assets and their upgrade path.
+- Tabular and non-tabular data in managed tables, external tables, volumes, DBFS, and mounts.
+- Identity, groups, service principals, service accounts, IAM roles, managed identities, and secrets.
+- Compute: clusters, SQL warehouses, policies, pools, runtimes, init scripts, and libraries.
+- Pipelines: Databricks Workflows, Delta Live Tables, external orchestrators, and CI/CD.
+- Analytics assets: SQL queries, dashboards, alerts, notebooks, repos, and workspace folders.
+- ML assets: MLflow experiments, model registry, feature tables, serving endpoints, and artifacts.
+- Networking, security, monitoring, audit, and platform foundations.
+
+## What is out of scope
+
+- Source systems upstream of Databricks (ETL ingestion pipelines, Kafka, CDC producers) are referenced but not migrated here.
+- Downstream BI tools, reverse ETL, and operational databases are covered only where they interact with Databricks endpoints.
+- Non-Databricks data platforms (Snowflake, BigQuery, Redshift) are not part of this runbook.
+
+## Key principles
+
+<Callout variant="prerequisite" title="Modernize as you migrate">
+  Do not reproduce legacy Hive, DBFS mounts, or unsupported runtimes in the target. Use the migration as a forcing function to adopt Unity Catalog, Unity Catalog volumes, and DBR 13.3 LTS or above.
+</Callout>
+
+<Callout variant="tip" title="Federate, then upgrade">
+  Databricks recommends a federate-then-upgrade path for large Unity Catalog migrations. UCX can accelerate the assessment and upgrade of Hive assets. This is especially true when the migration is combined with a cloud move.
+</Callout>
+
+<Callout variant="warning" title="Identity is not portable">
+  Users, groups, and service principals must be recreated or remapped in the target account. Convert workspace-local groups to account-level groups before migration.
+</Callout>
+
+## Validation
+
+- Confirm the target Databricks account has the same cloud SKU, region availability, and compliance certifications as the source.
+- Verify that Unity Catalog is enabled in the target region and that the metastore can be attached to the new workspace.
+- Document every account/subscription/project ID, region, workspace URL, and metastore ID before starting.
+
+## Rollback
+
+At this stage, rollback simply means stopping the program. The source platform remains untouched. Define a formal go/no-go gate before any write operations or data movement begins.
+
+## Automation opportunity
+
+- Generate a discovery manifest from the Databricks Accounts API, workspace APIs, and system tables.
+- Use a configuration-as-data model (YAML or JSON) to represent the source, target, and wave plan.
+- Run the discovery repeatedly during the program to detect drift.
+
+<Checklist title="Pre-readiness checkpoint" items={[
+  { id: 'scope', label: 'Define migration scope and business drivers' },
+  { id: 'teams', label: 'Identify platform, security, network, and application owners' },
+  { id: 'target', label: 'Confirm target cloud account, region, and landing zone' },
+  { id: 'uc', label: 'Confirm Unity Catalog availability and required SKUs in target' },
+  { id: 'governance', label: 'Establish migration governance, change control, and sign-off workflow' },
+]} />

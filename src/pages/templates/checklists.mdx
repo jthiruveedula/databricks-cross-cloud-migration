@@ -1,0 +1,61 @@
+---
+title: 'Checklists'
+layout: ../../layouts/Layout.astro
+description: 'Ready-to-use migration checklists.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Checklists
+
+Use these checklists to drive governance, execution, and sign-off.
+
+## Pre-migration readiness
+
+<Checklist title="Readiness" items={[
+  { id: 'business-case', label: 'Business case and migration scope approved' },
+  { id: 'team', label: 'Migration team and RACI defined' },
+  { id: 'target-env', label: 'Target account, region, and landing zone ready' },
+  { id: 'uc', label: 'Unity Catalog enabled and workspace attached' },
+  { id: 'iam', label: 'Identity federation and SCIM configured' },
+  { id: 'network', label: 'Networking and private connectivity validated' },
+  { id: 'runbook', label: 'Runbook and rollback plan reviewed' },
+]} />
+
+## Wave execution
+
+<Checklist title="Wave execution" items={[
+  { id: 'wave-plan', label: 'Wave plan approved by owners' },
+  { id: 'assets', label: 'Assets migrated and validated' },
+  { id: 'data', label: 'Data reconciled within tolerance' },
+  { id: 'jobs', label: 'Jobs smoke-tested' },
+  { id: 'security', label: 'Security controls verified' },
+  { id: 'signoff', label: 'Wave exit sign-off obtained' },
+]} />
+
+## Cutover day
+
+<Checklist title="Cutover day" items={[
+  { id: 'comm', label: 'User communication sent' },
+  { id: 'freeze', label: 'Source writes frozen' },
+  { id: 'sync', label: 'Final sync complete' },
+  { id: 'recon', label: 'Final reconciliation passed' },
+  { id: 'endpoint', label: 'Endpoints switched to target' },
+  { id: 'jobs-on', label: 'Target jobs enabled' },
+  { id: 'support', label: 'Hypercare support active' },
+]} />
+
+## Post-migration
+
+<Checklist title="Post-migration" items={[
+  { id: 'monitor', label: 'Monitoring and alerting operational' },
+  { id: 'cost', label: 'Cost and performance baselines established' },
+  { id: 'docs', label: 'Documentation and runbook updated' },
+  { id: 'decom', label: 'Source resources decommissioned' },
+  { id: 'retro', label: 'Retrospective completed' },
+]} />
+
+<Callout variant="tip" title="Make it actionable">
+  Assign an owner and due date to every checklist item. Use the interactive checkboxes in this site to track progress, and export to your project tool if needed.
+</Callout>

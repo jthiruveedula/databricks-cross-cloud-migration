@@ -1,0 +1,85 @@
+---
+title: 'Workspace inventory'
+layout: ../../layouts/Layout.astro
+description: 'Discover and catalog every Databricks workspace in scope.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Tabs from '../../components/Tabs.tsx';
+
+# Workspace inventory
+
+Every migration starts with a complete list of workspaces. A workspace is the primary unit of user interaction, but it is not the unit of governance: that is the account and metastore. You must map workspaces to accounts, regions, metastores, and landing zones before moving any data.
+
+## What to collect
+
+For each workspace record the following attributes:
+
+| Attribute | Why it matters | Source |
+|-----------|---------------|--------|
+| Workspace ID | Unique identifier across the account | Workspace URL or Accounts API |
+| Workspace URL | Endpoint used by users and automation | Admin console |
+| Cloud / Region | Determines target region options and data residency | Accounts API |
+| Account ID | Needed for cross-account mapping | Databricks account console |
+| Pricing tier | Premium vs. Standard affects UC and private connectivity | Admin console |
+| Metastore ID | Links workspace to governance boundary | System tables or API |
+| Subscription / Account / Project | Cloud billing boundary | Cloud portal |
+| VNet / VPC / Subnet IDs | Network dependencies | Cloud portal / Terraform |
+| Private connectivity mode | Classic, private endpoint, or custom | Databricks support / console |
+| Enabled features | Serverless, Model Serving, Predictive IO | Admin console |
+
+## Discovery methods
+
+## Discovery methods
+
+### Accounts API
+
+Use the Databricks Accounts API to list workspaces at the account level. This works across all clouds.
+
+<CodeBlock language="bash" code={`curl -n -X GET https://accounts.cloud.databricks.com/api/2.0/accounts/\${ACCOUNT_ID}/workspaces \\
+  -H "Authorization: Bearer $DATABRICKS_TOKEN" | jq '.workspaces[] | {workspace_id, workspace_name, deployment_name, aws_region, pricing_tier}'`} />
+
+### System tables
+
+If system tables are enabled, query the audit log and workspace inventory tables.
+
+<CodeBlock language="sql" code={`SELECT workspace_id, workspace_name, account_id, region
+FROM system.information_schema.workspaces;`} />
+
+<p className="text-xs text-[var(--ink-subtle)]">Table names vary by region and SKU; verify availability.</p>
+
+### Manual export
+
+For environments without API access, export the workspace list from the account admin console and enrich with cloud portal metadata.
+
+
+## Common pitfalls
+
+- **Orphan workspaces:** Workspaces created outside the central account or via Marketplace may not appear in the Accounts API.
+- **Dev/test clones:** Personal or sandbox workspaces often contain production data or secrets.
+- **Region mismatches:** A workspace may be in a region the target cloud does not support.
+
+## Validation
+
+- Cross-check API output against cloud console resources (resource groups, projects, VPCs).
+- Confirm every workspace has a named owner and migration decision: move, retire, or consolidate.
+- Verify that workspace-local groups and service principals are inventoried separately.
+
+## Rollback
+
+No rollback is needed at inventory stage, but missing workspaces discovered later can invalidate wave plans. Run the inventory weekly during discovery.
+
+## Automation opportunity
+
+- Script the Accounts API export into a CSV or YAML manifest.
+- Tag workspaces in the source with `migration-wave` and `owner` to drive automation.
+
+<Checklist title="Workspace inventory" items={[
+  { id: 'api', label: 'Export workspaces via Accounts API or console' },
+  { id: 'enrich', label: 'Enrich with region, SKU, network, and metastore metadata' },
+  { id: 'owners', label: 'Assign owner and migration decision per workspace' },
+  { id: 'shadow', label: 'Identify shadow or sandbox workspaces' },
+  { id: 'target-map', label: 'Map each workspace to target account, region, and landing zone' },
+]} />

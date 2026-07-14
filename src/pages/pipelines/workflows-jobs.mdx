@@ -1,0 +1,90 @@
+---
+title: 'Workflows and jobs'
+layout: ../../layouts/Layout.astro
+description: 'Migrate Databricks Workflows jobs, task graphs, triggers, and notifications.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Tabs from '../../components/Tabs.tsx';
+
+# Workflows and jobs
+
+Databricks Workflows is the native orchestrator for notebooks, Python, SQL, and DLT tasks. Migrating jobs requires recreating definitions in the target workspace and rewriting any cloud-specific references.
+
+## Job components to migrate
+
+| Component | Consideration |
+|-----------|---------------|
+| Task graph | Export JSON and recreate; validate dependencies |
+| Cluster / job cluster | Map node types, runtime, access mode |
+| Notebook tasks | Ensure notebooks exist in target workspace or repos |
+| Python wheel tasks | Rebuild and publish wheels to target artifact store |
+| SQL tasks | Rewrite warehouse endpoint and catalog references |
+| DLT tasks | Recreate pipeline in target and update catalog paths |
+| Triggers | Reconfigure schedule, file arrival, or continuous triggers |
+| Notifications | Update email lists and webhook endpoints |
+| Permissions | Replay job ACLs with mapped principals |
+
+## Export and import
+
+<CodeBlock language="bash" code={`# Export all jobs from source workspace
+databricks jobs list --output json | jq '.jobs[] | {job_id, settings}' > jobs.json
+
+# Create a job in target workspace after editing JSON
+databricks jobs create --json-file job-target.json}`} />
+
+## Task reference rewrites
+
+## Task reference rewrites
+
+### Notebook paths
+
+Workspace paths and repos may differ. Use a consistent naming convention and update task notebook paths.
+
+<CodeBlock language="json" code={`"notebook_task": {
+  "notebook_path": "/Shared/migration/<notebook>"
+}`} />
+
+### Warehouse endpoints
+
+SQL tasks reference warehouse IDs. Recreate warehouses in target and update IDs.
+
+### Catalog references
+
+Update SQL and notebook code that hardcodes source catalog names. Use a naming standard or environment variables.
+
+
+## Scheduling freeze
+
+During cutover:
+
+1. Pause source jobs at the agreed freeze window.
+2. Catch up target data to the last source commit or transaction.
+3. Enable target jobs in dependency order.
+4. Monitor the first target runs for failures.
+
+## Validation
+
+- Run every migrated job at least once in the target before cutover.
+- Compare run times, output counts, and failure rates.
+- Verify notification delivery and alerting.
+
+## Rollback
+
+If a target job fails, re-enable the source job and investigate. Do not decommission source jobs until hypercare.
+
+## Automation opportunity
+
+- Store job definitions as code in a Git repository.
+- Use CI/CD to deploy jobs to target environments.
+- Script path and catalog rewrites across job JSON.
+
+<Checklist title="Workflows and jobs" items={[
+  { id: 'export', label: 'Export all job definitions' },
+  { id: 'rewrite', label: 'Rewrite cluster, notebook, warehouse, and catalog references' },
+  { id: 'create', label: 'Create jobs in target workspace' },
+  { id: 'permissions', label: 'Replay job permissions' },
+  { id: 'test', label: 'Run smoke tests for each job' },
+]} />

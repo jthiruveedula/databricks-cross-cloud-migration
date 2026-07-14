@@ -1,0 +1,87 @@
+---
+title: 'Migration archetypes'
+layout: ../../layouts/Layout.astro
+description: 'Choose the right migration pattern for your Databricks environment.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Tabs from '../../components/Tabs.tsx';
+
+# Migration archetypes
+
+No single migration pattern fits every Databricks estate. The right archetype depends on the size of the data, the number of workspaces, the tolerance for downtime, governance constraints, and whether the source and target share an identity domain.
+
+## Common archetypes
+
+## Common archetypes
+
+### Workspace-only
+
+Move the workspace configuration, permissions, and notebooks while leaving data and metastores behind or reconnecting them later.
+
+- Fastest for assets that are code-heavy and data-light.
+- Use when data already lives in a cloud-agnostic storage layer.
+- Risk: users expect old data paths to resolve immediately.
+
+### Workspace + metastore
+
+Migrate the workspace and recreate or clone the Unity Catalog metastore in the target cloud.
+
+- The standard pattern for Unity Catalog customers.
+- Requires storage credentials and external locations in the target.
+- Data movement depends on table type: managed, external, or foreign.
+
+### Cross-subscription / account / project
+
+Same cloud, new billing or identity boundary. Easier than cross-cloud because storage, networking, and identity models stay the same.
+
+- Can often use cross-account replication for data.
+- Identity federation and private links still require rework.
+- Least privilege must be re-verified in the new account.
+
+### Data-only
+
+Move only the data and rebuild compute and code in the target. Common when modernizing runtimes and governance at the same time.
+
+- Cleanest from a technical-debt perspective.
+- Highest manual effort for notebooks, jobs, and dashboards.
+- Best when source has heavy legacy Hive or DBFS usage.
+
+### Blue-green cutover
+
+Run source and target in parallel, dual-write or dual-read, then switch traffic with a DNS, connection string, or endpoint change.
+
+- Lowest business risk for critical workloads.
+- Highest operational cost and complexity.
+- Requires reconciliation tooling and rollback runway.
+
+
+## Archetype selection matrix
+
+| Driver | Preferred archetype | Notes |
+|--------|---------------------|-------|
+| M&A consolidation | Workspace + metastore or data-only | Depends on tenant boundaries and data size. |
+| Regulatory isolation | Cross-account / region or blue-green | Data residency and sovereignty dominate. |
+| Cost optimization | Cross-subscription or blue-green | Validate egress and storage class costs. |
+| Cloud exit | Full cross-cloud migration | Plan identity reset and storage protocol change. |
+| Platform modernization | Data-only or workspace + metastore | Retire Hive, mounts, and old runtimes. |
+
+## Decision factors
+
+<Callout variant="decision" title="Use this flow">
+  1. Is the target in the same cloud? → Consider cross-subscription/account first.
+  2. Is Unity Catalog already in use? → Prefer workspace + metastore.
+  3. Is downtime acceptable? → If no, design blue-green or dual-run.
+  4. Is the source heavily legacy? → If yes, lean toward data-only with manual rebuild.
+  5. Is identity federated across clouds? → If no, plan group and principal remapping early.
+</Callout>
+
+## Validation
+
+- Document the selected archetype and the rationale for every major decision.
+- Obtain sign-off from security, networking, finance, and business stakeholders.
+- Confirm that the chosen archetype is supported by your Databricks contract and region availability.
+
+## Rollback
+
+If the selected archetype proves infeasible during pilot, revert to the next simplest option and update the wave plan. Maintain the source environment unchanged until bulk migration is validated.

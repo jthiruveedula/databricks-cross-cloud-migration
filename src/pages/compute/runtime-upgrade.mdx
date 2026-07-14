@@ -1,0 +1,62 @@
+---
+title: 'Runtime upgrade'
+layout: ../../layouts/Layout.astro
+description: 'Upgrade Databricks runtimes and access modes as part of migration.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Runtime upgrade
+
+Migration is the right time to upgrade runtimes. Databricks recommends DBR 13.3 LTS or above for Unity Catalog and modern access modes. Older runtimes may not support UC, Photon, or serverless compute.
+
+## Recommended runtime strategy
+
+- Use the latest LTS runtime that supports all required features.
+- Standardize on one or two runtime versions to simplify support.
+- Avoid unsupported runtimes and custom images unless required.
+
+## Access mode compatibility
+
+| Runtime | UC support | Serverless | Photon |
+|---------|------------|------------|--------|
+| DBR 10.4 LTS | Limited | No | Partial |
+| DBR 11.3 LTS | Yes | No | Yes |
+| DBR 12.2 LTS | Yes | No | Yes |
+| DBR 13.3 LTS | Yes | Yes | Yes |
+| DBR 14.x | Yes | Yes | Yes |
+
+<Callout variant="warning" title="Unsupported runtimes">
+  Do not migrate clusters or jobs using runtimes that are end-of-life. Upgrade and validate workloads before cutover.
+</Callout>
+
+## Python and library compatibility
+
+- Audit Python version differences between runtimes.
+- Test library versions, especially for ML, data processing, and cloud SDKs.
+- Replace deprecated APIs (for example, `dbutils.fs.mount` usage with volumes).
+
+## Validation
+
+- Run regression tests for critical notebooks and jobs on the target runtime.
+- Compare output schemas, data types, and performance metrics.
+- Enable Photon where appropriate and measure query speedup.
+
+## Rollback
+
+If a workload fails on the new runtime, keep a fallback cluster policy with the previous supported runtime until the issue is resolved.
+
+## Automation opportunity
+
+- Scan all clusters and jobs for runtime versions using the APIs.
+- Generate migration tickets for any workload below the target baseline.
+- Run regression tests automatically in a CI pipeline.
+
+<Checklist title="Runtime upgrade" items={[
+  { id: 'scan', label: 'Scan clusters and jobs for runtime versions' },
+  { id: 'baseline', label: 'Define target runtime baseline (e.g., DBR 13.3 LTS)' },
+  { id: 'regression', label: 'Run regression tests on target runtime' },
+  { id: 'access', label: 'Update access modes to UC-compatible' },
+  { id: 'photon', label: 'Evaluate and enable Photon where beneficial' },
+]} />

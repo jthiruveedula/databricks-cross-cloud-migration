@@ -1,0 +1,99 @@
+---
+title: 'Unity Catalog strategy'
+layout: ../../layouts/Layout.astro
+description: 'Design the Unity Catalog topology for cross-cloud migration.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+
+# Unity Catalog strategy
+
+Unity Catalog (UC) is the shared governance layer across Databricks clouds. Designing the UC topology correctly is the single highest-leverage decision in a cross-cloud migration.
+
+## Key concepts
+
+- **Metastore:** The top-level container for catalogs. A metastore is created per Databricks account and region. It cannot be moved across regions.
+- **Catalog:** A namespace that groups schemas. Use catalogs to separate environments (dev, prod) or business domains.
+- **External location:** A registered cloud storage path that UC can read and write. It uses a storage credential.
+- **Storage credential:** A cloud identity (managed identity, IAM role, service account) attached to UC.
+- **Volume:** UC-managed non-tabular storage. Prefer volumes over DBFS mounts.
+
+## Regional constraints
+
+<Callout variant="warning" title="Metastores are regional">
+  You cannot move a metastore from one region to another. Cross-cloud migration always requires creating a new metastore in the target account and region, then replicating catalogs, schemas, tables, and grants.
+</Callout>
+
+Check target region availability for:
+
+- Unity Catalog
+- Serverless SQL warehouses
+- Serverless compute for notebooks and jobs
+- Model Serving
+- Predictive IO
+
+## Recommended topology
+
+## Recommended topology
+
+### One metastore per region
+
+Create one metastore per target region. Workspaces in that region attach to it. This is the simplest and most common model.
+
+- Clear data-residency boundaries.
+- Reduces cross-region network latency.
+- Easier to align with cloud IAM and networking.
+
+### Multi-region replication
+
+If active-active or DR is required, replicate Delta tables and use a second metastore. Foreign catalogs are not cross-region; you must copy metadata.
+
+- Higher operational complexity.
+- Requires metadata synchronization or dual-write.
+
+
+## Account-level identity
+
+<Callout variant="prerequisite" title="Convert groups before migration">
+  Unity Catalog centralizes identity at the account level. Convert workspace-local groups to account-level groups before attaching workspaces to the target metastore. This avoids broken grants and duplicated group names.
+</Callout>
+
+Use the Databricks CLI or Accounts API to list and convert groups:
+
+<CodeBlock language="bash" code={`databricks account groups list --output json | jq '.[] | {id, displayName, externalId}'
+
+# Create account-level group in target if not present
+databricks account groups create --display-name "data-engineering-prod"}`} />
+
+## Migration patterns
+
+| Pattern | When to use | Trade-off |
+|---------|-------------|-----------|
+| Federate-first | Source storage accessible from target; want minimal data copy | Metadata-only migration; may need in-place upgrades later |
+| Clone-and-upgrade | Need target-managed tables with history preserved | Copies data; longer migration window |
+| Rebuild | Legacy Hive or non-Delta data; heavy modernization | Highest effort; cleanest outcome |
+
+## Validation
+
+- Confirm the target metastore is created and the target workspace is attached.
+- Verify storage credentials resolve to target storage.
+- Test a simple `CREATE TABLE` and `GRANT` in the target metastore before bulk migration.
+
+## Rollback
+
+If UC topology is wrong, detach the workspace, fix the metastore or credential, and reattach. No data is lost if tables were not yet created.
+
+## Automation opportunity
+
+- Use Terraform to define metastores, storage credentials, external locations, and catalog structure.
+- Store group-to-principal mappings in a YAML file and apply grants via a CI/CD pipeline.
+
+<Checklist title="UC strategy" items={[
+  { id: 'region', label: 'Target region and metastore created' },
+  { id: 'workspace-attach', label: 'Target workspace attached to metastore' },
+  { id: 'groups', label: 'Account-level groups created and mapped' },
+  { id: 'creds', label: 'Storage credentials for target cloud created' },
+  { id: 'locations', label: 'External locations registered' },
+]} />

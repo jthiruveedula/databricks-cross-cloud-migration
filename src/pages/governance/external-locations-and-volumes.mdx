@@ -1,0 +1,95 @@
+---
+title: 'External locations and volumes'
+layout: ../../layouts/Layout.astro
+description: 'Migrate from legacy mounts to Unity Catalog external locations and volumes.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# External locations and volumes
+
+Databricks recommends migrating raw files from DBFS or legacy mounts into Unity Catalog external locations and volumes. Volumes provide a governed, cloud-native way to store non-tabular data without the identity and path fragility of DBFS mounts.
+
+## External locations
+
+An external location registers a cloud storage path with a storage credential. It is the UC successor to `dbfs:/mnt/`.
+
+| Source pattern | Target pattern |
+|----------------|----------------|
+| `dbfs:/mnt/landing/` | `s3://target-bucket/landing/` or `abfss://...` or `gs://...` |
+| `dbfs:/mnt/raw/` | UC external location `raw-data` |
+| `wasb://...` | ADLS Gen2 `abfss://` or target cloud equivalent |
+
+### Creating an external location
+
+<CodeBlock language="sql" code={`CREATE EXTERNAL LOCATION raw_data
+URL 's3://<target-bucket>/raw'
+WITH (CREDENTIAL <target_storage_credential>)
+COMMENT 'Raw data landing zone';}`} />
+
+### Storage credential mapping
+
+| Source cloud | Source credential | Target cloud | Target credential |
+|--------------|-------------------|--------------|-------------------|
+| Azure | Managed identity + Key Vault | AWS | IAM role with trust policy |
+| Azure | Service principal | GCP | Service account with key or impersonation |
+| AWS | Instance profile | Azure | Managed identity |
+| AWS | IAM role | GCP | Service account |
+| GCP | Service account | Azure | Managed identity |
+| GCP | Service account | AWS | IAM role |
+
+## Volumes
+
+Volumes are UC objects for non-tabular files. They replace DBFS mounts for libraries, config, images, and raw exports.
+
+<CodeBlock language="sql" code={`CREATE EXTERNAL VOLUME <catalog>.<schema>.<volume_name>
+LOCATION 's3://<target-bucket>/volumes/<volume_name>'
+COMMENT 'Managed non-tabular data';}`} />
+
+## Migrating data from mounts
+
+<Callout variant="warning" title="Clean up mounts after verification">
+  After migrating data to external locations and volumes, update all notebooks and jobs to reference the new paths, then unmount and remove legacy DBFS mounts to avoid drift.
+</Callout>
+
+Migration steps:
+
+1. Inventory all `dbutils.fs.mounts()` and `dbfs:/` paths.
+2. Map each mount to a target external location or volume.
+3. Copy files using cloud-native tools or Databricks `cp` commands.
+4. Rewrite references in notebooks, jobs, and init scripts.
+5. Validate file counts, checksums, and access permissions.
+6. Unmount and delete source mounts.
+
+<CodeBlock language="bash" code={`# Copy from DBFS to external volume (example: AWS target)
+dbutils.fs.cp("dbfs:/mnt/legacy/config/", "/Volumes/catalog/schema/config/", recurse=True)
+
+# AWS CLI alternative for large transfers
+aws s3 sync s3://source-bucket/legacy/ s3://target-bucket/volumes/config/}`} />
+
+## Validation
+
+- List external locations and volumes in target and compare to source mounts.
+- Read a sample file from each volume with the target identity.
+- Verify grants on external locations restrict access appropriately.
+
+## Rollback
+
+If a volume is misconfigured, drop it and recreate. Data remains in the underlying storage bucket and can be re-registered.
+
+## Automation opportunity
+
+- Generate a mount-to-volume mapping from `dbutils.fs.mounts()` output.
+- Use cloud-native sync tools (AWS DataSync, Azure AzCopy, gsutil) for bulk transfer.
+- Script path rewrites across notebooks and job definitions.
+
+<Checklist title="External locations and volumes" items={[
+  { id: 'mounts', label: 'Inventory all DBFS mounts and paths' },
+  { id: 'map', label: 'Map each mount to external location or volume' },
+  { id: 'creds', label: 'Create target storage credentials' },
+  { id: 'copy', label: 'Copy non-tabular data to target' },
+  { id: 'rewrite', label: 'Rewrite code references to volumes' },
+  { id: 'cleanup', label: 'Unmount and remove legacy mounts' },
+]} />

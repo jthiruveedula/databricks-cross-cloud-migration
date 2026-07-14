@@ -1,0 +1,105 @@
+---
+title: 'IAM mapping'
+layout: ../../layouts/Layout.astro
+description: 'Map Azure, AWS, and GCP identity models to the target Databricks environment.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Tabs from '../../components/Tabs.tsx';
+
+# IAM mapping
+
+Identity and access management is the most cloud-specific part of migration. You must redesign IAM for the target cloud, then map every source principal to a target principal.
+
+## Principal mapping
+
+| Source | Target | Mapping approach |
+|--------|--------|------------------|
+| Azure AD group | Databricks account group | Sync via SCIM or recreate with same name |
+| Azure AD service principal | Databricks service principal | Create new principal; rotate credentials |
+| Azure managed identity | AWS IAM role | Create role with equivalent trust and policy |
+| AWS IAM role | Azure managed identity | Design managed identity with least privilege |
+| AWS IAM role | GCP service account | Create service account and attach roles |
+| GCP service account | Azure managed identity | Map to managed identity or service principal |
+| GCP service account | AWS IAM role | Create role with trust policy for external access |
+
+## Storage access models
+
+## Storage access models
+
+### Azure
+
+Use managed identities or service principals with RBAC on ADLS Gen2.
+
+<CodeBlock language="hcl" filename="azure-storage-rbac.tf" code={`resource "azurerm_role_assignment" "storage" {
+  scope                = azurerm_storage_account.data.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_databricks_access_connector.uc.identity[0].principal_id
+}`} />
+
+### AWS
+
+Use IAM roles attached to clusters via instance profiles or trust policies for UC storage credentials.
+
+<CodeBlock language="hcl" filename="aws-storage-role.tf" code={`resource "aws_iam_role" "uc_storage" {
+  name = "databricks-uc-storage"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = { AWS = "arn:aws:iam::414351767826:role/<databricks-account-role>" }
+      Action = "sts:AssumeRole"
+      Condition = { StringEquals = { "sts:ExternalId" = "<databricks-account-id>" } }
+    }]
+  })
+}`} />
+
+### GCP
+
+Use service accounts attached to clusters or as UC storage credentials.
+
+<CodeBlock language="hcl" filename="gcp-service-account.tf" code={`resource "google_service_account" "uc_storage" {
+  account_id   = "databricks-uc-storage"
+  display_name = "Databricks UC Storage"
+}
+
+resource "google_storage_bucket_iam_member" "data" {
+  bucket = google_storage_bucket.data.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:\${google_service_account.uc_storage.email}"
+}`} />
+
+
+## Least privilege model
+
+Apply least privilege from day one:
+
+- Grant users only the UC privileges they need (USAGE, SELECT, MODIFY, etc.).
+- Use service principals for automation and CI/CD, not personal access tokens.
+- Restrict cluster creation with cluster policies and access modes.
+- Audit storage access with cloud-native logs.
+
+## Validation
+
+- Run a principal mapping review with security and identity teams.
+- Test each target role with a read and write operation on target storage.
+- Confirm that break-glass accounts exist in the target account.
+
+## Rollback
+
+If an IAM role is over-permissive, update the policy and re-test before migration. Keep source IAM roles until hypercare ends.
+
+## Automation opportunity
+
+- Store principal mappings in a CSV and generate Terraform or ARM/CloudFormation resources.
+- Use the Databricks Account SCIM API to provision groups and users.
+
+<Checklist title="IAM mapping" items={[
+  { id: 'principals', label: 'Inventory source principals (groups, SPs, managed identities)' },
+  { id: 'map', label: 'Create target principal mapping table' },
+  { id: 'roles', label: 'Define target IAM roles and storage access policies' },
+  { id: 'scim', label: 'Configure SCIM or provisioning for target account' },
+  { id: 'test', label: 'Test target access for representative workloads' },
+]} />

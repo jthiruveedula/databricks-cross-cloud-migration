@@ -1,0 +1,95 @@
+---
+title: 'Common errors'
+layout: ../../layouts/Layout.astro
+description: 'Diagnose and resolve common cross-cloud migration errors.'
+---
+
+import Callout from '../../components/Callout.tsx';
+
+# Common errors
+
+This section catalogs errors that appear frequently during cross-cloud migrations and provides practical resolution steps.
+
+## Metastore attachment failed
+
+**Symptom:** `Workspace is already attached to a metastore` or `Metastore not found`.
+
+**Causes:**
+
+- Workspace already attached to a different metastore.
+- Region mismatch between workspace and metastore.
+- Insufficient account admin permissions.
+
+**Resolution:**
+
+1. Check current metastore attachment in the account console.
+2. Detach from old metastore if appropriate.
+3. Ensure workspace and metastore are in the same region.
+
+## External location access denied
+
+**Symptom:** `Unable to access location` or `403 Forbidden` when reading external tables.
+
+**Causes:**
+
+- Storage credential IAM role does not trust Databricks account.
+- Bucket policy denies access.
+- External location path is misconfigured.
+
+**Resolution:**
+
+1. Verify the IAM trust policy and external ID.
+2. Test access with the cloud CLI using the target identity.
+3. Check that the external location URL matches the credential scope.
+
+## Cluster fails to start
+
+**Symptom:** Cluster stays in `PENDING` or `TERMINATED` state.
+
+**Causes:**
+
+- Node type not available in target region.
+- Instance profile or managed identity missing.
+- Init script path invalid.
+
+**Resolution:**
+
+1. Check cluster event logs for the termination reason.
+2. Validate node type availability.
+3. Verify init script and library paths point to target volumes.
+
+## Job fails after migration
+
+**Symptom:** Job task fails with path, catalog, or secret errors.
+
+**Causes:**
+
+- Hardcoded source paths or catalog names.
+- Secret scope/key missing in target.
+- Warehouse endpoint ID not updated.
+
+**Resolution:**
+
+1. Search task code for source-specific strings.
+2. Verify all referenced secrets exist in target scope.
+3. Confirm SQL warehouse ID matches target.
+
+## Data reconciliation mismatch
+
+**Symptom:** Row counts or checksums differ between source and target.
+
+**Causes:**
+
+- Source data changed after sync.
+- Partition filter applied incorrectly.
+- Non-deterministic ordering in checksum query.
+
+**Resolution:**
+
+1. Re-run sync during a freeze window.
+2. Add `ORDER BY` primary key to checksum query.
+3. Investigate specific partitions causing mismatch.
+
+<Callout variant="tip" title="Log everything">
+  Capture full error messages, cluster event logs, and API responses. Most migration errors are caused by identity, path, or permission drift that is visible in logs.
+</Callout>

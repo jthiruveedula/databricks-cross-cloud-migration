@@ -1,0 +1,141 @@
+{
+  "sections": [
+    {
+      "title": "Overview",
+      "slug": "overview",
+      "items": [
+        { "title": "What is cross-cloud migration?", "slug": "overview/what-is-cross-cloud-migration" },
+        { "title": "Migration archetypes", "slug": "overview/migration-archetypes" },
+        { "title": "Decision framework", "slug": "overview/decision-framework" }
+      ]
+    },
+    {
+      "title": "Discovery",
+      "slug": "discovery",
+      "items": [
+        { "title": "Workspace inventory", "slug": "discovery/workspace-inventory" },
+        { "title": "Asset inventory", "slug": "discovery/asset-inventory" },
+        { "title": "Dependency mapping", "slug": "discovery/dependency-mapping" },
+        { "title": "Risk assessment", "slug": "discovery/risk-assessment" }
+      ]
+    },
+    {
+      "title": "Cloud mappings",
+      "slug": "cloud-mappings",
+      "items": [
+        { "title": "Azure to AWS", "slug": "cloud-mappings/azure-to-aws" },
+        { "title": "Azure to GCP", "slug": "cloud-mappings/azure-to-gcp" },
+        { "title": "AWS to Azure", "slug": "cloud-mappings/aws-to-azure" },
+        { "title": "AWS to GCP", "slug": "cloud-mappings/aws-to-gcp" },
+        { "title": "GCP to Azure", "slug": "cloud-mappings/gcp-to-azure" },
+        { "title": "GCP to AWS", "slug": "cloud-mappings/gcp-to-aws" },
+        { "title": "Cross-cloud equivalency matrix", "slug": "cloud-mappings/cross-cloud-equivalency-matrix" }
+      ]
+    },
+    {
+      "title": "Governance",
+      "slug": "governance",
+      "items": [
+        { "title": "Unity Catalog strategy", "slug": "governance/unity-catalog-strategy" },
+        { "title": "Metastore migration", "slug": "governance/metastore-migration" },
+        { "title": "Grants and roles", "slug": "governance/grants-and-roles" },
+        { "title": "External locations and volumes", "slug": "governance/external-locations-and-volumes" },
+        { "title": "Legacy Hive transition", "slug": "governance/legacy-hive-transition" }
+      ]
+    },
+    {
+      "title": "Security",
+      "slug": "security",
+      "items": [
+        { "title": "IAM mapping", "slug": "security/iam-mapping" },
+        { "title": "Identity federation", "slug": "security/identity-federation" },
+        { "title": "Secrets and KMS", "slug": "security/secrets-and-kms" },
+        { "title": "Network security", "slug": "security/network-security" },
+        { "title": "Audit and compliance", "slug": "security/audit-and-compliance" }
+      ]
+    },
+    {
+      "title": "Compute",
+      "slug": "compute",
+      "items": [
+        { "title": "Cluster migration", "slug": "compute/cluster-migration" },
+        { "title": "SQL warehouses", "slug": "compute/sql-warehouses" },
+        { "title": "Cluster policies", "slug": "compute/cluster-policies" },
+        { "title": "Runtime upgrade", "slug": "compute/runtime-upgrade" },
+        { "title": "Init scripts and libraries", "slug": "compute/init-scripts-and-libraries" }
+      ]
+    },
+    {
+      "title": "Pipelines",
+      "slug": "pipelines",
+      "items": [
+        { "title": "Workflows and jobs", "slug": "pipelines/workflows-jobs" },
+        { "title": "DLT and Lakeflow", "slug": "pipelines/dlt-lakeflow" },
+        { "title": "External orchestrators", "slug": "pipelines/external-orchestrators" },
+        { "title": "CI/CD promotion", "slug": "pipelines/cicd-promotion" }
+      ]
+    },
+    {
+      "title": "Analytics",
+      "slug": "analytics",
+      "items": [
+        { "title": "SQL queries", "slug": "analytics/sql-queries" },
+        { "title": "Dashboards", "slug": "analytics/dashboards" },
+        { "title": "Alerts", "slug": "analytics/alerts" },
+        { "title": "Notebooks and repos", "slug": "analytics/notebooks-and-repos" }
+      ]
+    },
+    {
+      "title": "ML",
+      "slug": "ml",
+      "items": [
+        { "title": "MLflow", "slug": "ml/mlflow" },
+        { "title": "Model registry", "slug": "ml/model-registry" },
+        { "title": "Feature assets", "slug": "ml/feature-assets" },
+        { "title": "Serving and artifacts", "slug": "ml/serving-and-artifacts" }
+      ]
+    },
+    {
+      "title": "Execution",
+      "slug": "execution",
+      "items": [
+        { "title": "Wave planning", "slug": "execution/wave-planning" },
+        { "title": "Pilot", "slug": "execution/pilot" },
+        { "title": "Bulk migration", "slug": "execution/bulk-migration" },
+        { "title": "Cutover", "slug": "execution/cutover" },
+        { "title": "Rollback", "slug": "execution/rollback" },
+        { "title": "Hypercare", "slug": "execution/hypercare" }
+      ]
+    },
+    {
+      "title": "Validation",
+      "slug": "validation",
+      "items": [
+        { "title": "Technical validation", "slug": "validation/technical-validation" },
+        { "title": "Data reconciliation", "slug": "validation/data-reconciliation" },
+        { "title": "Security validation", "slug": "validation/security-validation" },
+        { "title": "Business validation", "slug": "validation/business-validation" }
+      ]
+    },
+    {
+      "title": "Templates",
+      "slug": "templates",
+      "items": [
+        { "title": "Checklists", "slug": "templates/checklists" },
+        { "title": "RACI", "slug": "templates/raci" },
+        { "title": "Risk register", "slug": "templates/risk-register" },
+        { "title": "Sample scripts", "slug": "templates/sample-scripts" },
+        { "title": "Terraform patterns", "slug": "templates/terraform-patterns" }
+      ]
+    },
+    {
+      "title": "Troubleshooting",
+      "slug": "troubleshooting",
+      "items": [
+        { "title": "Common errors", "slug": "troubleshooting/common-errors" },
+        { "title": "Anti-patterns", "slug": "troubleshooting/anti-patterns" },
+        { "title": "FAQ", "slug": "troubleshooting/faq" }
+      ]
+    }
+  ]
+}

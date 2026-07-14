@@ -1,0 +1,82 @@
+---
+title: 'Cutover'
+layout: ../../layouts/Layout.astro
+description: 'Execute the final switch from source to target Databricks environment.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Cutover
+
+Cutover is the moment the target environment becomes the system of record. It requires a freeze window, final data catch-up, job re-enablement, and user redirection.
+
+## Cutover prerequisites
+
+<Callout variant="prerequisite" title="Go/no-go gate">
+  Do not proceed with cutover until validation, security sign-off, and business sign-off are complete. Hold a formal go/no-go call.
+</Callout>
+
+- All target infrastructure is provisioned and validated.
+- Data reconciliation shows parity within agreed tolerance.
+- Jobs and pipelines have run successfully in target.
+- Identity, groups, and secrets are working.
+- Support roster and rollback plan are in place.
+- Communication has been sent to users.
+
+## Cutover sequence
+
+| Step | Action | Owner |
+|------|--------|-------|
+| 1 | Announce maintenance window | Migration PMO |
+| 2 | Pause source jobs and writes | Platform team |
+| 3 | Final incremental sync | Data team |
+| 4 | Run final reconciliation | QA / data team |
+| 5 | Switch DNS/endpoints/connection strings | Network team |
+| 6 | Enable target jobs in dependency order | Platform team |
+| 7 | Verify first target runs | Application teams |
+| 8 | Open support channel | Migration PMO |
+
+## Final sync and read-only mode
+
+Set source tables to read-only if possible:
+
+<CodeBlock language="sql" code={`-- Example: revoke write privileges on source catalog during freeze
+REVOKE ALL PRIVILEGES ON CATALOG source_catalog FROM \`users\`;
+GRANT SELECT ON CATALOG source_catalog TO \`users\`;`} />
+
+Run final catch-up based on table type:
+
+- **Delta tables:** Apply incremental `DEEP CLONE` or merge changes.
+- **Streaming:** Restart from last checkpoint offset.
+- **Volumes:** Sync any files changed since last run.
+
+## Validation
+
+- Re-run row-count and checksum queries.
+- Start a sample job from each critical pipeline.
+- Verify user login, SSO, and permissions.
+
+## Rollback
+
+If cutover fails:
+
+1. Stop target writes and jobs.
+2. Re-enable source jobs from the last consistent state.
+3. Redirect users and applications back to source.
+4. Investigate and schedule a new cutover window.
+
+## Automation opportunity
+
+- Use a cutover runbook script that pauses jobs, runs final sync, validates, and enables target jobs.
+- Integrate with orchestration tools for dependency-aware job startup.
+
+<Checklist title="Cutover checklist" items={[
+  { id: 'freeze', label: 'Source jobs paused and users notified' },
+  { id: 'final-sync', label: 'Final incremental sync completed' },
+  { id: 'reconcile', label: 'Final reconciliation passed' },
+  { id: 'endpoint', label: 'Endpoints/DNS switched to target' },
+  { id: 'jobs', label: 'Target jobs enabled in dependency order' },
+  { id: 'support', label: 'Hypercare support channel active' },
+]} />

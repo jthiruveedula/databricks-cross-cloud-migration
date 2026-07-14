@@ -1,0 +1,97 @@
+---
+title: 'Cluster migration'
+layout: ../../layouts/Layout.astro
+description: 'Migrate interactive clusters, job clusters, pools, and policies to the target cloud.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Cluster migration
+
+Clusters are not migrated as running instances. They are recreated in the target cloud with equivalent configurations, node types, access modes, and libraries. This is also the right time to modernize access modes and runtimes.
+
+## What to recreate
+
+| Source object | Migration action |
+|---------------|------------------|
+| Interactive clusters | Recreate with mapped node types and UC access mode |
+| Job clusters | Recreate in job definitions or cluster policies |
+| Cluster policies | Recreate and validate against target SKUs |
+| Instance pools | Recreate with target VM/EC2/GCE families |
+| Init scripts | Copy to target volumes and update paths |
+| Libraries | Reinstall from Maven/PyPI or target artifact store |
+
+## Node type mapping
+
+| Source family | Azure | AWS | GCP |
+|---------------|-------|-----|-----|
+| Memory optimized | Esv5, Dsv5 | R5, R6i | N2-highmem |
+| Compute optimized | Fsv2 | C5, C6i | C2 |
+| General purpose | Dsv5 | M5, M6i | N2 |
+| GPU | NC-series | P4/G4dn | T4/A2 |
+| Storage optimized | Lsv2 | I3/I4i | N2-highcpu |
+
+Map node types by workload profile (CPU, memory, GPU, local SSD) rather than by name.
+
+## Access modes
+
+<Callout variant="prerequisite" title="Use UC-compatible access modes">
+  Unity Catalog requires shared or single-user access modes. Do not migrate legacy shared-no-isolation or high-concurrency clusters to UC-enabled workspaces.
+</Callout>
+
+| Source access mode | Target access mode |
+|--------------------|---------------------|
+| Shared (legacy) | Shared (UC) or Single user |
+| High concurrency | Shared (UC) |
+| Standard | Single user |
+
+## Migration steps
+
+1. Export cluster definitions via the Clusters API.
+2. Translate node types, instance profiles, and storage credentials.
+3. Update init scripts and library paths to target volumes.
+4. Create cluster policies with cost and compliance guardrails.
+5. Recreate pools with appropriate idle termination.
+6. Run smoke tests and validate autoscaling behavior.
+
+<CodeBlock language="python" filename="translate-cluster.py" code={`source_cluster = {
+    "cluster_name": "etl-shared",
+    "node_type_id": "Standard_DS3_v2",  # Azure
+    "num_workers": 2,
+    "spark_version": "13.3.x-scala2.12",
+    "access_mode": "LEGACY_SHARED"
+}
+
+target_cluster = {
+    "cluster_name": source_cluster["cluster_name"],
+    "node_type_id": "m5.large",  # AWS equivalent
+    "num_workers": source_cluster["num_workers"],
+    "spark_version": "13.3.x-scala2.12",
+    "access_mode": "SHARED"
+}
+}`} />
+
+## Validation
+
+- Start each cluster and run a sample job.
+- Verify that UC tables and volumes are accessible.
+- Check autoscaling and spot/preemptible behavior.
+
+## Rollback
+
+If a cluster fails, delete the target cluster and recreate with a corrected configuration. Keep the source cluster running until cutover.
+
+## Automation opportunity
+
+- Generate target cluster JSON from a mapping table.
+- Use Terraform or the Databricks Terraform provider to create clusters, policies, and pools.
+
+<Checklist title="Cluster migration" items={[
+  { id: 'export', label: 'Export cluster definitions and policies' },
+  { id: 'map', label: 'Map node types and access modes' },
+  { id: 'init', label: 'Migrate init scripts and libraries' },
+  { id: 'policies', label: 'Create target cluster policies' },
+  { id: 'smoke', label: 'Run smoke tests on target clusters' },
+]} />

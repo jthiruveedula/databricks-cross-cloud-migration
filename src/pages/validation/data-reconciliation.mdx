@@ -1,0 +1,81 @@
+---
+title: 'Data reconciliation'
+layout: ../../layouts/Layout.astro
+description: 'Reconcile table and file data between source and target after migration.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Data reconciliation
+
+Data reconciliation proves that target data matches source data within agreed tolerances. It is the most critical validation activity before cutover.
+
+## Reconciliation dimensions
+
+| Dimension | Method | Tolerance |
+|-----------|--------|-----------|
+| Row count | `COUNT(*)` per table | 0% |
+| Column-level checksum | Hash aggregate by column | 0% |
+| File count | List files in storage | 0% |
+| File size / checksum | Cloud-native checksums | 0% |
+| Schema | Compare column names, types, nullability | Exact match |
+| Partitions | Compare partition values and counts | 0% |
+| Primary/unique keys | Verify uniqueness constraints | 0% |
+
+## Row-count and checksum query
+
+<CodeBlock language="sql" filename="reconcile.sql" code={`-- Reconcile row count
+SELECT 'source' AS env, COUNT(*) AS cnt FROM source_catalog.schema.table
+UNION ALL
+SELECT 'target' AS env, COUNT(*) AS cnt FROM target_catalog.schema.table;
+
+-- Column-level checksum
+SELECT md5(concat_ws(',', cast(col1 AS string), cast(col2 AS string))) AS hash
+FROM source_catalog.schema.table
+ORDER BY hash;}`} />
+
+## Volume reconciliation
+
+For non-tabular files:
+
+<CodeBlock language="bash" code={`# AWS example: compare file counts and total size
+aws s3 sync s3://source-bucket/path s3://target-bucket/path --dryrun
+
+# GCP example
+gsutil -m rsync -r gs://source-bucket/path gs://target-bucket/path -d -n}`} />
+
+## Handling mismatches
+
+1. Identify the partition or file causing the mismatch.
+2. Re-run the copy or sync for that subset.
+3. Investigate if the mismatch is due to ongoing source changes during sync.
+4. Document the resolution before signing off.
+
+<Callout variant="warning" title="Do not ignore small mismatches">
+  Even a single-row mismatch can indicate a bug in the migration logic or a permissions issue. Treat every mismatch as a severity-2 finding until explained.
+</Callout>
+
+## Validation
+
+- Reconcile every migrated table and volume.
+- Run reconciliation after final sync and again after cutover.
+- Store reconciliation reports with timestamps.
+
+## Rollback
+
+If reconciliation fails beyond tolerance, halt cutover and re-sync. Do not proceed until all severity-1 findings are resolved.
+
+## Automation opportunity
+
+- Run reconciliation queries via a Databricks job and store results in a Delta table.
+- Generate alerts when any table exceeds tolerance.
+
+<Checklist title="Data reconciliation" items={[
+  { id: 'counts', label: 'Row counts match for all tables' },
+  { id: 'checksums', label: 'Column checksums match' },
+  { id: 'files', label: 'File counts and checksums match for volumes' },
+  { id: 'schema', label: 'Schemas match exactly' },
+  { id: 'partitions', label: 'Partitions match' },
+]} />

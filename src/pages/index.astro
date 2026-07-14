@@ -1,0 +1,78 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Card from '../components/Card.tsx';
+import MigrationPlanner from '../components/MigrationPlanner.tsx';
+import { ArrowRight, BookOpen, Cloud, Shield, Cpu, Workflow, ClipboardList, Activity } from 'lucide-react';
+
+const sections = [
+  { title: 'Overview', description: 'Migration drivers, archetypes, and decision framework.', href: '/overview/what-is-cross-cloud-migration', icon: BookOpen },
+  { title: 'Discovery', description: 'Inventory workspaces, assets, dependencies, and risks.', href: '/discovery/workspace-inventory', icon: ClipboardList },
+  { title: 'Cloud mappings', description: 'Azure ↔ AWS ↔ GCP construct equivalency matrix.', href: '/cloud-mappings/cross-cloud-equivalency-matrix', icon: Cloud },
+  { title: 'Governance', description: 'Unity Catalog, metastore, grants, and legacy Hive.', href: '/governance/unity-catalog-strategy', icon: Shield },
+  { title: 'Compute', description: 'Clusters, warehouses, policies, runtimes, and libraries.', href: '/compute/cluster-migration', icon: Cpu },
+  { title: 'Pipelines', description: 'Workflows, DLT, orchestrators, and CI/CD promotion.', href: '/pipelines/workflows-jobs', icon: Workflow },
+  { title: 'Execution', description: 'Waves, cutover, rollback, and hypercare.', href: '/execution/wave-planning', icon: Activity },
+  { title: 'Validation', description: 'Technical, data, security, and business sign-off.', href: '/validation/technical-validation', icon: Activity },
+];
+---
+
+<Layout title="Databricks Cross-Cloud Migration Runbook" description="Enterprise runbook for migrating Databricks across Azure, AWS, and GCP." hideToc>
+  <div class="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-6 py-16 text-center md:py-24">
+    <div class="hero-glow" />
+    <div class="hero-orb hero-orb-1" />
+    <div class="hero-orb hero-orb-2" />
+    <div class="hero-orb hero-orb-3" />
+    <div class="relative z-10 mx-auto max-w-3xl">
+      <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-4 py-1.5 text-sm font-medium text-[var(--accent)]">
+        <span class="relative flex h-2 w-2">
+          <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-75"></span>
+          <span class="relative inline-flex h-2 w-2 rounded-full bg-[var(--accent)]"></span>
+        </span>
+        Enterprise runbook v1.0
+      </div>
+      <h1 class="mb-6 text-4xl font-bold tracking-tight md:text-6xl">
+        Migrate Databricks <span class="gradient-text">across any cloud</span>
+      </h1>
+      <p class="mx-auto mb-8 max-w-2xl text-lg text-[var(--ink-muted)]">
+        A deeply detailed, practical runbook for platform teams, cloud architects, and security engineers moving Databricks between Azure, AWS, and GCP.
+      </p>
+      <div class="flex flex-wrap items-center justify-center gap-4">
+        <a href="/overview/what-is-cross-cloud-migration" class="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-6 py-3 font-medium text-white shadow-glow transition-transform hover:-translate-y-0.5">
+          Start reading <ArrowRight className="h-4 w-4" />
+        </a>
+        <a href="/execution/wave-planning" class="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-6 py-3 font-medium text-[var(--ink)] transition-colors hover:bg-[var(--surface-hover)]">
+          Jump to execution
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="my-12">
+    <MigrationPlanner client:load />
+  </div>
+
+  <div class="card-grid my-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+    {sections.map((s) => <Card href={s.href} title={s.title} description={s.description} icon={s.icon} />)}
+  </div>
+
+  <div class="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-6 md:p-8">
+    <h2 class="mb-4 text-2xl font-semibold text-[var(--ink)]">What this runbook covers</h2>
+    <p class="mb-6 text-[var(--ink-muted)]">
+      Cross-cloud migration is not a lift-and-shift. It is a deliberate reset of identity, storage, networking, governance, and compute. This runbook gives you the decision framework, sequencing, commands, and validation patterns to execute it safely.
+    </p>
+    <div class="grid gap-6 md:grid-cols-3">
+      <div>
+        <h3 class="mb-2 font-semibold text-[var(--ink)]">Plan</h3>
+        <p class="text-sm text-[var(--ink-muted)]">Inventory assets, map dependencies, assess risk, and choose the right migration archetype for your constraints.</p>
+      </div>
+      <div>
+        <h3 class="mb-2 font-semibold text-[var(--ink)]">Migrate</h3>
+        <p class="text-sm text-[var(--ink-muted)]">Move metastores, data, compute, pipelines, SQL assets, and ML artifacts with reusable automation and validation.</p>
+      </div>
+      <div>
+        <h3 class="mb-2 font-semibold text-[var(--ink)]">Validate & cutover</h3>
+        <p class="text-sm text-[var(--ink-muted)]">Reconcile data, verify IAM and networking, run business UAT, and execute blue-green cutover with rollback guardrails.</p>
+      </div>
+    </div>
+  </div>
+</Layout>

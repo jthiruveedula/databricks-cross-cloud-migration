@@ -1,0 +1,87 @@
+---
+title: 'Sample scripts'
+layout: ../../layouts/Layout.astro
+description: 'Bash, Python, and SQL snippets for migration tasks.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+
+# Sample scripts
+
+These snippets are starting points. Replace placeholders with your actual account IDs, workspace URLs, bucket names, and principal names.
+
+## Export all job definitions
+
+<CodeBlock language="bash" code={`#!/bin/bash
+set -e
+SOURCE_HOST="https://<source-workspace>.cloud.databricks.com"
+TOKEN="<PAT>"
+
+mkdir -p exported/jobs
+
+job_ids=$(curl -s -H "Authorization: Bearer $TOKEN" \
+  "$SOURCE_HOST/api/2.1/jobs/list" | jq -r '.jobs[].job_id')
+
+for id in $job_ids; do
+  curl -s -H "Authorization: Bearer $TOKEN" \
+    "$SOURCE_HOST/api/2.1/jobs/get?job_id=$id" \
+    > "exported/jobs/job_$id.json"
+done
+
+echo "Exported $(ls exported/jobs | wc -l) jobs"}`} />
+
+## Deep clone a catalog of Delta tables
+
+<CodeBlock language="python" filename="bulk_clone.py" code={`from databricks.sdk import WorkspaceClient
+
+source = WorkspaceClient(host="<SOURCE_HOST>", token="<SOURCE_TOKEN>")
+target = WorkspaceClient(host="<TARGET_HOST>", token="<TARGET_TOKEN>")
+
+source_catalog = "source_catalog"
+target_catalog = "target_catalog"
+
+tables = source.tables.list(source_catalog, "schema_name")
+for t in tables:
+    if t.table_type == "MANAGED":
+        sql = f"""CREATE TABLE IF NOT EXISTS {target_catalog}.{t.schema_name}.{t.name}
+                  DEEP CLONE {source_catalog}.{t.schema_name}.{t.name}
+                  LOCATION 's3://<target-bucket>/{t.schema_name}/{t.name}'"""
+        target.statement_execution.execute_statement(sql, warehouse_id="<TARGET_WAREHOUSE>")
+        print(f"Cloned {t.name}")
+}`} />
+
+## Reconcile row counts
+
+<CodeBlock language="sql" code={`WITH src AS (
+  SELECT 'source' AS env, COUNT(*) AS cnt FROM source_catalog.schema.table
+),
+tgt AS (
+  SELECT 'target' AS env, COUNT(*) AS cnt FROM target_catalog.schema.table
+)
+SELECT src.env, src.cnt, tgt.env, tgt.cnt, src.cnt - tgt.cnt AS diff
+FROM src CROSS JOIN tgt;}`} />
+
+## Path rewrite helper
+
+<CodeBlock language="python" filename="rewrite_paths.py" code={`def rewrite_path(source_path: str, target_cloud: str, mappings: dict) -> str:
+    """
+    Rewrite cloud storage paths for target environment.
+    Example mappings:
+      abfss://data@source.dfs.core.windows.net/raw -> s3://target-bucket/raw
+    """
+    for src, tgt in mappings.items():
+        if source_path.startswith(src):
+            return source_path.replace(src, tgt)
+    return source_path
+
+mappings = {
+    "abfss://data@source.dfs.core.windows.net/": "s3://target-bucket/",
+    "dbfs:/mnt/legacy/": "/Volumes/target_catalog/schema/legacy/"
+}
+
+print(rewrite_path("abfss://data@source.dfs.core.windows.net/raw/sales", "aws", mappings))}`} />
+
+<Callout variant="warning" title="Test before production">
+  Run all scripts in a non-production target workspace first. Validate outputs and review SQL before executing in production.
+</Callout>

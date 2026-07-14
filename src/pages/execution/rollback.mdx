@@ -1,0 +1,74 @@
+---
+title: 'Rollback'
+layout: ../../layouts/Layout.astro
+description: 'Rollback criteria, steps, and guardrails for cross-cloud migration.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Rollback
+
+A rollback returns the business to the source environment. It must be planned before cutover and executed with discipline to avoid data loss or split-brain.
+
+## Rollback criteria
+
+Trigger rollback if any of the following occur during or after cutover:
+
+- Data reconciliation fails beyond agreed tolerance.
+- Critical jobs cannot start or complete in target.
+- Identity or authentication outage affects a large user group.
+- Security controls are not enforced.
+- Target performance violates SLA for an extended period.
+- Business stakeholders revoke sign-off.
+
+## Rollback steps
+
+1. **Stop target writes:** Pause all target jobs, pipelines, and user writes.
+2. **Preserve evidence:** Capture logs, error messages, and state of target objects.
+3. **Assess data drift:** Determine whether any data was written to target after cutover. If so, decide whether to replay it into source or discard it.
+4. **Re-enable source:** Start source jobs in reverse dependency order.
+5. **Redirect users:** Switch endpoints, DNS, or connection strings back to source.
+6. **Communicate:** Notify users of the rollback and expected next steps.
+7. **Post-incident review:** Document root cause before attempting another cutover.
+
+## Rollback by asset type
+
+| Asset | Rollback action |
+|-------|-----------------|
+| Tables | Revert to source tables; discard or merge target writes |
+| Jobs | Re-enable source jobs; disable target jobs |
+| Dashboards | Switch endpoints back to source warehouse |
+| Identity | Keep source federation active; redirect SSO if changed |
+| Networking | Revert DNS / endpoint changes |
+| Secrets | Re-enable source secret scopes if needed |
+
+<Callout variant="warning" title="Do not leave both environments writable">
+  Split-brain—where source and target both accept writes—is the most dangerous rollback failure mode. Always make one environment read-only before re-enabling the other.
+</Callout>
+
+## Roll-forward
+
+If rollback is not viable due to source decommissioning or business pressure, choose roll-forward:
+
+- Fix the blocking issue in the target.
+- Replay any missing data from source backups.
+- Extend hypercare and monitoring until stability is proven.
+
+## Validation
+
+- Test the rollback procedure in a pilot wave before the production cutover.
+- Confirm source jobs can restart from the state they were in before the freeze.
+
+## Automation opportunity
+
+- Maintain a rollback script that stops target jobs, re-enables source jobs, and flips endpoints.
+- Automate alerts for rollback triggers (failed reconciliation, job failure rate).
+
+<Checklist title="Rollback readiness" items={[
+  { id: 'criteria', label: 'Rollback criteria defined and agreed' },
+  { id: 'runbook', label: 'Step-by-step rollback runbook written' },
+  { id: 'test', label: 'Rollback tested in pilot wave' },
+  { id: 'evidence', label: 'Evidence-capture checklist prepared' },
+  { id: 'comm', label: 'Rollback communication template ready' },
+]} />
