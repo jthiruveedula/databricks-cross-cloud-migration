@@ -17,7 +17,7 @@ export default function ProgressIndicator() {
   return (
     <div className="fixed left-0 top-[var(--header-height)] z-50 h-0.5 w-full bg-[var(--border)]">
       <div
-        className="h-full bg-gradient-to-r from-[var(--accent)] to-violet-500 transition-all"
+        className="h-full bg-gradient-to-r from-[var(--accent)] to-orange-400 transition-all"
         style={{ width: `${progress}%` }}
       />
     </div>
