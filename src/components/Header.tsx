@@ -3,6 +3,7 @@ import ThemeToggle from './ThemeToggle';
 import SearchOverlay from './SearchOverlay';
 import BrandGlyph from './logos/BrandGlyph';
 import { BRAND_ICONS } from './logos/brandIcons';
+import { withBase } from '../lib/paths';
 import { Menu, X } from 'lucide-react';
 
 interface Props {
@@ -23,7 +24,7 @@ export default function Header({ onMenuToggle, menuOpen = false }: Props) {
         >
           {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
-        <a href="/" className="flex items-center gap-2 text-[var(--ink)]">
+        <a href={withBase('/')} className="flex items-center gap-2 text-[var(--ink)]">
           <span
             className="flex h-8 w-8 items-center justify-center rounded-lg shadow-sm"
             style={{ backgroundColor: `#${BRAND_ICONS.databricks.hex}` }}

@@ -2,6 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import nav from '../data/navigation.json';
 import Card from '../components/Card.tsx';
+import { withBase } from '../lib/paths';
 import { ArrowLeft, FileText } from 'lucide-react';
 
 export function getStaticPaths() {
@@ -27,10 +28,10 @@ const siblings = section.items.filter((i) => i.slug !== item.slug);
       This page is a placeholder in the <span class="font-medium text-[var(--accent)]">{section.title}</span> section. It is part of the suggested information architecture for the Databricks Cross-Cloud Migration Runbook.
     </p>
     <div class="flex flex-wrap items-center justify-center gap-3">
-      <a href={`/${section.items[0].slug}`} class="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 font-medium text-white shadow-glow">
+      <a href={withBase(`/${section.items[0].slug}`)} class="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2.5 font-medium text-white shadow-glow">
         <ArrowLeft className="h-4 w-4" /> Go to {section.title}
       </a>
-      <a href="/" class="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-5 py-2.5 font-medium text-[var(--ink)] hover:bg-[var(--surface-hover)]">
+      <a href={withBase('/')} class="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-5 py-2.5 font-medium text-[var(--ink)] hover:bg-[var(--surface-hover)]">
         Return home
       </a>
     </div>
@@ -40,7 +41,7 @@ const siblings = section.items.filter((i) => i.slug !== item.slug);
     <h2 class="mb-4 text-lg font-semibold text-[var(--ink)]">Other pages in {section.title}</h2>
     <div class="grid gap-4 sm:grid-cols-2">
       {siblings.map((s) => (
-        <Card href={`/${s.slug}`} title={s.title} description={`View the ${s.title} page.`} />
+        <Card href={withBase(`/${s.slug}`)} title={s.title} description={`View the ${s.title} page.`} />
       ))}
     </div>
   </div>

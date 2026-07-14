@@ -1,5 +1,6 @@
 import React from 'react';
 import nav from '../data/navigation.json';
+import { withBase } from '../lib/paths';
 import { ChevronRight } from 'lucide-react';
 
 interface Props {
@@ -40,7 +41,7 @@ export default function Sidebar({ open, onClose, currentSlug }: Props) {
                   return (
                     <li key={item.slug}>
                       <a
-                        href={slug}
+                        href={withBase(slug)}
                         onClick={onClose}
                         className={`
                           flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors

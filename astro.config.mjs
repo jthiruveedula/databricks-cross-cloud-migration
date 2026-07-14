@@ -4,7 +4,8 @@ import react from '@astrojs/react';
 import tailwind from '@astrojs/tailwind';
 
 export default defineConfig({
-  site: 'https://databricks-migration.runbook.dev',
+  site: 'https://jthiruveedula.github.io',
+  base: '/databricks-cross-cloud-migration/',
   integrations: [
     tailwind({ applyBaseStyles: false }),
     react(),
