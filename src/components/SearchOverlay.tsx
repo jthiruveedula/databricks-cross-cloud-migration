@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import nav from '../data/navigation.json';
+import { withBase } from '../lib/paths';
 
 interface Hit {
   title: string;
@@ -18,7 +19,7 @@ export default function SearchOverlay() {
     return nav.sections.flatMap((section) =>
       section.items
         .filter((item) => item.title.toLowerCase().includes(q) || section.title.toLowerCase().includes(q))
-        .map((item) => ({ title: item.title, slug: `/${item.slug}`, section: section.title }))
+        .map((item) => ({ title: item.title, slug: withBase(`/${item.slug}`), section: section.title }))
     );
   }, [query]);
 

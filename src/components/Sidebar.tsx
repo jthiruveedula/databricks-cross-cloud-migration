@@ -1,5 +1,6 @@
 import React from 'react';
 import nav from '../data/navigation.json';
+import { withBase } from '../lib/paths';
 import { ChevronRight } from 'lucide-react';
 
 interface Props {
@@ -18,6 +19,7 @@ export default function Sidebar({ open, onClose, currentSlug }: Props) {
         />
       )}
       <aside
+        id="primary-sidebar"
         className={`
           fixed left-0 top-[var(--header-height)] z-50 h-[calc(100vh-var(--header-height))] w-[var(--sidebar-width)]
           transform border-r border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-md
@@ -39,7 +41,7 @@ export default function Sidebar({ open, onClose, currentSlug }: Props) {
                   return (
                     <li key={item.slug}>
                       <a
-                        href={slug}
+                        href={withBase(slug)}
                         onClick={onClose}
                         className={`
                           flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors

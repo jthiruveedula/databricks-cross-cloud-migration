@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import CloudLogo from './CloudLogo.tsx';
 import ToolLogo from './ToolLogo.tsx';
+import { withBase } from '../lib/paths';
 
 type Cloud = 'aws' | 'azure' | 'gcp';
 
@@ -176,7 +177,7 @@ export default function MigrationPlanner() {
           </p>
         </div>
         <a
-          href="/overview/decision-framework"
+          href={withBase('/overview/decision-framework')}
           className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline"
         >
           Read the decision framework <ArrowRight className="h-4 w-4" />
@@ -300,7 +301,7 @@ export default function MigrationPlanner() {
                 <div className="space-y-4">
                   {plan.mappingSlug && (
                     <motion.a
-                      href={`/${plan.mappingSlug}`}
+                      href={withBase(`/${plan.mappingSlug}`)}
                       whileHover={{ scale: 1.01, x: 4 }}
                       className="group flex items-start gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 transition-colors hover:border-[var(--accent)]/50 hover:bg-[var(--surface-hover)]"
                     >
@@ -340,7 +341,7 @@ export default function MigrationPlanner() {
                         {phase.links.map((link) => (
                           <a
                             key={link.href}
-                            href={link.href}
+                            href={withBase(link.href)}
                             className="rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-1 text-sm text-[var(--ink)] transition-colors hover:border-[var(--accent)]/50 hover:text-[var(--accent)]"
                           >
                             {link.label}
@@ -361,7 +362,7 @@ export default function MigrationPlanner() {
                   {TOOLS.map((tool, idx) => (
                     <motion.a
                       key={tool.label}
-                      href={tool.href}
+                      href={tool.href.startsWith('http') ? tool.href : withBase(tool.href)}
                       target={tool.href.startsWith('http') ? '_blank' : undefined}
                       rel={tool.href.startsWith('http') ? 'noopener noreferrer' : undefined}
                       initial={{ opacity: 0, x: 12 }}
@@ -389,7 +390,7 @@ export default function MigrationPlanner() {
                   Keep source workspaces online, preserve DBFS and metastore backups, and validate data before DNS cutover.
                 </p>
                 <a
-                  href="/execution/rollback"
+                  href={withBase('/execution/rollback')}
                   className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline"
                 >
                   Open rollback guide <ArrowRight className="h-4 w-4" />
@@ -397,7 +398,7 @@ export default function MigrationPlanner() {
               </motion.div>
 
               <motion.a
-                href="/execution/wave-planning"
+                href={withBase('/execution/wave-planning')}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.98 }}
                 className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-3 font-medium text-white shadow-glow transition-shadow hover:shadow-glow"

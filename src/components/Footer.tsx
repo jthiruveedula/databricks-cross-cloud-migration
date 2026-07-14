@@ -1,4 +1,5 @@
 import React from 'react';
+import { withBase } from '../lib/paths';
 
 export default function Footer() {
   return (
@@ -9,10 +10,10 @@ export default function Footer() {
           <p className="mt-1">Enterprise-grade guidance for Azure, AWS, and GCP migrations.</p>
         </div>
         <div className="flex gap-6">
-          <a href="/overview/what-is-cross-cloud-migration" className="hover:text-[var(--accent)]">Overview</a>
-          <a href="/execution/wave-planning" className="hover:text-[var(--accent)]">Execution</a>
-          <a href="/templates/checklists" className="hover:text-[var(--accent)]">Templates</a>
-          <a href="/troubleshooting/faq" className="hover:text-[var(--accent)]">FAQ</a>
+          <a href={withBase('/overview/what-is-cross-cloud-migration')} className="hover:text-[var(--accent)]">Overview</a>
+          <a href={withBase('/execution/wave-planning')} className="hover:text-[var(--accent)]">Execution</a>
+          <a href={withBase('/templates/checklists')} className="hover:text-[var(--accent)]">Templates</a>
+          <a href={withBase('/troubleshooting/faq')} className="hover:text-[var(--accent)]">FAQ</a>
         </div>
       </div>
       <div className="mx-auto mt-8 max-w-6xl text-xs text-[var(--ink-subtle)]">
