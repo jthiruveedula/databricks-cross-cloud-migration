@@ -18,6 +18,7 @@ export default function Sidebar({ open, onClose, currentSlug }: Props) {
         />
       )}
       <aside
+        id="primary-sidebar"
         className={`
           fixed left-0 top-[var(--header-height)] z-50 h-[calc(100vh-var(--header-height))] w-[var(--sidebar-width)]
           transform border-r border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-md

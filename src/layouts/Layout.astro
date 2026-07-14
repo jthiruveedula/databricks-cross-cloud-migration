@@ -1,7 +1,6 @@
 ---
 import '../styles/global.css';
-import Header from '../components/Header.tsx';
-import Sidebar from '../components/Sidebar.tsx';
+import AppShell from '../components/AppShell.tsx';
 import TableOfContents from '../components/TableOfContents.tsx';
 import ProgressIndicator from '../components/ProgressIndicator.tsx';
 import Footer from '../components/Footer.tsx';
@@ -13,6 +12,8 @@ export interface Props {
   currentSlug?: string;
   hideSidebar?: boolean;
   hideToc?: boolean;
+  /** Skip `.prose` typography styling for pages that are custom UI, not an article (e.g. the homepage). */
+  bare?: boolean;
 }
 
 const frontmatter = (Astro.props.frontmatter as Props | undefined) ?? Astro.props;
@@ -20,6 +21,7 @@ const title = frontmatter.title ?? 'Databricks Cross-Cloud Migration Runbook';
 const description = frontmatter.description ?? 'Enterprise runbook for Databricks cross-cloud migration.';
 const hideSidebar = frontmatter.hideSidebar;
 const hideToc = frontmatter.hideToc;
+const bare = frontmatter.bare;
 
 const pathname = Astro.url.pathname.replace(/\.html$/, '').replace(/^\//, '');
 const currentSlug = frontmatter.currentSlug ?? pathname;
@@ -46,14 +48,13 @@ const pageTitle = `${title} | Databricks Cross-Cloud Migration Runbook`;
     </script>
   </head>
   <body class="min-h-screen bg-[var(--surface)] text-[var(--ink)]">
-    <Header client:load onMenuToggle={() => {}} />
+    <AppShell client:load currentSlug={currentSlug} hideSidebar={hideSidebar} />
     <ProgressIndicator client:load />
     <div class="flex pt-[var(--header-height)]">
-      {!hideSidebar && <Sidebar client:load open={false} onClose={() => {}} currentSlug={currentSlug} />}
       <div class={`flex-1 ${!hideSidebar ? 'lg:ml-[var(--sidebar-width)]' : ''}`}>
         <main class="mx-auto min-h-[calc(100vh-var(--header-height))] max-w-6xl px-6 py-10 lg:px-10">
           <div class={`flex gap-8 ${!hideToc ? '' : ''}`}>
-            <article class="prose w-full max-w-none">
+            <article class={bare ? 'w-full max-w-none' : 'prose w-full max-w-none'}>
               <slot />
             </article>
             {!hideToc && <TableOfContents client:idle />}
