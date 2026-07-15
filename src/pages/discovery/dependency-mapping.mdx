@@ -1,0 +1,78 @@
+---
+title: 'Dependency mapping'
+layout: ../../layouts/Layout.astro
+description: 'Trace the dependency graph between tables, jobs, and consumers to sequence migration waves correctly.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Dependency mapping
+
+The [asset inventory](/discovery/asset-inventory) tells you *what* exists. Dependency mapping tells you *what breaks* if you migrate one piece without the others — and it's the input [wave planning](/execution/wave-planning) actually needs, since waves are built around dependency clusters, not asset types.
+
+<Callout variant="warning" title="The most common wave-planning mistake">
+  Grouping workloads by asset type ("migrate all the tables first, then all the jobs") ignores dependencies and guarantees a wave that can't run end to end. Group by dependency cluster instead — a job and every table, secret, and cluster policy it touches move together.
+</Callout>
+
+## Dependency types to trace
+
+| Dependency | Where it hides | Why it matters |
+|---|---|---|
+| Table → table (lineage) | Job/notebook SQL and PySpark code | A downstream table migrated before its upstream source has nothing to read |
+| Job → cluster policy | Job cluster spec | Policy must exist in target before the job can even be created |
+| Job → secret scope | Notebook/job code referencing `dbutils.secrets.get` | Job fails silently or errors on first run if the scope is missing |
+| Notebook → external location | Hardcoded or parameterized paths | Path rewrite (see the relevant [cloud mapping](/cloud-mappings/cross-cloud-equivalency-matrix)) must land before the notebook runs |
+| Dashboard/query → SQL warehouse → tables | Lakeview/SQL API definitions | A dashboard can look "migrated" while silently querying stale source data |
+| Pipeline → upstream pipeline | DLT pipeline dependency graph | Streaming pipelines can't start if their upstream isn't already producing to target |
+| External tool → workspace API | Partner integration configs (orchestrators, catalogs, BI tools) | Breaks silently outside Databricks; easy to miss in an internal-only inventory |
+
+## Building the dependency graph
+
+<CodeBlock language="sql" filename="table_lineage.sql" code={`-- Databricks system tables expose lineage directly -- don't hand-parse SQL/notebooks
+SELECT source_table_full_name, target_table_full_name, source_type, target_type
+FROM system.access.table_lineage
+WHERE target_table_full_name LIKE 'prod_catalog.%';
+`} />
+
+<CodeBlock language="python" filename="build_dependency_graph.py" code={`import networkx as nx
+
+graph = nx.DiGraph()
+for row in lineage_rows:
+    graph.add_edge(row.source_table_full_name, row.target_table_full_name)
+
+# Everything reachable from a given table -- what breaks if it migrates alone
+downstream = nx.descendants(graph, "prod_catalog.raw.orders")
+
+# Connected components approximate natural wave boundaries
+clusters = list(nx.weakly_connected_components(graph))
+`} />
+
+## From graph to wave boundaries
+
+- Each weakly-connected component in the dependency graph is a candidate wave — don't split one unless it's large enough that splitting reduces risk more than it adds coordination overhead.
+- Cross-cluster edges (a table read by jobs in two otherwise-separate clusters) are exactly the cases [wave planning](/execution/wave-planning)'s scoring matrix should flag as high dependency-count risk.
+- Circular or unclear dependencies (job A depends on table from job B, which depends on a table from job A) need a manual design decision before wave assignment, not an automated cluster boundary.
+
+## Validation
+
+- Confirm the dependency graph derived from `system.access.table_lineage` matches what job owners believe their jobs depend on — lineage capture has gaps for anything that bypasses Spark's read/write APIs (e.g. raw cloud SDK calls).
+- Spot-check a sample of "isolated" nodes (no edges) — an asset with no detected dependencies is either genuinely standalone or has an undetected dependency that lineage capture missed.
+
+## Rollback
+
+Dependency mapping is read-only and produces no environment changes — there is nothing to roll back. An incomplete or wrong dependency map is a planning risk, not an execution risk; fix it before wave assignment, not during.
+
+## Automation opportunity
+
+- Regenerate the dependency graph on a schedule during discovery so it reflects code changes made while migration planning is underway.
+- Feed the connected-components output directly into the [wave plan template](/execution/wave-planning) as a starting point for wave scope, rather than starting wave design from a blank page.
+
+<Checklist title="Dependency mapping" items={[
+  { id: 'lineage', label: 'Table lineage extracted from system.access.table_lineage' },
+  { id: 'job-deps', label: 'Job → cluster policy, secret scope, and cluster dependencies traced' },
+  { id: 'graph', label: 'Full dependency graph built and connected components identified' },
+  { id: 'validated', label: 'Graph validated against job owners\' understanding of their dependencies' },
+  { id: 'circular', label: 'Circular/cross-cluster dependencies flagged for manual wave design' },
+]} />
