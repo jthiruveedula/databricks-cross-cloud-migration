@@ -15,29 +15,33 @@ Divide the migration into waves that move related workloads together. Waves redu
 
 ## Wave design principles
 
-- Group by business domain, not by cloud primitive.
-- Keep dependencies together: a job and its input tables should move in the same wave.
+- Group by **dependency chain**, not by asset type. A wave is "the table, the pipeline that populates it, and every dashboard/job that reads it" — never just "all the dashboards" or "all the pipelines" as separate waves. See [dependency mapping](/discovery/dependency-mapping) for how to derive these clusters instead of guessing.
+- Group by business domain within that constraint, not by cloud primitive.
 - Start with low-risk, non-production workloads.
 - Reserve the final wave for the most critical or tightly coupled systems.
+
+<Callout client:visible variant="warning" title="A dashboard has no data until its pipeline has migrated too">
+  If Wave 1 moves "the dashboards" and Wave 2 moves "the batch pipelines" as separate asset-type waves, Wave 1's dashboards have nothing current to query -- the job that refreshes their source tables is still running against source, not target. Every wave below bundles a reporting/domain's tables, the pipeline(s) that populate them, *and* the dashboards that read them together; "Analytics and BI" names the wave's business domain, not a list of only-dashboards.
+</Callout>
 
 ## Sample wave structure
 
 <Accordion client:visible items={[
   {
     title: 'Wave 0: Pilot',
-    content: 'One or two non-production workloads. Validate tooling, IAM, networking, and runbook timing.'
+    content: 'One or two non-production workloads, each migrated as a full dependency chain (table + pipeline + consumer). Validate tooling, IAM, networking, and runbook timing.'
   },
   {
-    title: 'Wave 1: Analytics and BI',
-    content: 'Read-only dashboards and batch SQL. Low risk, high visibility. Builds confidence.'
+    title: 'Wave 1: Read-only reporting domains',
+    content: 'The lowest-complexity dependency chains: source tables, the batch pipelines that refresh them, and the dashboards/BI queries that read them, for a handful of low-risk, high-visibility reporting domains. Low risk because these chains are simple and read-only downstream; builds confidence before tackling larger domains.'
   },
   {
-    title: 'Wave 2: Batch pipelines',
-    content: 'Databricks Workflows and DLT jobs. Requires data validation and SLA sign-off.'
+    title: 'Wave 2: Remaining batch domains',
+    content: 'The larger or more complex batch pipeline dependency chains not covered in Wave 1 -- more tables, more downstream consumers, or cross-domain dependencies. Requires data validation and SLA sign-off per chain.'
   },
   {
-    title: 'Wave 3: Streaming and ML',
-    content: 'Real-time pipelines, model serving, and feature stores. Highest operational risk.'
+    title: 'Wave 3: Streaming and ML domains',
+    content: 'Real-time pipelines, model serving, and feature stores, each with their own upstream data and downstream consumers migrated together. Highest operational risk.'
   },
   {
     title: 'Wave 4: Decommission',
