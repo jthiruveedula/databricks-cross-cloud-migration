@@ -1,0 +1,89 @@
+---
+title: 'Bulk migration'
+layout: ../../layouts/Layout.astro
+description: 'Execute waves 1-N at scale using the runbook and timing the pilot validated.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Bulk migration
+
+Bulk migration is the pilot's runbook, repeated across every remaining wave from [wave planning](/execution/wave-planning) — at scale, on a schedule, with the same reconciliation rigor. The goal at this stage is throughput and consistency, not discovery; anything still being discovered here should have surfaced during the [pilot](/execution/pilot).
+
+<Callout variant="prerequisite" title="Don't start bulk migration on an unvalidated runbook">
+  If the pilot retro found gaps in tooling, IAM mapping, or reconciliation, close them before wave 1 — bulk migration multiplies whatever is broken in the runbook across every remaining workload.
+</Callout>
+
+## Parallelizing within a wave
+
+Waves group workloads by dependency, not by migration mechanics — within a wave, migrate independent tables/jobs in parallel to compress the timeline:
+
+<CodeBlock language="python" filename="bulk_migrate.py" code={`from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def migrate_table(table_name: str) -> dict:
+    deep_clone(source=f"source_catalog.{table_name}", target=f"target_catalog.{table_name}")
+    return reconcile(table_name)
+
+tables = load_wave_manifest("wave-1.yaml")["tables"]
+results = {}
+with ThreadPoolExecutor(max_workers=8) as pool:
+    futures = {pool.submit(migrate_table, t): t for t in tables}
+    for future in as_completed(futures):
+        table = futures[future]
+        results[table] = future.result()
+
+failed = [t for t, r in results.items() if not r["reconciled"]]
+if failed:
+    raise RuntimeError(f"Reconciliation failed for: {failed}")
+`} />
+
+<Callout variant="warning" title="Parallelism has a ceiling">
+  Cloud storage APIs and Unity Catalog metastore operations both rate-limit. Tune `max_workers` against your source and target cloud's actual throttling limits — a naive "migrate everything at once" run degrades into throttling errors, not faster migration.
+</Callout>
+
+## Per-wave sequence
+
+| Step | Action |
+|------|--------|
+| 1 | Confirm previous wave's exit criteria are met |
+| 2 | Freeze wave scope (no new tables/jobs added mid-wave) |
+| 3 | Migrate data in parallel per the wave manifest |
+| 4 | Reconcile every table/job against the pilot's validation harness |
+| 5 | Re-create jobs/pipelines in dependency order |
+| 6 | Grant access via Unity Catalog; verify with the owning team |
+| 7 | Hold wave sign-off before starting the next wave |
+
+## Tracking progress
+
+Maintain a single source of truth for wave status — a stalled or partially-migrated wave is easy to lose track of across dozens of tables and jobs:
+
+| Wave | Tables | Jobs | Status | Blocked by |
+|------|--------|------|--------|-------------|
+| Wave 1 | 42/42 | 8/8 | Reconciled | — |
+| Wave 2 | 31/56 | 3/12 | In progress | Streaming checkpoint migration |
+| Wave 3 | 0/18 | 0/9 | Not started | Wave 2 exit criteria |
+
+## Validation
+
+- Apply the pilot's reconciliation harness to every table and job — no wave exits on a manual spot-check alone.
+- Track failure patterns across waves; a recurring failure type (e.g. a specific data type or partition scheme) means fixing the tooling, not re-running the same fix per table.
+- Confirm each wave's owning team explicitly signs off before starting the next wave.
+
+## Rollback
+
+Roll back at wave granularity, not migration-wide — see [rollback](/execution/rollback). A failed wave 3 does not require reverting waves 1-2; keep completed waves on target and only revert the wave in question.
+
+## Automation opportunity
+
+- Generate wave manifests directly from the [dependency mapping](/discovery/dependency-mapping) output rather than hand-curating table lists.
+- Build a dashboard from the wave-tracking table above so stakeholders can self-serve status instead of asking in standup.
+
+<Checklist title="Bulk migration discipline" items={[
+  { id: 'freeze', label: 'Wave scope frozen before migration starts' },
+  { id: 'parallel', label: 'Parallelism tuned to cloud API rate limits' },
+  { id: 'reconcile', label: 'Every table/job reconciled with the pilot harness' },
+  { id: 'tracking', label: 'Single source of truth for wave status maintained' },
+  { id: 'signoff', label: 'Wave owner sign-off required before next wave starts' },
+]} />

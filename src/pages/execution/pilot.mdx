@@ -1,0 +1,82 @@
+---
+title: 'Pilot'
+layout: ../../layouts/Layout.astro
+description: 'Run Wave 0 as a small, low-risk proof that the target foundation and runbook actually work.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Pilot (Wave 0)
+
+The pilot is not a demo — it is the first real execution of your migration runbook, at small enough scale that a mistake costs hours instead of weeks. Everything the pilot doesn't catch, bulk migration will catch at 10x the cost. See [wave planning](/execution/wave-planning) for how the pilot fits into the overall wave sequence.
+
+<Callout variant="prerequisite" title="What must exist before the pilot starts">
+  Target foundation (metastore, IAM/identity federation, networking, storage) must already be provisioned and validated per your [cloud mapping](/cloud-mappings/cross-cloud-equivalency-matrix) before you pick a pilot workload. The pilot proves the runbook, not the foundation.
+</Callout>
+
+## Choosing the pilot workload
+
+Pick a workload that is:
+
+- **Non-production**, or production but read-only and low-visibility.
+- **Representative** of a common pattern in your estate (e.g. a batch SQL job reading Delta tables), not an edge case.
+- **Small enough** to fully reconcile by hand if automation fails.
+- **Owned by an engaged team** willing to validate results and report friction quickly.
+
+<Callout variant="warning" title="Don't pick the easiest workload">
+  A pilot with no dependencies, no downstream consumers, and no governance grants proves nothing about the parts of the runbook that will actually be hard. Pick something with at least one dependency and one Unity Catalog grant to exercise.
+</Callout>
+
+## Pilot execution sequence
+
+| Step | Action | Validates |
+|------|--------|-----------|
+| 1 | Register pilot catalog/schema in target Unity Catalog | Metastore and governance foundation |
+| 2 | Replicate pilot tables via Delta Deep Clone | Storage path mapping and data replication |
+| 3 | Re-create pilot cluster policy and job | Compute and identity mapping |
+| 4 | Run job against target, compare output to source | End-to-end correctness |
+| 5 | Grant pilot user group access via Unity Catalog | IAM/grants mapping |
+| 6 | Time every step | Real estimates for wave planning |
+
+<CodeBlock language="python" filename="pilot_reconcile.py" code={`# Minimal pilot reconciliation: row count + checksum parity
+source_count = spark.table("source_catalog.pilot.orders").count()
+target_count = spark.table("target_catalog.pilot.orders").count()
+assert source_count == target_count, f"Row count mismatch: {source_count} vs {target_count}"
+
+source_hash = spark.sql("SELECT md5(concat_ws('|', *)) AS h FROM source_catalog.pilot.orders")
+target_hash = spark.sql("SELECT md5(concat_ws('|', *)) AS h FROM target_catalog.pilot.orders")
+diff = source_hash.exceptAll(target_hash).count()
+assert diff == 0, f"{diff} rows differ between source and target"
+`} />
+
+## What the pilot should tell you
+
+- **Real per-table migration time** — use it to size bulk migration wave windows, not a vendor estimate.
+- **Gaps in the runbook** — every manual step you had to improvise belongs back in the [checklists](/templates/checklists) template.
+- **Actual IAM friction** — which grants were missing, which group mappings were wrong.
+- **Tooling gaps** — did UCX, the Terraform provider, or your scripts need a patch mid-pilot? Fix it now, not in wave 1.
+
+## Validation
+
+- Reconcile data with the same rigor you'll require for production waves — see [data reconciliation](/validation/data-reconciliation).
+- Confirm the pilot's users can actually query the target (not just that the job ran) — permissions bugs often hide behind a service-account test.
+- Hold a pilot retro with the owning team before greenlighting bulk migration.
+
+## Rollback
+
+Pilot rollback is trivial by design: the source workload keeps running untouched throughout, so "rollback" is simply not cutting the pilot workload's users over — there is nothing to revert.
+
+## Automation opportunity
+
+- Turn the pilot's reconciliation script into the reusable validation harness for every subsequent wave.
+- Feed pilot timing data into the [wave plan template](/execution/wave-planning) to size later waves realistically.
+
+<Checklist title="Pilot exit criteria" items={[
+  { id: 'foundation', label: 'Target foundation validated independently of the pilot' },
+  { id: 'data', label: 'Pilot data reconciled with zero unexplained diffs' },
+  { id: 'access', label: 'Pilot user group can query target with correct grants' },
+  { id: 'timing', label: 'Per-table/job timing captured for wave sizing' },
+  { id: 'retro', label: 'Runbook gaps found during pilot fed back into templates' },
+]} />
