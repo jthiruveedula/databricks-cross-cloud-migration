@@ -1,0 +1,80 @@
+---
+title: 'Risk assessment'
+layout: ../../layouts/Layout.astro
+description: 'Score discovered assets and workloads for migration risk before wave assignment.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Risk assessment
+
+[Asset inventory](/discovery/asset-inventory) and [dependency mapping](/discovery/dependency-mapping) tell you what exists and how it connects. Risk assessment turns that into a score you can actually sequence waves by — without it, [wave planning](/execution/wave-planning) is just intuition with extra steps.
+
+## Risk dimensions
+
+| Dimension | Low risk | High risk |
+|---|---|---|
+| Business criticality | Internal reporting, non-customer-facing | Revenue-impacting, customer-facing, regulatory-reportable |
+| Data sensitivity | Public or internal data | PII, PHI, PCI-scoped data |
+| Dependency count | Standalone table/job, no downstream consumers | Hub table with many downstream jobs/dashboards |
+| Data volume/velocity | Small batch, daily | Large volume or continuous streaming |
+| Custom tooling | Standard Workflows/DLT | Bespoke orchestration, non-standard cluster configs, legacy Hive |
+| Owner engagement | Actively maintained, responsive team | Orphaned, no clear owner, tribal knowledge only |
+| Rollback complexity | Stateless, easily re-run | Stateful streaming, hard to replay exactly |
+
+<Callout variant="warning" title="Orphaned workloads are the highest-risk category, not the lowest">
+  It's tempting to deprioritize a workload with no responsive owner as "low activity, low risk." The opposite is usually true — no owner means no one to validate the migration worked, no one to explain undocumented behavior, and no one to notice quietly broken output until a downstream consumer complains weeks later.
+</Callout>
+
+## Scoring model
+
+<CodeBlock language="python" filename="risk_score.py" code={`WEIGHTS = {
+    "criticality": 3,
+    "sensitivity": 3,
+    "dependency_count": 2,
+    "volume_velocity": 1,
+    "custom_tooling": 2,
+    "owner_engagement": 2,  # inverted: unengaged owner = high score = high risk
+}
+
+def risk_score(workload: dict) -> int:
+    return sum(WEIGHTS[dim] * workload["ratings"][dim] for dim in WEIGHTS)
+
+# Ratings are 1 (low) - 3 (high) per dimension, gathered during discovery interviews
+# and from the dependency graph -- not guessed from the asset name alone.
+`} />
+
+Bucket the resulting scores into three tiers to drive wave assignment:
+
+- **Low risk** — pilot and early waves. Builds confidence and validates tooling.
+- **Medium risk** — mid-sequence waves, once tooling and process are proven.
+- **High risk** — late waves, with extra validation time and a named rollback owner, or a dedicated blue-green approach instead of a standard wave cutover.
+
+## Risk register
+
+Track every high- and medium-risk item as a standing register entry, not just a scoring artifact you compute once — see the [risk register template](/templates/risk-register) for the tracked format (owner, mitigation, status, review date).
+
+## Validation
+
+- Have the workload's actual owning team review its risk rating — a rating assigned purely from discovery tooling output misses context (e.g. "this looks standalone but it's the input to a quarterly regulatory report").
+- Cross-check high-data-sensitivity workloads against the [audit and compliance](/security/audit-and-compliance) requirements before wave assignment, not after.
+- Re-score after the pilot wave — real migration friction discovered in the pilot should adjust risk ratings for similar workloads still pending.
+
+## Rollback
+
+Risk assessment produces no environment changes; there's nothing to roll back. A wrong risk rating is a planning-quality issue — fix it by re-scoring and re-sequencing, not by reverting infrastructure.
+
+## Automation opportunity
+
+- Compute dependency-count and volume/velocity ratings directly from the [dependency mapping](/discovery/dependency-mapping) graph and system tables instead of manual estimation.
+- Auto-populate the [risk register](/templates/risk-register) from the scoring output so medium/high-risk items don't rely on someone remembering to transcribe them.
+
+<Checklist title="Risk assessment" items={[
+  { id: 'dimensions', label: 'Every workload rated across all risk dimensions' },
+  { id: 'owner-review', label: 'Ratings reviewed with the workload\'s actual owning team' },
+  { id: 'tiers', label: 'Workloads bucketed into low/medium/high risk tiers' },
+  { id: 'register', label: 'Medium/high-risk items tracked in the risk register' },
+  { id: 'rescored', label: 'Ratings re-checked after the pilot wave' },
+]} />
