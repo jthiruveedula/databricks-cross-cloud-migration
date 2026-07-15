@@ -1,0 +1,77 @@
+---
+title: 'Serving and artifacts'
+layout: ../../layouts/Layout.astro
+description: 'Migrate model serving endpoints and artifact stores to the target cloud with zero-downtime cutover.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Serving and artifacts
+
+Once a model is registered (see [model registry](/ml/model-registry)), serving it is its own migration concern: endpoints are workspace-scoped, callers hold a specific URL and auth token, and — unlike a batch job — a serving endpoint often has to stay available with no downtime through cutover.
+
+<Callout client:visible variant="prerequisite" title="Serving endpoints need a real cutover plan, not just a recreation">
+  A batch job can be paused during a maintenance window. A live model-serving endpoint backing a real-time application usually can't be. Plan serving endpoint cutover with the same rigor as [cutover](/execution/cutover) itself, including a rollback path that doesn't involve downtime.
+</Callout>
+
+## What to migrate
+
+| Asset | Migration approach |
+|---|---|
+| Model Serving endpoint | Recreate in target referencing the migrated model from [model registry](/ml/model-registry) |
+| Endpoint configuration (compute size, scale-to-zero, traffic splitting) | Recreate explicitly; don't assume defaults match source |
+| Caller authentication (tokens, service principals) | Issue new target-workspace credentials to every caller — do not attempt to reuse source tokens |
+| Artifact store (model files, custom Python environments) | Migrate alongside the model version itself; verify custom dependencies install correctly on target |
+
+## Zero-downtime cutover pattern
+
+1. Stand up the target serving endpoint alongside the still-running source endpoint (not replacing it yet).
+2. Validate the target endpoint directly (see validation below) before any caller traffic moves.
+3. Move callers incrementally — canary a small percentage of traffic to target first if your calling application supports it, rather than an all-at-once DNS flip.
+4. Monitor latency and error rate on target under real traffic before fully cutting over.
+5. Keep the source endpoint warm and reachable through [hypercare](/execution/hypercare) as the rollback target.
+
+<CodeBlock client:visible language="python" filename="create_target_endpoint.py" code={`from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.serving import EndpointCoreConfigInput, ServedEntityInput
+
+w = WorkspaceClient(host=TARGET_HOST, token=TARGET_TOKEN)
+
+w.serving_endpoints.create(
+    name="churn-model-serving",
+    config=EndpointCoreConfigInput(
+        served_entities=[
+            ServedEntityInput(
+                entity_name="target_catalog.models.churn_model",
+                entity_version="3",
+                workload_size="Small",
+                scale_to_zero_enabled=True,
+            )
+        ]
+    ),
+)
+`} />
+
+## Validation
+
+- Send the same test payload to both source and target endpoints and confirm equivalent predictions before moving any real traffic.
+- Load-test the target endpoint at expected production traffic levels — serving compute sizing rarely transfers 1:1 across clouds (see the node-type mapping caveats in [cluster migration](/compute/cluster-migration)).
+- Confirm custom model dependencies (conda/pip environment bundled with the model) actually install and run on target — a dependency that resolved fine on source can fail on a different base image in target.
+
+## Rollback
+
+Keep the source serving endpoint running and reachable throughout hypercare — rollback is redirecting callers back to the source endpoint URL, which requires no data migration since the source model artifact never moved. This is exactly why the zero-downtime cutover pattern above stands up target *alongside* source rather than replacing it.
+
+## Automation opportunity
+
+- Automate the canary traffic-shift (e.g. via a load balancer or API gateway in front of both endpoints) rather than a manual all-at-once caller cutover.
+- Script the equivalent-prediction check as a CI gate that must pass before traffic is allowed to shift to target.
+
+<Checklist client:visible title="Serving and artifacts migration" items={[
+  { id: 'endpoint', label: 'Target serving endpoint created referencing the migrated model' },
+  { id: 'auth', label: 'New target-workspace credentials issued to every caller' },
+  { id: 'parity', label: 'Source and target endpoints validated to produce equivalent predictions' },
+  { id: 'load-tested', label: 'Target endpoint load-tested at expected production traffic' },
+  { id: 'canary', label: 'Traffic shifted incrementally, not via a single all-at-once cutover' },
+]} />

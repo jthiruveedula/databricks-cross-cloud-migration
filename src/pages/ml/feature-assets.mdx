@@ -1,0 +1,80 @@
+---
+title: 'Feature assets'
+layout: ../../layouts/Layout.astro
+description: 'Migrate feature tables and feature-serving lookups to the target metastore without breaking training/serving parity.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Feature assets
+
+Feature tables (via Databricks Feature Engineering / Feature Store) are Delta tables with extra metadata: primary keys, feature lookups used at training time, and an online-serving path used at inference time. Migrating the table alone (as covered generically in [governance/metastore migration](/governance/metastore-migration)) is not enough — the feature-lookup metadata and any online store sync need to move too.
+
+<Callout client:visible variant="warning" title="Training/serving skew is the specific risk here">
+  If a feature table migrates but its serving/online-store counterpart doesn't (or migrates with a subtle difference), a model can train correctly against target offline features while serving stale or mismatched values online. Validate both paths, not just the offline table.
+</Callout>
+
+## What to migrate
+
+| Asset | Migration approach |
+|---|---|
+| Feature table (Delta) | Migrate via Delta Deep Clone like any other UC table |
+| Feature table metadata (primary keys, timestamp keys) | Re-register as a feature table in target using the Feature Engineering client, not a plain `CREATE TABLE` |
+| Training set specs (`FeatureLookup` definitions used in training code) | Update catalog/schema references in training code, same as any other hardcoded reference |
+| Online store sync (if used for low-latency serving) | Re-create the online store publish job against target, pointed at the target online store instance |
+
+## Migration pattern
+
+<CodeBlock client:visible language="python" filename="migrate_feature_table.py" code={`from databricks.feature_engineering import FeatureEngineeringClient
+
+fe = FeatureEngineeringClient()
+
+# Data itself migrates via Delta Deep Clone (see cloud-mappings path-rewrite pattern);
+# this re-establishes the feature-table *metadata* on top of the migrated Delta table
+fe.create_table(
+    name="target_catalog.features.customer_features",
+    primary_keys=["customer_id"],
+    timestamp_keys=["event_time"],
+    df=spark.table("target_catalog.features.customer_features"),
+    description="Customer features migrated from source_catalog.features.customer_features",
+)
+`} />
+
+## Training code references
+
+Update every `FeatureLookup` in training pipelines to reference the target catalog:
+
+<CodeBlock client:visible language="python" filename="training_lookup.py" code={`from databricks.feature_engineering import FeatureLookup
+
+feature_lookups = [
+    FeatureLookup(
+        table_name="target_catalog.features.customer_features",  # was source_catalog.*
+        lookup_key="customer_id",
+    )
+]
+`} />
+
+## Validation
+
+- Re-run a training job against the migrated feature table and confirm it produces a model statistically equivalent to one trained against source features for the same time window.
+- If an online store is in use, compare a sample of served feature values between source and target for the same entity keys — this is the check that catches training/serving skew before it reaches production.
+- Confirm point-in-time correctness (as-of joins) still resolve correctly against target — timestamp key handling is easy to silently break during a metadata re-registration.
+
+## Rollback
+
+Feature tables are Delta tables underneath; rollback follows the same pattern as [rollback](/execution/rollback) for any other table — keep source feature tables and any online store sync live and untouched through hypercare.
+
+## Automation opportunity
+
+- Generate the feature-table re-registration script from the source feature table's existing metadata (primary keys, timestamp keys) via the Feature Engineering API, rather than hand-transcribing the schema.
+- Add an automated training/serving parity check comparing a sample of online-store values to the offline feature table, run continuously through hypercare.
+
+<Checklist client:visible title="Feature asset migration" items={[
+  { id: 'data', label: 'Feature table data migrated via Delta Deep Clone' },
+  { id: 'metadata', label: 'Feature-table metadata (primary/timestamp keys) re-registered, not just a plain table' },
+  { id: 'training-code', label: 'FeatureLookup references updated in all training pipelines' },
+  { id: 'online-store', label: 'Online store sync re-created and validated against target, if in use' },
+  { id: 'parity', label: 'Training/serving parity validated -- no skew between offline and online values' },
+]} />
