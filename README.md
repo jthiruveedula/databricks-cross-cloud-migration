@@ -1,13 +1,15 @@
 # Databricks Cross-Cloud Migration Runbook
 
-A production-grade, enterprise-focused documentation website and migration runbook for moving Databricks across Azure, AWS, and GCP.
+**Live site: https://jthiruveedula.github.io/databricks-cross-cloud-migration/**
+
+A production-grade, enterprise-focused documentation website and migration runbook for moving Databricks across Azure, AWS, and GCP — discovery, Unity Catalog and metastore strategy, IAM and network security, compute and pipeline migration, wave planning through cutover and hypercare, and validation, backed by an interactive Migration Planner that generates a tailored runbook path for any source/target cloud pair.
 
 ## What is included
 
-- **Static docs website** built with [Astro](https://astro.build), React, and Tailwind CSS.
-- **Premium UX** with dark/light mode, search, progress indicator, animated cards, code copy buttons, and table of contents.
-- **Full runbook content** covering discovery, cloud mappings, governance, security, compute, pipelines, execution, validation, templates, and troubleshooting.
-- **Sample pages** (28+ pages) with decision tables, checklists, code snippets, Mermaid-ready diagrams, and callouts.
+- **Static docs website** built with [Astro](https://astro.build), React, and Tailwind CSS, deployed to GitHub Pages via GitHub Actions on every push to `main`.
+- **Interactive Migration Planner** (`src/components/MigrationPlanner.tsx`) — pick a source/target cloud and get a tailored migration strategy, recommended runbook path, and toolset.
+- **Premium UX** with dark/light mode, search (⌘K), scroll progress indicator, animated cards, code copy buttons, table of contents, and real brand logos (Databricks, Terraform, GitHub, MLflow, Apache Spark, Kubernetes, Google Cloud via `simple-icons`; AWS/Azure as brand-color wordmark badges since those marks aren't redistributable).
+- **Full runbook content** (40+ pages and growing) covering discovery, all 6 directional cloud mappings, governance, security, compute, pipelines, execution (pilot → bulk migration → cutover → hypercare → rollback), validation, templates, and troubleshooting. Nav entries without a dedicated page yet fall through to a placeholder route — see [Writing new pages](#writing-new-pages).
 - **Reusable components**: cards, callouts, code blocks, checklists, tabs, accordions, theme toggle, search, sidebar, and TOC.
 
 ## Tech stack
@@ -16,7 +18,8 @@ A production-grade, enterprise-focused documentation website and migration runbo
 - React 18
 - Tailwind CSS 3.4
 - TypeScript
-- Lucide React icons
+- Framer Motion
+- Lucide React icons + `simple-icons` for brand marks
 
 ## Project structure
 
@@ -29,13 +32,16 @@ A production-grade, enterprise-focused documentation website and migration runbo
 │   └── favicon.svg
 ├── src/
 │   ├── components/          # React UI components
+│   │   └── logos/           # Brand SVG glyphs (simple-icons data) + BrandGlyph renderer
 │   ├── data/
 │   │   └── navigation.json  # Sidebar and search index
+│   ├── lib/
+│   │   └── paths.ts         # withBase() helper for GitHub Pages base-path-aware links
 │   ├── layouts/
-│   │   └── Layout.astro     # Docs shell
+│   │   └── Layout.astro     # Docs shell (AppShell header+sidebar, TOC, footer)
 │   ├── pages/
-│   │   ├── index.astro      # Landing page
-│   │   ├── [...slug].astro  # Placeholder for pages not yet written
+│   │   ├── index.astro      # Landing page + Migration Planner
+│   │   ├── [...slug].astro  # Placeholder for nav items without a dedicated page yet
 │   │   ├── overview/
 │   │   ├── discovery/
 │   │   ├── cloud-mappings/
@@ -90,27 +96,29 @@ npm run preview
 
 ## Writing new pages
 
-1. Create a new `.mdx` file under `src/pages/<section>/<page>.mdx`.
-2. Import the layout and components:
+1. Create a new `.mdx` file under `src/pages/<section>/<page>.mdx`, matching a slug already listed in `src/data/navigation.json` (add it there first if it isn't).
+2. Use the `layout` frontmatter field — Astro applies it automatically, no manual wrapper needed:
 
 ```mdx
 ---
 title: 'Page title'
+layout: ../../layouts/Layout.astro
 description: 'Page description'
 ---
 
-import Layout from '../../layouts/Layout.astro';
 import Callout from '../../components/Callout.tsx';
-
-export default function ({ children }) {
-  return <Layout title={frontmatter.title} description={frontmatter.description} currentSlug="section/page">{children}</Layout>;
-}
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
 
 # Page title
+
+Body content, using Callout/CodeBlock/Checklist/Tabs/Accordion as needed. Follow the
+existing pages' shape: intro, a comparison/decision table where relevant, a code
+sample, then **Validation**, **Rollback**, and **Automation opportunity** sections
+closing with a `<Checklist>`.
 ```
 
-3. Add the page to `src/data/navigation.json`.
-4. If you want the new page to render instead of the placeholder, remove or rename the `[...slug].astro` dynamic route or ensure your static file path matches the navigation slug.
+3. That's it — `[...slug].astro`'s `getStaticPaths` automatically excludes any nav slug that has a matching `.mdx` file (via `import.meta.glob`), so your new page supersedes the placeholder with no extra routing changes.
 
 ## Design system
 
@@ -131,6 +139,12 @@ Suggested meta description:
 > Enterprise runbook for migrating Databricks across Azure, AWS, and GCP. Covers Unity Catalog, metastores, IAM, data movement, cutover, validation, and rollback.
 
 Suggested keywords: `Databricks migration`, `cross-cloud migration`, `Unity Catalog`, `Azure Databricks`, `AWS Databricks`, `GCP Databricks`, `data migration`, `cloud migration runbook`.
+
+## Deployment
+
+The site deploys to **GitHub Pages** automatically on every push to `main` via `.github/workflows/deploy.yml` (build with `npm run build`, then `actions/deploy-pages`). Pages is configured with build source `workflow` — no manual `gh-pages` branch step required.
+
+Because GitHub Pages serves a project repo under `/<repo-name>/` rather than the domain root, `astro.config.mjs` sets `site`/`base` accordingly, and every internal link goes through the `withBase()` helper in `src/lib/paths.ts` instead of a hardcoded root-relative path. If you fork this repo under a different name, update `base` in `astro.config.mjs` to match — the rest of the app picks it up automatically.
 
 ## Optional enhancements
 
