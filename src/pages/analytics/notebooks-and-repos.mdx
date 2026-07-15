@@ -1,0 +1,75 @@
+---
+title: 'Notebooks and repos'
+layout: ../../layouts/Layout.astro
+description: 'Migrate workspace notebooks and Git-backed repos without losing history or breaking hardcoded references.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Notebooks and repos
+
+Notebooks are the easiest asset type to move (they're just code) and the easiest to get subtly wrong (that code is full of hardcoded paths, catalog names, and cluster/warehouse IDs pointing at source). Repos add a second dimension: Git remotes, branch permissions, and CI/CD triggers layered on top.
+
+## Notebooks not backed by Git
+
+<Callout variant="warning" title="Un-versioned notebooks are technical debt you're about to inherit permanently">
+  Any notebook that exists only in the workspace (no Git repo) has no change history and no code review trail. Migration is the natural point to move it into a repo — carrying forward un-versioned notebooks into the target workspace just relocates the same problem.
+</Callout>
+
+| Approach | When to use |
+|---|---|
+| Export `.dbc` archive, import to target workspace | Fastest path for notebooks you're not ready to version yet |
+| Move into a Git repo first, then sync via Repos | Preferred — gains version history and review going forward |
+
+<CodeBlock language="bash" filename="export_notebooks.sh" code={`# Export a workspace folder as a .dbc archive
+databricks workspace export-dir /Shared/analytics ./export/analytics --format DBC
+
+# Import into the target workspace
+databricks workspace import-dir ./export/analytics /Shared/analytics --format DBC
+`} />
+
+## Git-backed repos
+
+- Databricks Repos just needs the same Git remote re-cloned in the target workspace — the code and history live in Git, not in the workspace, so this is usually the simplest part of the migration.
+- Re-establish Git credentials (PAT or app integration) for the target workspace against your Git provider.
+- If CI/CD deploys from the repo (see [CI/CD promotion](/pipelines/cicd-promotion)), confirm the deployment target mapping points at the new target workspace, not source.
+
+## Hardcoded references to fix
+
+Regardless of export method, audit notebook code for:
+
+| Reference type | Fix |
+|---|---|
+| Cloud storage paths (`abfss://`, `s3://`, `gs://`) | Apply the path-rewrite mapping from the relevant [cloud mapping](/cloud-mappings/cross-cloud-equivalency-matrix) |
+| Catalog/schema names | Update to target naming convention |
+| Cluster/warehouse IDs referenced directly (rare but real) | Update to target IDs, or better, remove the hardcoding in favor of widget/parameter-based configuration |
+| DBFS mount paths | Migrate to Unity Catalog volumes or external locations, don't recreate DBFS mounts on target |
+
+<CodeBlock language="bash" filename="audit_notebooks.sh" code={`# Scan exported notebooks for likely hardcoded references before importing to target
+grep -rlE 'abfss://|s3://|gs://|dbfs:/mnt/' ./export/ | sort
+`} />
+
+## Validation
+
+- Run every migrated notebook end to end against target, not just a syntax check — a notebook can import cleanly and fail on the first cell that references a source path.
+- For Repos, confirm the Git remote resolves and pulls correctly from the target workspace's network (private connectivity may restrict outbound Git access differently than source — see [network security](/security/network-security)).
+- Spot-check notebooks with widgets/parameters to confirm default values still make sense against target data.
+
+## Rollback
+
+Notebooks and repos are code; if a migrated notebook is broken, fix and re-run it rather than rolling back an environment. Keep source workspace notebooks and repo connections intact through hypercare so users have a working fallback.
+
+## Automation opportunity
+
+- Run the hardcoded-reference audit script as a CI check on every notebook before it's considered migration-complete, not as a one-time manual pass.
+- Batch-migrate un-versioned notebooks into Git as part of this step using a scripted `.dbc` export → Git commit → Repos sync pipeline, rather than doing it ad hoc per notebook.
+
+<Checklist title="Notebooks and repos migration" items={[
+  { id: 'versioned', label: 'Un-versioned notebooks moved into Git during migration, not deferred' },
+  { id: 'repos-recloned', label: 'Git-backed repos re-cloned in target with working credentials' },
+  { id: 'audit', label: 'Hardcoded path/catalog/ID references audited and rewritten' },
+  { id: 'e2e-run', label: 'Every migrated notebook run end to end against target, not just imported' },
+  { id: 'cicd-repointed', label: 'CI/CD deployment mapping updated for repos driving pipeline deploys' },
+]} />
