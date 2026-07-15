@@ -26,7 +26,8 @@ const bare = frontmatter.bare;
 
 const pathname = Astro.url.pathname.replace(/\.html$/, '').replace(/^\//, '');
 const currentSlug = frontmatter.currentSlug ?? pathname;
-const pageTitle = `${title} | Databricks Cross-Cloud Migration Runbook`;
+const siteName = 'Databricks Cross-Cloud Migration Runbook';
+const pageTitle = title === siteName ? title : `${title} | ${siteName}`;
 ---
 
 <!DOCTYPE html>
@@ -37,7 +38,20 @@ const pageTitle = `${title} | Databricks Cross-Cloud Migration Runbook`;
     <meta name="description" content={description} />
     <meta name="generator" content={Astro.generator} />
     <title>{pageTitle}</title>
+
     <link rel="icon" type="image/svg+xml" href={withBase('/favicon.svg')} />
+    <link rel="apple-touch-icon" href={withBase('/apple-touch-icon.png')} />
+    <link rel="manifest" href={withBase('/site.webmanifest')} />
+    <meta name="theme-color" content="#FF3621" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={withBase('/icon-512.png')} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={withBase('/icon-512.png')} />
     <script is:inline>
       (function () {
         const saved = localStorage.getItem('theme');
