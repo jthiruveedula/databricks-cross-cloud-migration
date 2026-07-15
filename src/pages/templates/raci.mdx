@@ -1,0 +1,69 @@
+---
+title: 'RACI'
+layout: ../../layouts/Layout.astro
+description: 'Responsibility matrix template for a cross-cloud Databricks migration.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# RACI
+
+A cross-cloud migration touches platform, security, data, and business teams simultaneously — the most common execution failure isn't a technical one, it's two teams both assuming the other owns a step. Define Responsible / Accountable / Consulted / Informed explicitly per phase before [wave planning](/execution/wave-planning) starts, not during it.
+
+<Callout client:visible variant="prerequisite" title="One Accountable per row, always">
+  Multiple people can be Responsible for doing the work. Exactly one person or role is Accountable for a given row — if two names are Accountable for the same activity, treat that as an unresolved gap, not a shared responsibility.
+</Callout>
+
+## Migration RACI
+
+| Activity | Responsible | Accountable | Consulted | Informed |
+|---|---|---|---|---|
+| Discovery and asset inventory | Platform team | Platform lead | Application owners | Migration PMO |
+| Risk assessment and wave planning | Migration architect | Migration lead | Security, app owners | All stakeholders |
+| Target foundation (metastore, IAM, network) | Cloud platform team | Cloud platform lead | Security, networking | Migration PMO |
+| IAM mapping and grants | Security engineering | Security lead | Platform team, app owners | Compliance |
+| Data replication and reconciliation | Data engineering | Data eng lead | Application owners | Migration PMO |
+| Compute and pipeline migration | Platform team | Platform lead | Application owners | Migration PMO |
+| Pilot wave execution | Migration team | Migration lead | Pilot workload owner | All stakeholders |
+| Bulk migration waves | Migration team | Migration lead | Wave owners | Migration PMO |
+| Cutover execution | Migration team | Migration lead | Network, security | All stakeholders |
+| Business validation sign-off | Application owners | Business sponsor | Migration lead | Migration PMO |
+| Hypercare monitoring | Platform on-call | Platform lead | Migration lead | All stakeholders |
+| Source decommission | Cloud platform team | Cloud platform lead | Security, compliance | All stakeholders |
+
+## Per-wave RACI
+
+Large migrations should assign a wave-specific RACI on top of the program-level one above — a wave owner accountable for that wave's specific workloads, distinct from the migration lead accountable for the overall program:
+
+| Activity | Responsible | Accountable |
+|---|---|---|
+| Wave scope sign-off | Wave owner | Wave owner |
+| Wave data reconciliation | Data engineering | Wave owner |
+| Wave cutover go/no-go | Migration lead | Wave owner |
+| Wave rollback decision | Migration lead | Wave owner |
+
+<Callout client:visible variant="warning" title="RACI drifts if it's only reviewed once">
+  Teams change during a multi-month migration. Re-confirm the RACI at the start of each wave, not just once at kickoff — a stale RACI is functionally the same as having none.
+</Callout>
+
+## Validation
+
+- Confirm every row has exactly one Accountable party, and that party has actually agreed to it — a RACI assigned without the person's knowledge isn't a real commitment.
+- Cross-check the RACI against the [risk register](/templates/risk-register) — every high-risk item should trace back to a clearly accountable owner.
+- Re-review the RACI at each wave boundary as part of wave sign-off.
+
+## Rollback
+
+A RACI is a planning artifact, not an environment change — there's nothing to roll back. If ownership turns out to be wrong mid-migration, update the RACI and communicate the change immediately rather than working around an unclear owner.
+
+## Automation opportunity
+
+- Publish the RACI in the same system used for wave tracking (see [bulk migration](/execution/bulk-migration)) so ownership is visible alongside real-time wave status, not in a separate static document.
+
+<Checklist client:visible title="RACI readiness" items={[
+  { id: 'defined', label: 'RACI defined for every program-level activity' },
+  { id: 'single-accountable', label: 'Exactly one Accountable party per row, confirmed with that person' },
+  { id: 'per-wave', label: 'Per-wave RACI assigned on top of the program-level RACI' },
+  { id: 'reviewed', label: 'RACI re-confirmed at each wave boundary' },
+]} />
