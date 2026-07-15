@@ -1,0 +1,78 @@
+---
+title: 'Hypercare'
+layout: ../../layouts/Layout.astro
+description: 'The heightened-monitoring period after cutover, before source decommission.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Hypercare
+
+Hypercare is the bounded period immediately after [cutover](/execution/cutover) where the target environment runs under close watch, the [rollback](/execution/rollback) path is still live, and the source environment stays intact. It ends when the target has proven itself, not on a fixed calendar date picked before cutover happened.
+
+<Callout variant="decision" title="Hypercare is not indefinite">
+  Set an explicit hypercare exit gate before cutover (e.g. "N consecutive clean SLA days plus one full business cycle"). Without one, hypercare quietly becomes permanent — source decommission keeps getting deferred and the migration never actually closes out.
+</Callout>
+
+## What changes during hypercare
+
+| Area | Normal operations | Hypercare |
+|------|--------------------|-----------|
+| On-call | Standard rotation | Elevated staffing, often war-room or dedicated Slack channel |
+| Monitoring | Standard dashboards | Tightened alert thresholds on jobs, cost, and data freshness |
+| Change control | Normal release cadence | Freeze on unrelated changes to reduce noise while diagnosing issues |
+| Source environment | — | Kept fully running and reachable for rollback, not yet decommissioned |
+| Incident response | Standard SLA | Migration team on point for anything migration-related |
+
+## Hypercare monitoring focus
+
+- **Job success rate and duration** vs. the source environment's historical baseline — a job that "succeeds" but runs 3x slower is a hidden problem.
+- **Cost** — cross-cloud migrations frequently reveal under-provisioned or over-provisioned target compute; watch spend daily, not monthly.
+- **Data freshness / SLA adherence** for every migrated pipeline, not just the ones flagged as critical.
+- **Support ticket volume and theme** — a spike in a specific category (e.g. permission errors) points at a systemic gap, not isolated user error.
+
+## Exit criteria
+
+Define hypercare exit criteria before cutover, and hold every wave to the same bar:
+
+- No unresolved Sev-1/Sev-2 incidents attributable to the migration.
+- Job success rate and duration within agreed tolerance of source baseline for the full observation window.
+- Cost within budget or an explained/approved variance.
+- Business stakeholders have signed off — see [business validation](/validation/business-validation).
+
+## Decommissioning the source
+
+Only after hypercare exit criteria are met and signed off:
+
+1. Revoke write access to source, keep read-only for a defined grace period.
+2. Take a final backup/export of source metastore and configuration for audit purposes.
+3. Decommission source compute and jobs.
+4. After the grace period, decommission source storage and identity federation.
+5. Close out the migration with a retrospective — feed lessons back into the [anti-patterns](/troubleshooting/anti-patterns) and [checklists](/templates/checklists) pages for the next wave or the next migration.
+
+<Callout variant="warning" title="Decommission source last, not first">
+  Don't decommission source infrastructure the moment cutover looks successful. The whole point of hypercare is that "looks successful on day one" and "is actually stable" are different claims — keep the rollback path alive until you've proven the second one.
+</Callout>
+
+## Validation
+
+- Run the same [technical](/validation/technical-validation) and [security](/validation/security-validation) validation suites used at cutover on a recurring cadence throughout hypercare, not just once.
+- Confirm rollback is still executable at any point during hypercare — test it in a lower environment if you can't test it in production.
+
+## Rollback
+
+Hypercare is precisely the window where rollback must remain live and tested — see [rollback](/execution/rollback). If a rollback trigger fires during hypercare, follow that runbook rather than improvising a fix under pressure.
+
+## Automation opportunity
+
+- Automate the hypercare exit-criteria check (job success rate, cost, SLA) as a single dashboard query instead of manually gathering it wave over wave.
+- Automate the source read-only → decommission sequence as a scripted, reviewable change rather than a set of manual console actions.
+
+<Checklist title="Hypercare readiness" items={[
+  { id: 'gate', label: 'Explicit hypercare exit criteria defined before cutover' },
+  { id: 'staffing', label: 'Elevated on-call/support staffing in place' },
+  { id: 'monitoring', label: 'Tightened alert thresholds active on target' },
+  { id: 'source', label: 'Source environment kept live and rollback-ready' },
+  { id: 'decommission', label: 'Source decommission sequence documented and gated on sign-off' },
+]} />
