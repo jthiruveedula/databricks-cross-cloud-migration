@@ -46,6 +46,8 @@ Google Cloud IAM, GCS paths, and Private Service Connect have no direct AWS equi
   },
 ]} />
 
+Register the replicated data as a Unity Catalog **external location** in the target metastore, backed by an **AWS IAM role storage credential** (`aws_iam_role { role_arn = ... }` on `databricks_storage_credential`) — not a raw bucket policy. See [external locations and volumes](/governance/external-locations-and-volumes) for the general pattern and [Terraform patterns](/templates/terraform-patterns) for provisioning it as code.
+
 <CodeBlock client:visible language="python" filename="path_rewrite.py" code={`MAPPING = {
     "gs://prod-raw-us-central1": "s3://prod-raw-us-east-1",
     "gs://prod-curated-us-central1": "s3://prod-curated-us-east-1",

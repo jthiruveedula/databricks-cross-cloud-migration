@@ -32,7 +32,7 @@ curl -n https://<target-workspace>.cloud.databricks.com/api/2.0/clusters/list \\
   -H "Authorization: Bearer $TOKEN" | jq '.clusters[] | {cluster_id, cluster_name, state}'
 
 # Verify metastore attachment
-databricks metastores list --output json | jq '.[] | {name, storage_root, region}'}`} />
+databricks metastores list --output json | jq '.[] | {name, storage_root, region}'`} />
 
 ## IAM validation
 
@@ -40,7 +40,7 @@ databricks metastores list --output json | jq '.[] | {name, storage_root, region
 SELECT current_user();
 
 -- Verify grants on a catalog
-SHOW GRANT ON CATALOG <catalog_name>;}`} />
+SHOW GRANT ON CATALOG <catalog_name>;`} />
 
 ## Validation sign-off
 

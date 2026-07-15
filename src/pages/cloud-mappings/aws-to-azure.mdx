@@ -46,6 +46,8 @@ AWS IAM roles, S3 paths, and VPC PrivateLink connections do not carry over to Az
   },
 ]} />
 
+Register the replicated data as a Unity Catalog **external location** in the target metastore, backed by an **Azure Databricks Access Connector** with a managed identity (`azure_managed_identity { access_connector_id = ... }` on `databricks_storage_credential`) — not a raw storage-account key. See [external locations and volumes](/governance/external-locations-and-volumes) for the general pattern and [Terraform patterns](/templates/terraform-patterns) for provisioning it as code.
+
 <CodeBlock client:visible language="python" filename="path_rewrite.py" code={`MAPPING = {
     "s3://prod-raw-us-east-1": "abfss://raw@prodadls.dfs.core.windows.net",
     "s3://prod-curated-us-east-1": "abfss://curated@prodadls.dfs.core.windows.net",

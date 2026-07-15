@@ -27,7 +27,7 @@ An external location registers a cloud storage path with a storage credential. I
 <CodeBlock client:visible language="sql" code={`CREATE EXTERNAL LOCATION raw_data
 URL 's3://<target-bucket>/raw'
 WITH (CREDENTIAL <target_storage_credential>)
-COMMENT 'Raw data landing zone';}`} />
+COMMENT 'Raw data landing zone';`} />
 
 ### Storage credential mapping
 
@@ -46,7 +46,7 @@ Volumes are UC objects for non-tabular files. They replace DBFS mounts for libra
 
 <CodeBlock client:visible language="sql" code={`CREATE EXTERNAL VOLUME <catalog>.<schema>.<volume_name>
 LOCATION 's3://<target-bucket>/volumes/<volume_name>'
-COMMENT 'Managed non-tabular data';}`} />
+COMMENT 'Managed non-tabular data';`} />
 
 ## Migrating data from mounts
 
@@ -67,7 +67,7 @@ Migration steps:
 dbutils.fs.cp("dbfs:/mnt/legacy/config/", "/Volumes/catalog/schema/config/", recurse=True)
 
 # AWS CLI alternative for large transfers
-aws s3 sync s3://source-bucket/legacy/ s3://target-bucket/volumes/config/}`} />
+aws s3 sync s3://source-bucket/legacy/ s3://target-bucket/volumes/config/`} />
 
 ## Validation
 

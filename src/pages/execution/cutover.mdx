@@ -15,15 +15,19 @@ Cutover is the moment the target environment becomes the system of record. It re
 ## Cutover prerequisites
 
 <Callout client:visible variant="prerequisite" title="Go/no-go gate">
-  Do not proceed with cutover until validation, security sign-off, and business sign-off are complete. Hold a formal go/no-go call.
+  Do not proceed with cutover until every domain below has an explicit, named sign-off. Hold a formal go/no-go call and record the decision — "everyone was busy so we assumed it was fine" is not a sign-off.
 </Callout>
 
-- All target infrastructure is provisioned and validated.
-- Data reconciliation shows parity within agreed tolerance.
-- Jobs and pipelines have run successfully in target.
-- Identity, groups, and secrets are working.
-- Support roster and rollback plan are in place.
-- Communication has been sent to users.
+<Checklist client:visible title="Go/no-go gate — one sign-off per domain" items={[
+  { id: 'technical', label: 'Technical: target infrastructure provisioned and passes technical validation' },
+  { id: 'data', label: 'Data: reconciliation shows parity within agreed tolerance' },
+  { id: 'security', label: 'Security: identity, groups, secrets, and network validation passed' },
+  { id: 'business', label: 'Business: stakeholders have signed off per business validation' },
+  { id: 'operational', label: 'Operational: support roster, rollback plan, and hypercare severity matrix are in place' },
+  { id: 'communication', label: 'Communication: cutover window and contact channel sent to affected users' },
+]} />
+
+If any domain is not signed off, the answer is no-go — reschedule rather than proceed on a partial gate.
 
 ## Cutover sequence
 
@@ -51,6 +55,10 @@ Run final catch-up based on table type:
 - **Delta tables:** Apply incremental `DEEP CLONE` or merge changes.
 - **Streaming:** Restart from last checkpoint offset.
 - **Volumes:** Sync any files changed since last run.
+
+## Cloud-specific caveats
+
+DNS/endpoint switch mechanics in Step 5 are not interchangeable across clouds: Azure Traffic Manager/Front Door, AWS Route 53, and GCP Cloud DNS have different propagation timing and health-check semantics. Rehearse the actual cutover DNS/endpoint change against the target cloud's tooling during the [pilot](/execution/pilot), not for the first time on cutover night.
 
 ## Validation
 

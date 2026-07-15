@@ -13,3 +13,5 @@ pnpm-debug.log*
 .codegraph
 databricks-cross-cloud-migration-docs
 .claude/
+.venv-crawl4ai/
+.firecrawl

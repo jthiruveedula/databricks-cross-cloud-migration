@@ -46,6 +46,8 @@ AWS IAM roles, S3 paths, and VPC PrivateLink have no direct GCP equivalent — i
   },
 ]} />
 
+Register the replicated data as a Unity Catalog **external location** in the target metastore, backed by a **Databricks-managed GCP service account** storage credential (`databricks_gcp_service_account` on `databricks_storage_credential`) — not a manually created service-account key. See [external locations and volumes](/governance/external-locations-and-volumes) for the general pattern and [Terraform patterns](/templates/terraform-patterns) for provisioning it as code.
+
 <CodeBlock client:visible language="python" filename="path_rewrite.py" code={`MAPPING = {
     "s3://prod-raw-us-east-1": "gs://prod-raw-us-central1",
     "s3://prod-curated-us-east-1": "gs://prod-curated-us-central1",

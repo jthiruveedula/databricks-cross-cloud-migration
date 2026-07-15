@@ -33,7 +33,7 @@ Databricks Workflows is the native orchestrator for notebooks, Python, SQL, and 
 databricks jobs list --output json | jq '.jobs[] | {job_id, settings}' > jobs.json
 
 # Create a job in target workspace after editing JSON
-databricks jobs create --json-file job-target.json}`} />
+databricks jobs create --json-file job-target.json`} />
 
 ## Task reference rewrites
 
@@ -53,6 +53,12 @@ SQL tasks reference warehouse IDs. Recreate warehouses in target and update IDs.
 
 Update SQL and notebook code that hardcodes source catalog names. Use a naming standard or environment variables.
 
+
+## Cloud-specific caveats
+
+<Callout client:visible variant="warning" title="File-arrival triggers cannot be recreated identically cross-cloud">
+  A file-arrival trigger is backed by a cloud-native event source — S3 event notifications on AWS, ADLS Gen2 events on Azure, GCS Pub/Sub notifications on GCP. Migrating a job with a file-arrival trigger across clouds means re-implementing the trigger against the target cloud's native event mechanism, not just pointing the same trigger config at a new path. Budget this as a redesign, not a config edit — see [external orchestrators](/pipelines/external-orchestrators) for the equivalent nuance on externally-scheduled triggers.
+</Callout>
 
 ## Scheduling freeze
 

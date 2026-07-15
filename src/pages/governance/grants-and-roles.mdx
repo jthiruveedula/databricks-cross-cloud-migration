@@ -41,7 +41,10 @@ WHERE object_catalog = 'source_catalog';
 | 4 | Apply grants at catalog/schema level first, table-level exceptions second |
 | 5 | Diff target `SHOW GRANTS` output against the source export |
 
-<CodeBlock client:visible language="python" filename="generate_grants.py" code={`import json
+<p className="text-xs text-[var(--ink-subtle)]">Illustrative — adapt the CSV schema and error handling to your export format before running against production.</p>
+
+<CodeBlock client:visible language="python" filename="generate_grants.py" code={`import csv
+import json
 
 PRINCIPAL_MAP = json.load(open("principal_mapping.json"))  # source group -> target group
 
@@ -50,6 +53,10 @@ def translate_grant(row: dict) -> str:
     if not target_principal:
         raise KeyError(f"No target mapping for principal: {row['grantee']}")
     return f"GRANT {row['privilege_type']} ON {row['object_type']} {row['object_name']} TO \`{target_principal}\`;"
+
+# source_grants.csv is the export from inventory_grants.sql above
+with open("source_grants.csv") as f:
+    source_grants = list(csv.DictReader(f))
 
 statements = [translate_grant(r) for r in source_grants]
 `} />

@@ -17,7 +17,7 @@ export default function Header({ onMenuToggle, menuOpen = false }: Props) {
       <div className="flex items-center gap-3">
         <button
           onClick={onMenuToggle}
-          className="rounded-lg p-2 text-[var(--ink-muted)] hover:bg-[var(--surface-hover)] lg:hidden"
+          className="rounded-lg p-2 text-[var(--ink-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--ink)]"
           aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
           aria-expanded={menuOpen}
           aria-controls="primary-sidebar"

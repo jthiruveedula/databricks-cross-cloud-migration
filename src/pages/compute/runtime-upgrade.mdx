@@ -5,27 +5,44 @@ description: 'Upgrade Databricks runtimes and access modes as part of migration.
 ---
 
 import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 
 # Runtime upgrade
 
-Migration is the right time to upgrade runtimes. Databricks recommends DBR 13.3 LTS or above for Unity Catalog and modern access modes. Older runtimes may not support UC, Photon, or serverless compute.
+Migration is the right time to upgrade runtimes rather than carry an aging one forward onto a new cloud. Never treat a Databricks Runtime (DBR) version number as a fixed fact in a document like this one — support windows expire on fixed dates, and a table that looked current when written is stale within a year. Always check the [live Databricks Runtime release notes and support-lifecycle page](https://docs.databricks.com/aws/en/release-notes/runtime/) for the current LTS lineup before setting a target baseline.
+
+## Why this matters
+
+An old runtime carried into the target cloud unchanged just relocates a ticking clock — if the source runtime's LTS support window ends during or shortly after hypercare, you inherit an unsupported platform on day one in the new cloud. Migration is the natural forcing function to fix this once, not defer it again.
+
+## Applicability
+
+Applies to every workload being migrated, not only ones already flagged as "old." Check the actual DBR version in use per cluster/job — teams are frequently unaware they're several LTS generations behind.
 
 ## Recommended runtime strategy
 
-- Use the latest LTS runtime that supports all required features.
-- Standardize on one or two runtime versions to simplify support.
-- Avoid unsupported runtimes and custom images unless required.
+- Target the newest LTS release that supports all required features, not simply "whatever is one version newer than source."
+- Standardize on one or two runtime versions across the target estate to simplify support and reduce the compatibility matrix your team has to reason about.
+- Avoid unsupported runtimes and custom images unless there's a specific, documented reason.
 
-## Access mode compatibility
+<Callout client:visible variant="warning" title="Check LTS support end dates before picking a target baseline, not after">
+  As one illustrative example: Databricks Runtime 13.3 LTS (released August 2023) has a published support end date — verify the current one on the [release notes page](https://docs.databricks.com/aws/en/release-notes/runtime/) rather than trusting this document, since by the time you read this it may already have passed. If your source estate is still on 13.3 LTS, don't set it as the target baseline by default; treat it as a signal you're already close to end-of-support and should jump at least one LTS generation forward as part of the migration.
+</Callout>
 
-| Runtime | UC support | Serverless | Photon |
-|---------|------------|------------|--------|
-| DBR 10.4 LTS | Limited | No | Partial |
-| DBR 11.3 LTS | Yes | No | Yes |
-| DBR 12.2 LTS | Yes | No | Yes |
-| DBR 13.3 LTS | Yes | Yes | Yes |
-| DBR 14.x | Yes | Yes | Yes |
+## Access mode and feature compatibility
+
+Don't hardcode a specific DBR-version-to-feature table in your own internal runbook either — Unity Catalog access-mode support, serverless compute, and Photon eligibility have all shifted which DBR versions they require as Databricks has shipped new LTS releases. Confirm current requirements against the [access mode limitations](https://docs.databricks.com/aws/en/compute/access-mode-limitations) and [Unity Catalog compute requirements](https://docs.databricks.com/aws/en/compute/) pages for the specific LTS version you're targeting, and re-check them again before every future migration — this is exactly the kind of fact that goes stale silently.
+
+The current LTS lineup, as a dated snapshot rather than a permanent fact (verified against `docs.databricks.com/aws/en/release-notes/runtime/` — re-check before relying on it):
+
+| LTS release | Released | Support ends |
+|---|---|---|
+| 17.3 LTS | Oct 2025 | Oct 2028 |
+| 16.4 LTS | May 2025 | May 2028 |
+| 15.4 LTS | Aug 2024 | Aug 2027 |
+| 14.3 LTS | Feb 2024 | Feb 2027 |
+| 13.3 LTS | Aug 2023 | Aug 2026 — close enough to treat as EOL for a new migration target |
 
 <Callout client:visible variant="warning" title="Unsupported runtimes">
   Do not migrate clusters or jobs using runtimes that are end-of-life. Upgrade and validate workloads before cutover.
@@ -52,6 +69,29 @@ If a workload fails on the new runtime, keep a fallback cluster policy with the 
 - Scan all clusters and jobs for runtime versions using the APIs.
 - Generate migration tickets for any workload below the target baseline.
 - Run regression tests automatically in a CI pipeline.
+
+<CodeBlock client:visible language="yaml" filename="runtime-regression.yml" code={`# Illustrative CI job: run a fixed notebook/job set against the target runtime
+# and fail the pipeline on schema or row-count drift versus a recorded baseline.
+name: runtime-regression
+on: [workflow_dispatch]
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run regression job on target runtime
+        run: |
+          databricks jobs run-now --job-id "$TARGET_REGRESSION_JOB_ID" \\
+            --python-params '["--baseline", "s3://target-bucket/regression/baseline.json"]'
+      - name: Fail on drift
+        run: |
+          databricks jobs runs get-output --run-id "$RUN_ID" \\
+            | jq -e '.notebook_output.result == "PASS"'`} />
+
+## Evidence to capture
+
+- Per-cluster/job DBR version inventory taken before the upgrade, and the target baseline it was mapped to.
+- Regression test run output (schema diff, row counts, performance metrics) for every migrated workload, not just a pass/fail flag.
 
 <Checklist client:visible title="Runtime upgrade" items={[
   { id: 'scan', label: 'Scan clusters and jobs for runtime versions' },

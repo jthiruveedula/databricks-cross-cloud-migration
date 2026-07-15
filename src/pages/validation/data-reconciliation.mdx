@@ -34,7 +34,7 @@ SELECT 'target' AS env, COUNT(*) AS cnt FROM target_catalog.schema.table;
 -- Column-level checksum
 SELECT md5(concat_ws(',', cast(col1 AS string), cast(col2 AS string))) AS hash
 FROM source_catalog.schema.table
-ORDER BY hash;}`} />
+ORDER BY hash;`} />
 
 ## Volume reconciliation
 
@@ -44,7 +44,7 @@ For non-tabular files:
 aws s3 sync s3://source-bucket/path s3://target-bucket/path --dryrun
 
 # GCP example
-gsutil -m rsync -r gs://source-bucket/path gs://target-bucket/path -d -n}`} />
+gsutil -m rsync -r gs://source-bucket/path gs://target-bucket/path -d -n`} />
 
 ## Handling mismatches
 

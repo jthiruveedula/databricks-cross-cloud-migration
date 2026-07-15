@@ -41,17 +41,18 @@ Use managed identities or service principals with RBAC on ADLS Gen2.
 
 Use IAM roles attached to clusters via instance profiles or trust policies for UC storage credentials.
 
-<CodeBlock client:visible language="hcl" filename="aws-storage-role.tf" code={`resource "aws_iam_role" "uc_storage" {
-  name = "databricks-uc-storage"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = { AWS = "arn:aws:iam::414351767826:role/<databricks-account-role>" }
-      Action = "sts:AssumeRole"
-      Condition = { StringEquals = { "sts:ExternalId" = "<databricks-account-id>" } }
-    }]
-  })
+<Callout client:visible variant="warning" title="Don't hardcode Databricks' cross-account role ARN">
+  Do not copy a Databricks-owned AWS account ID/role ARN from an old snippet into a trust policy — it is not a fixed, universal constant, and a stale or wrong value silently breaks role assumption. Use the provider's `databricks_aws_unity_catalog_assume_role_policy` data source (shown below) to generate the correct trust policy, or copy the exact ARN and external ID from the current step in [Databricks' own AWS storage-credential setup guide](https://docs.databricks.com/aws/en/connect/unity-catalog/cloud-storage/storage-credentials) at the time you create the role.
+</Callout>
+
+<CodeBlock client:visible language="hcl" filename="aws-storage-role.tf" code={`data "databricks_aws_unity_catalog_assume_role_policy" "this" {
+  aws_account_id = var.aws_account_id
+  role_name      = "databricks-uc-storage"
+}
+
+resource "aws_iam_role" "uc_storage" {
+  name               = "databricks-uc-storage"
+  assume_role_policy = data.databricks_aws_unity_catalog_assume_role_policy.this.json
 }`} />
 
 ### GCP

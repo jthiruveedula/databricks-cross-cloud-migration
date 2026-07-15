@@ -10,7 +10,15 @@ import Checklist from '../../components/Checklist.tsx';
 
 # DLT and Lakeflow
 
-Delta Live Tables (DLT) and Lakeflow pipelines are declarative streaming and batch pipelines. They must be recreated in the target workspace because pipelines are bound to the workspace, storage, and metastore.
+**Lakeflow Declarative Pipelines** is Databricks' current name for what was previously branded Delta Live Tables (DLT) — the underlying pipeline engine and `CREATE FLOW`/`@dlt.table`-style declarative model are the same lineage, not a rewrite, so existing DLT pipelines and terminology in your source workspace are not obsolete. This page uses "pipeline" generically for both. They must be recreated in the target workspace because pipelines are bound to the workspace, storage, and metastore.
+
+## Why this matters
+
+A declarative pipeline's checkpoint state and streaming-source configuration are two of the most commonly under-scoped parts of a pipeline migration — teams correctly plan for recreating the pipeline definition and target catalog, then discover during cutover that checkpoints don't transfer as cleanly as a table does, and that switching the underlying streaming source (not just its cloud location) invalidates checkpoint state entirely.
+
+## Applicability
+
+Applies to any Lakeflow/DLT pipeline being moved to a new workspace, whether or not the cloud changes. The streaming-source-swap caveat below applies specifically when the migration also changes the cloud-native event/streaming source a pipeline reads from (e.g., moving off Kinesis onto Event Hubs or Pub/Sub) — same-cloud pipeline moves with an unchanged source have a smaller version of this problem.
 
 ## Migration scope
 
@@ -27,7 +35,7 @@ databricks pipelines get --pipeline-id <PIPELINE_ID> --output json > pipeline.js
 
 # Edit target_catalog, target_schema, storage, cluster, and expectations
 # Then create in target
-databricks pipelines create --json-file pipeline-target.json}`} />
+databricks pipelines create --json-file pipeline-target.json`} />
 
 ## Source and target differences
 
@@ -39,16 +47,17 @@ databricks pipelines create --json-file pipeline-target.json}`} />
 | Photon | Re-evaluate based on target pricing |
 | Continuous vs. triggered | Match source unless cost drives a change |
 
-## Data catch-up
+## Streaming checkpoint migration
 
-For pipelines with streaming sources:
+For pipelines with streaming sources, checkpoint handling is not a copy-the-files problem — treat it as its own decision, separate from copying the pipeline definition and target tables:
 
-- Identify checkpoint locations; decide whether to copy checkpoints or start fresh.
-- Starting fresh may reprocess historical data; ensure idempotency.
-- If copying checkpoints, update paths to target storage.
+- **Checkpoint location portability:** a Structured Streaming checkpoint stores offsets/commit logs keyed to the exact storage path and, for some sources, absolute references back to the source system. Copying the checkpoint's files to target storage does not make it "the same checkpoint" if the path or source identity changed underneath it — validate a test restart before trusting a copied checkpoint in production.
+- **Changing the streaming source connector invalidates checkpoints, regardless of copy strategy.** If the migration also swaps the underlying event source — AWS Kinesis → Azure Event Hubs → GCP Pub/Sub, for example — the new connector has no concept of the old source's offsets. This is not a path-rewrite problem to solve by copying checkpoint files; it requires a deliberate fresh-start decision (see below) because the old checkpoint literally cannot resume against a different source system.
+- **Watermark and exactly-once semantics:** if the pipeline relies on watermarking or exactly-once sink semantics, confirm the target sink/source pairing preserves those guarantees — don't assume a "should behave the same" swap is exactly equivalent, particularly across differing at-least-once vs. exactly-once delivery models between cloud-native queue/stream services.
+- Starting fresh may reprocess historical data; ensure downstream consumers and sinks are idempotent before choosing this path.
 
-<Callout client:visible variant="warning" title="Checkpoints are not portable">
-  DLT checkpoints contain absolute paths and offsets. Recreating them in the target without validation can cause data duplication or loss.
+<Callout client:visible variant="warning" title="Checkpoints are not portable across a source-connector change">
+  If the migration changes the streaming source (not just its cloud location), plan for a fresh-start checkpoint as the default assumption, not an edge case — the old checkpoint's offsets have no meaning against a different source connector. Validate this decision explicitly per pipeline rather than assuming a uniform strategy across all streaming pipelines in the wave.
 </Callout>
 
 ## Validation

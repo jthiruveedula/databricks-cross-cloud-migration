@@ -10,13 +10,21 @@ import Checklist from '../../components/Checklist.tsx';
 
 # Legacy Hive transition
 
-A migration is the ideal time to retire the legacy Hive metastore. Databricks guidance recommends moving Hive assets to Unity Catalog rather than carrying forward workspace-local metastores and DBFS dependencies.
+A migration is the ideal time to retire the legacy Hive metastore and its DBFS-mount dependencies for good — carrying them into the target cloud only defers the same cutover pain to a future migration. This page covers table-level upgrade paths; for the file-level mount retirement mechanics (inventorying `dbutils.fs.mounts()`, rewriting paths, unmounting), see [external locations and volumes](/governance/external-locations-and-volumes).
+
+## Why this matters
+
+Workspace-local Hive metastores and DBFS mounts are the two most common sources of "it worked in the old workspace but breaks in the new one" incidents during cross-cloud cutover: both are implicitly tied to a single workspace's identity and storage configuration, and neither concept exists in a cross-cloud target the same way. Deferring this work does not avoid it — it just moves the failure from planning time to cutover night.
 
 ## Why retire Hive now?
 
-- Workspace-local metastores do not share governance across workspaces.
-- DBFS-backed managed tables are tied to a workspace and are not portable.
+- Workspace-local metastores do not share governance across workspaces — every workspace has its own, so nothing here is portable by definition.
+- DBFS-backed managed tables are tied to a workspace and are not portable; the data and the workspace-local metastore pointer to it must both move, which is exactly what Unity Catalog is designed to avoid needing again.
 - Legacy runtimes and access modes will not work with Unity Catalog compute.
+
+## Applicability
+
+Applies to any source workspace still running the legacy (workspace-local) Hive metastore, or one that has UC enabled but still has un-upgraded Hive-backed tables and DBFS mounts alongside it. Does not apply if the source workspace is already fully on Unity Catalog with no remaining `hive_metastore` catalog objects — skip straight to [metastore migration](/governance/metastore-migration).
 
 ## Assessment with UCX
 
@@ -24,14 +32,17 @@ A migration is the ideal time to retire the legacy Hive metastore. Databricks gu
   UCX scans the legacy metastore, identifies upgrade candidates, maps grants, and generates upgrade notebooks. It is especially useful for large estates.
 </Callout>
 
-Install UCX in a dedicated workspace and run the assessment:
+Install UCX in a dedicated workspace and run the assessment. See [UCX-assisted migration](/governance/ucx-strategy) for the full workflow, limits, and where UCX fits into a broader migration factory.
 
-<CodeBlock client:visible language="bash" code={`# Install UCX (follow official Databricks documentation for latest version)
+<CodeBlock client:visible language="bash" code={`# 1. Install UCX
 databricks labs install ucx
 
-# Run assessment workflow
-databricks labs ucx install
-# Assessment reports are written to the installed workspace as Delta tables and dashboards.}`} />
+# 2. Trigger the assessment workflow and block until it completes (writes findings
+#    to Delta tables + a dashboard; does not modify source objects)
+databricks labs ucx ensure-assessment-run
+
+# 3. Export the readiness report before touching any source object
+databricks labs ucx export-assessment`} />
 
 ## Upgrade paths
 

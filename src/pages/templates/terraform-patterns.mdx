@@ -6,10 +6,38 @@ description: 'Reusable Terraform modules for target Databricks foundations.'
 
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
 
 # Terraform patterns
 
 Use infrastructure as code to create repeatable target foundations. These patterns are cloud-agnostic in structure but use cloud-specific resources.
+
+## Why this matters
+
+Hand-writing target-cloud Terraform from scratch reproduces whatever the source workspace happens to look like today, drift and all. Generating a starting point from the source workspace's actual configuration — rather than only writing target resources by hand — catches settings teams forgot they had.
+
+## Applicability
+
+Use these patterns once the target cloud, region, and Unity Catalog topology are decided (see [Unity Catalog strategy](/governance/unity-catalog-strategy)). Not a substitute for the exporter step below when a source workspace configuration already exists and needs to be captured before it's decommissioned.
+
+## Generating Terraform from source state
+
+<Callout client:visible variant="tip" title="Export before you hand-write">
+  Before writing target Terraform by hand, use the [Databricks Terraform exporter](https://registry.terraform.io/providers/databricks/databricks/latest/docs/guides/experimental-exporter) (`databricks exporter`, an experimental feature of the Databricks Terraform provider) to generate a baseline configuration from the *source* workspace. It captures clusters, jobs, notebooks, cluster policies, and (with scope flags) Unity Catalog objects as importable Terraform — giving you a real inventory of what exists today instead of relying on tribal knowledge of what should exist. Adapt the generated resources for the target cloud rather than starting from a blank module.
+</Callout>
+
+<CodeBlock client:visible language="bash" code={`# The exporter ships inside the databricks/databricks Terraform provider plugin, not as a
+# separate CLI. Authenticate via DATABRICKS_HOST / DATABRICKS_TOKEN env vars (or let it
+# prompt interactively), then run the provider binary from your Terraform plugin cache:
+export DATABRICKS_HOST=<SOURCE_WORKSPACE_URL>
+export DATABRICKS_TOKEN=<TOKEN>
+
+terraform-provider-databricks exporter \\
+  -skip-interactive \\
+  -listing=compute,jobs,notebooks,policies \\
+  -directory ./exported`} />
+
+This is distinct from [UCX-assisted migration](/governance/ucx-strategy): the exporter captures workspace-level object configuration as IaC; UCX assesses and executes the Hive-metastore-to-Unity-Catalog upgrade. Large estates typically use both — UCX for the governance upgrade, the exporter for capturing workspace object configuration as a Terraform starting point.
 
 ## AWS target foundation
 
@@ -43,10 +71,10 @@ resource "databricks_mws_vpc_endpoint" "backend" {
   depends_on                 = [aws_vpc_endpoint.backend]
 }
 
-resource "databricks_mws_storage_credentials" "uc" {
+resource "databricks_storage_credential" "uc" {
   provider     = databricks.mws
-  account_id   = var.databricks_account_id
-  credentials_name = "\${var.prefix}-uc-storage"
+  name         = "\${var.prefix}-uc-storage"
+  metastore_id = databricks_metastore.this.id
   aws_iam_role {
     role_arn = aws_iam_role.uc_storage.arn
   }
@@ -58,7 +86,7 @@ resource "databricks_metastore" "this" {
   storage_root  = "s3://\${aws_s3_bucket.metastore.id}/metastore"
   region        = var.region
   force_destroy = true
-}}`} />
+}`} />
 
 ## Azure target foundation
 
@@ -90,7 +118,7 @@ resource "databricks_metastore_data_access" "uc" {
     access_connector_id = azurerm_databricks_access_connector.uc.id
   }
   is_default = true
-}}`} />
+}`} />
 
 ## GCP target foundation
 
@@ -115,8 +143,39 @@ resource "databricks_metastore" "this" {
   name         = "\${var.prefix}-metastore"
   storage_root = "gs://\${google_storage_bucket.uc.name}/metastore"
   region       = var.region
-}}`} />
+}`} />
 
 <Callout client:visible variant="tip" title="Modularize">
   Keep cloud-specific modules separate and use a common variables interface. This makes multi-cloud migrations easier to maintain and review.
 </Callout>
+
+## Validation
+
+- Run `terraform plan` against the target account and confirm zero unexpected diffs before every apply — especially after re-running the exporter, since re-imports can introduce drift in provider-managed fields.
+- Verify the metastore, storage credential, and access connector resources actually resolve (test a `CREATE TABLE` and `GRANT` in the target) before treating the foundation as complete.
+
+## Rollback
+
+Target foundation resources created via Terraform should be destroyed via `terraform destroy` scoped to the specific module, not manually in the cloud console — manual deletion causes state drift that blocks future applies. Keep `terraform.tfstate` for the target foundation in remote state (not local disk) so rollback is possible even if the machine that ran `apply` is gone.
+
+## Automation opportunity
+
+- Run `terraform plan` in CI on every pull request touching the foundation modules, and require a human-reviewed `plan` output before `apply`.
+- Store per-cloud variable files (`aws.tfvars`, `azure.tfvars`, `gcp.tfvars`) in version control so the same module set can be re-applied for future migrations without rediscovering variable names.
+
+## Evidence to capture
+
+- The `terraform plan` and `apply` output for the target foundation, archived alongside the migration's decision register.
+- The exporter's output diff (source configuration vs. what was actually carried into the target module) so reviewers can see what was intentionally left out.
+
+## Cloud-specific caveats
+
+The `databricks` Terraform provider's resource names and required arguments differ meaningfully across clouds even where the concept is shared — `databricks_storage_credential` and `databricks_metastore_data_access` take an `aws_iam_role { role_arn = ... }` block on AWS, an `azure_managed_identity { access_connector_id = ... }` block on Azure (the Azure Databricks Access Connector, not a raw managed identity, is the actual UC storage-credential object), and a Databricks-managed `databricks_gcp_service_account` block on GCP — the three are not interchangeable, and provider schema for these resources has changed across releases. Always check the exact schema for your pinned provider version rather than assuming argument names transfer from the AWS example to Azure/GCP.
+
+<Checklist client:visible title="Terraform target foundation" items={[
+  { id: 'export', label: 'Source workspace configuration exported as a baseline (where a source workspace exists)' },
+  { id: 'modules', label: 'Target foundation modules written per cloud with a shared variables interface' },
+  { id: 'plan-review', label: 'terraform plan reviewed in CI before every apply' },
+  { id: 'state', label: 'Remote state configured for the target foundation module' },
+  { id: 'validate', label: 'Target metastore, storage credential, and connectivity validated post-apply' },
+]} />

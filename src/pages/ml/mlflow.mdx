@@ -50,6 +50,20 @@ for run in source_client.search_runs([experiment.experiment_id]):
         mlflow.log_artifacts(local_path)
 `} />
 
+## Artifact store URI portability
+
+<Callout client:visible variant="warning" title="Re-uploading artifact bytes doesn't fix embedded paths">
+  A model's `MLmodel` file and `conda.yaml`/`requirements.txt` can embed scheme-specific paths (`dbfs:/`, `s3://`, `mlflow-artifacts:/`) inside custom pyfunc wrappers, code paths, or artifact references — not just as the top-level artifact URI. Re-running `mlflow.log_artifacts()` on the target moves the bytes, but any code inside the model that hardcodes a source-scheme path will still reference the wrong location at inference time.
+</Callout>
+
+Before migrating a run's artifacts, check for hardcoded paths beyond the top-level artifact URI:
+
+- Custom `pyfunc` wrappers that read auxiliary files (vocab files, lookup tables) via an absolute path rather than a path relative to the artifact root.
+- Conda/pip requirements files referencing an internal package index by a source-workspace-specific URL.
+- Any `code_path` entries in `log_model()` calls — these are copied as-is and can themselves contain source-path assumptions.
+
+Re-log the model with `mlflow.pyfunc.log_model(..., artifacts={...})` using artifact-relative references, rather than trusting a straight file copy, whenever the model's code touches paths beyond what MLflow manages automatically.
+
 ## Deciding what to actually migrate
 
 <Callout client:visible variant="tip" title="Not every run deserves migration">
