@@ -24,7 +24,7 @@ An external location registers a cloud storage path with a storage credential. I
 
 ### Creating an external location
 
-<CodeBlock language="sql" code={`CREATE EXTERNAL LOCATION raw_data
+<CodeBlock client:visible language="sql" code={`CREATE EXTERNAL LOCATION raw_data
 URL 's3://<target-bucket>/raw'
 WITH (CREDENTIAL <target_storage_credential>)
 COMMENT 'Raw data landing zone';}`} />
@@ -44,7 +44,7 @@ COMMENT 'Raw data landing zone';}`} />
 
 Volumes are UC objects for non-tabular files. They replace DBFS mounts for libraries, config, images, and raw exports.
 
-<CodeBlock language="sql" code={`CREATE EXTERNAL VOLUME <catalog>.<schema>.<volume_name>
+<CodeBlock client:visible language="sql" code={`CREATE EXTERNAL VOLUME <catalog>.<schema>.<volume_name>
 LOCATION 's3://<target-bucket>/volumes/<volume_name>'
 COMMENT 'Managed non-tabular data';}`} />
 
@@ -63,7 +63,7 @@ Migration steps:
 5. Validate file counts, checksums, and access permissions.
 6. Unmount and delete source mounts.
 
-<CodeBlock language="bash" code={`# Copy from DBFS to external volume (example: AWS target)
+<CodeBlock client:visible language="bash" code={`# Copy from DBFS to external volume (example: AWS target)
 dbutils.fs.cp("dbfs:/mnt/legacy/config/", "/Volumes/catalog/schema/config/", recurse=True)
 
 # AWS CLI alternative for large transfers
@@ -85,7 +85,7 @@ If a volume is misconfigured, drop it and recreate. Data remains in the underlyi
 - Use cloud-native sync tools (AWS DataSync, Azure AzCopy, gsutil) for bulk transfer.
 - Script path rewrites across notebooks and job definitions.
 
-<Checklist title="External locations and volumes" items={[
+<Checklist client:visible title="External locations and volumes" items={[
   { id: 'mounts', label: 'Inventory all DBFS mounts and paths' },
   { id: 'map', label: 'Map each mount to external location or volume' },
   { id: 'creds', label: 'Create target storage credentials' },

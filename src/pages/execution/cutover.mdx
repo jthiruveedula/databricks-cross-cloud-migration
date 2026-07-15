@@ -42,7 +42,7 @@ Cutover is the moment the target environment becomes the system of record. It re
 
 Set source tables to read-only if possible:
 
-<CodeBlock language="sql" code={`-- Example: revoke write privileges on source catalog during freeze
+<CodeBlock client:visible language="sql" code={`-- Example: revoke write privileges on source catalog during freeze
 REVOKE ALL PRIVILEGES ON CATALOG source_catalog FROM \`users\`;
 GRANT SELECT ON CATALOG source_catalog TO \`users\`;`} />
 
@@ -72,7 +72,7 @@ If cutover fails:
 - Use a cutover runbook script that pauses jobs, runs final sync, validates, and enables target jobs.
 - Integrate with orchestration tools for dependency-aware job startup.
 
-<Checklist title="Cutover checklist" items={[
+<Checklist client:visible title="Cutover checklist" items={[
   { id: 'freeze', label: 'Source jobs paused and users notified' },
   { id: 'final-sync', label: 'Final incremental sync completed' },
   { id: 'reconcile', label: 'Final reconciliation passed' },

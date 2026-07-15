@@ -64,7 +64,7 @@ The framework itself has no rollback, but every decision should have a contingen
 
 Store the decision register and wave plan in a version-controlled YAML file. Example:
 
-<CodeBlock language="yaml" filename="migration-config.yaml" code={`migration:
+<CodeBlock client:visible language="yaml" filename="migration-config.yaml" code={`migration:
   source:
     cloud: azure
     account_id: <SOURCE_ACCOUNT_ID>
@@ -89,7 +89,7 @@ Store the decision register and wave plan in a version-controlled YAML file. Exa
       criteria: requires dual-run sign-off
 }`} />
 
-<Checklist title="Decision checkpoints" items={[
+<Checklist client:visible title="Decision checkpoints" items={[
   { id: 'driver', label: 'Business driver documented and approved' },
   { id: 'data-gravity', label: 'Data size and change rate estimated' },
   { id: 'archetype', label: 'Migration archetype selected and signed off' },

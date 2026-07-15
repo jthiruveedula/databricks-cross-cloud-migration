@@ -27,7 +27,7 @@ Technical validation confirms that the target platform is functional, secure, an
 
 ## Infra validation script
 
-<CodeBlock language="bash" code={`# Verify target workspace health
+<CodeBlock client:visible language="bash" code={`# Verify target workspace health
 curl -n https://<target-workspace>.cloud.databricks.com/api/2.0/clusters/list \\
   -H "Authorization: Bearer $TOKEN" | jq '.clusters[] | {cluster_id, cluster_name, state}'
 
@@ -36,7 +36,7 @@ databricks metastores list --output json | jq '.[] | {name, storage_root, region
 
 ## IAM validation
 
-<CodeBlock language="sql" code={`-- Verify current user and group membership
+<CodeBlock client:visible language="sql" code={`-- Verify current user and group membership
 SELECT current_user();
 
 -- Verify grants on a catalog
@@ -57,7 +57,7 @@ If validation fails, fix the issue and re-run the affected test category. Do not
 - Run validation tests as a CI/CD pipeline.
 - Store results in a Delta table for audit and trending.
 
-<Checklist title="Technical validation" items={[
+<Checklist client:visible title="Technical validation" items={[
   { id: 'infra', label: 'Infrastructure provisioned and healthy' },
   { id: 'iam', label: 'IAM and federation validated' },
   { id: 'meta', label: 'Metastore objects reconciled' },

@@ -31,7 +31,7 @@ A cross-cloud migration creates a discontinuity in your audit trail: source-clou
 - **Document the cutover timestamp precisely** per workload, so auditors can identify which system of record applies to any given period.
 - **Preserve the principal mapping** from [IAM mapping](/security/iam-mapping) as a durable artifact — an auditor asking "who had access to this table on this date" needs to trace through both source and target identity systems for anything spanning the cutover.
 
-<CodeBlock language="sql" filename="export_uc_audit.sql" code={`-- Export Unity Catalog audit history before decommissioning the source metastore
+<CodeBlock client:visible language="sql" filename="export_uc_audit.sql" code={`-- Export Unity Catalog audit history before decommissioning the source metastore
 SELECT event_time, event_type, user_identity, request_params, response
 FROM system.access.audit
 WHERE event_date >= '2026-01-01'
@@ -65,7 +65,7 @@ Audit and compliance concerns don't block a technical rollback, but any rollback
 - Automate source audit log export as a scheduled job with a defined retention target, rather than a manual one-time export before decommission.
 - Build a single query/dashboard that spans both source-export and target-native audit logs for any workload that crossed the cutover boundary, so auditors don't need to manually stitch two systems together.
 
-<Checklist title="Audit and compliance" items={[
+<Checklist client:visible title="Audit and compliance" items={[
   { id: 'stakeholders', label: 'Compliance/audit stakeholders engaged during planning' },
   { id: 'export', label: 'Source audit logs exported and archived per retention policy' },
   { id: 'target-logging', label: 'Target audit logging verified active from day one' },

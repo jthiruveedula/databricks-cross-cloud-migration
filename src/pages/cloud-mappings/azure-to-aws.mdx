@@ -35,7 +35,7 @@ Moving Databricks from Azure to AWS is a platform reset, not a lift-and-shift. E
 
 ## Storage and path rewrite
 
-<Tabs tabs={[
+<Tabs client:visible tabs={[
   {
     label: 'Path pattern',
     content: 'ADLS Gen2: abfss://container@account.dfs.core.windows.net/path  →  S3: s3://bucket/path. Container and storage-account segments collapse into a single bucket name; plan a bucket-naming convention before you start copying data.'
@@ -46,7 +46,7 @@ Moving Databricks from Azure to AWS is a platform reset, not a lift-and-shift. E
   },
 ]} />
 
-<CodeBlock language="python" filename="path_rewrite.py" code={`MAPPING = {
+<CodeBlock client:visible language="python" filename="path_rewrite.py" code={`MAPPING = {
     "abfss://raw@prodadls.dfs.core.windows.net": "s3://prod-raw-us-east-1",
     "abfss://curated@prodadls.dfs.core.windows.net": "s3://prod-curated-us-east-1",
 }
@@ -85,7 +85,7 @@ Keep the Azure workspace, ADLS storage, and Entra ID federation live and untouch
 - Drive the S3 bucket layout and IAM role creation from Terraform using the [Terraform patterns](/templates/terraform-patterns) as a base module, parameterized per wave.
 - Generate the path-rewrite mapping file from the [asset inventory](/discovery/asset-inventory) output rather than hand-maintaining it.
 
-<Checklist title="Azure → AWS cutover readiness" items={[
+<Checklist client:visible title="Azure → AWS cutover readiness" items={[
   { id: 'account', label: 'Target AWS account, VPC, and Unity Catalog metastore provisioned' },
   { id: 'identity', label: 'IAM Identity Center federation validated with a pilot group' },
   { id: 'storage', label: 'S3 buckets provisioned and Deep Clone replication complete' },

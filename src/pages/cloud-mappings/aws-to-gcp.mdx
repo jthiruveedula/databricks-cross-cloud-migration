@@ -35,7 +35,7 @@ AWS IAM roles, S3 paths, and VPC PrivateLink have no direct GCP equivalent — i
 
 ## Storage and path rewrite
 
-<Tabs tabs={[
+<Tabs client:visible tabs={[
   {
     label: 'Path pattern',
     content: 'S3: s3://bucket/path  →  GCS: gs://bucket/path. GCS bucket names are globally unique across all of GCP (not just your project), so a straight bucket-name reuse from S3 may not be available — plan the naming convention first.'
@@ -46,7 +46,7 @@ AWS IAM roles, S3 paths, and VPC PrivateLink have no direct GCP equivalent — i
   },
 ]} />
 
-<CodeBlock language="python" filename="path_rewrite.py" code={`MAPPING = {
+<CodeBlock client:visible language="python" filename="path_rewrite.py" code={`MAPPING = {
     "s3://prod-raw-us-east-1": "gs://prod-raw-us-central1",
     "s3://prod-curated-us-east-1": "gs://prod-curated-us-central1",
 }
@@ -85,7 +85,7 @@ Keep the AWS workspace, S3 storage, and IAM Identity Center federation live thro
 - Drive GCS bucket creation and service account provisioning from Terraform using the [Terraform patterns](/templates/terraform-patterns) as a base module.
 - Generate the path-rewrite mapping from the [asset inventory](/discovery/asset-inventory) output rather than hand-maintaining it.
 
-<Checklist title="AWS → GCP cutover readiness" items={[
+<Checklist client:visible title="AWS → GCP cutover readiness" items={[
   { id: 'account', label: 'Target GCP project, VPC, and Unity Catalog metastore provisioned' },
   { id: 'identity', label: 'Google Cloud Identity federation validated with a pilot group' },
   { id: 'storage', label: 'GCS buckets provisioned and Deep Clone replication complete' },

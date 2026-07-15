@@ -19,7 +19,7 @@ Not every job runs inside Databricks Workflows — [workflows and jobs](/pipelin
 
 ## Per-orchestrator migration notes
 
-<Tabs tabs={[
+<Tabs client:visible tabs={[
   {
     label: 'Airflow',
     content: 'Update the Databricks connection (host + token or service principal) in Airflow\'s connection store to point at the target workspace. If DAGs reference job/cluster IDs directly rather than by name, every hardcoded ID needs updating post-migration — prefer referencing jobs by name lookup where the operator supports it.'
@@ -46,7 +46,7 @@ Not every job runs inside Databricks Workflows — [workflows and jobs](/pipelin
 4. Update connection configs and any hardcoded job/cluster IDs.
 5. Run each orchestrated pipeline end to end against target before cutover, not just a connectivity check.
 
-<CodeBlock language="python" filename="airflow_connection_update.py" code={`from airflow.models import Connection
+<CodeBlock client:visible language="python" filename="airflow_connection_update.py" code={`from airflow.models import Connection
 from airflow import settings
 
 session = settings.Session()
@@ -71,7 +71,7 @@ Keep source orchestrator connections and job definitions intact and pointed at s
 - Store orchestrator connection configs as code (Airflow connections as JSON/Terraform, ADF linked services as ARM/Bicep) so the cutover is a reviewable config change, not a manual UI edit per environment.
 - Build a smoke-test DAG/pipeline per orchestrator that only exercises the Databricks connection, so connectivity issues surface before the first real pipeline run.
 
-<Checklist title="External orchestrator migration" items={[
+<Checklist client:visible title="External orchestrator migration" items={[
   { id: 'inventory', label: 'Every external orchestrator with a Databricks connection inventoried' },
   { id: 'auth', label: 'Auth mechanism re-created for target (service principal preferred over PAT)' },
   { id: 'ids', label: 'Hardcoded job/cluster IDs updated to target values' },

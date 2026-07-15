@@ -33,7 +33,7 @@ Identity and access management is the most cloud-specific part of migration. You
 
 Use managed identities or service principals with RBAC on ADLS Gen2.
 
-<CodeBlock language="hcl" filename="azure-storage-rbac.tf" code={`resource "azurerm_role_assignment" "storage" {
+<CodeBlock client:visible language="hcl" filename="azure-storage-rbac.tf" code={`resource "azurerm_role_assignment" "storage" {
   scope                = azurerm_storage_account.data.id
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = azurerm_databricks_access_connector.uc.identity[0].principal_id
@@ -43,7 +43,7 @@ Use managed identities or service principals with RBAC on ADLS Gen2.
 
 Use IAM roles attached to clusters via instance profiles or trust policies for UC storage credentials.
 
-<CodeBlock language="hcl" filename="aws-storage-role.tf" code={`resource "aws_iam_role" "uc_storage" {
+<CodeBlock client:visible language="hcl" filename="aws-storage-role.tf" code={`resource "aws_iam_role" "uc_storage" {
   name = "databricks-uc-storage"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -60,7 +60,7 @@ Use IAM roles attached to clusters via instance profiles or trust policies for U
 
 Use service accounts attached to clusters or as UC storage credentials.
 
-<CodeBlock language="hcl" filename="gcp-service-account.tf" code={`resource "google_service_account" "uc_storage" {
+<CodeBlock client:visible language="hcl" filename="gcp-service-account.tf" code={`resource "google_service_account" "uc_storage" {
   account_id   = "databricks-uc-storage"
   display_name = "Databricks UC Storage"
 }
@@ -96,7 +96,7 @@ If an IAM role is over-permissive, update the policy and re-test before migratio
 - Store principal mappings in a CSV and generate Terraform or ARM/CloudFormation resources.
 - Use the Databricks Account SCIM API to provision groups and users.
 
-<Checklist title="IAM mapping" items={[
+<Checklist client:visible title="IAM mapping" items={[
   { id: 'principals', label: 'Inventory source principals (groups, SPs, managed identities)' },
   { id: 'map', label: 'Create target principal mapping table' },
   { id: 'roles', label: 'Define target IAM roles and storage access policies' },

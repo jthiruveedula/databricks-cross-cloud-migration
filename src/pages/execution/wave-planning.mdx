@@ -22,7 +22,7 @@ Divide the migration into waves that move related workloads together. Waves redu
 
 ## Sample wave structure
 
-<Accordion items={[
+<Accordion client:visible items={[
   {
     title: 'Wave 0: Pilot',
     content: 'One or two non-production workloads. Validate tooling, IAM, networking, and runbook timing.'
@@ -57,7 +57,7 @@ Divide the migration into waves that move related workloads together. Waves redu
 
 ## Wave plan template
 
-<CodeBlock language="yaml" filename="wave-plan.yaml" code={`waves:
+<CodeBlock client:visible language="yaml" filename="wave-plan.yaml" code={`waves:
   - id: wave-0
     name: Pilot
     workspaces:
@@ -92,7 +92,7 @@ Rollback is performed per wave. If a wave fails, revert the workloads in that wa
 - Generate wave manifests from dependency graphs.
 - Use orchestration tools to trigger validation and cutover steps per wave.
 
-<Checklist title="Wave planning" items={[
+<Checklist client:visible title="Wave planning" items={[
   { id: 'domains', label: 'Group workloads by domain and dependency' },
   { id: 'criteria', label: 'Define entry/exit criteria per wave' },
   { id: 'owners', label: 'Assign wave owners and support roster' },

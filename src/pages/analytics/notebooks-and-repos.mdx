@@ -23,7 +23,7 @@ Notebooks are the easiest asset type to move (they're just code) and the easiest
 | Export `.dbc` archive, import to target workspace | Fastest path for notebooks you're not ready to version yet |
 | Move into a Git repo first, then sync via Repos | Preferred — gains version history and review going forward |
 
-<CodeBlock language="bash" filename="export_notebooks.sh" code={`# Export a workspace folder as a .dbc archive
+<CodeBlock client:visible language="bash" filename="export_notebooks.sh" code={`# Export a workspace folder as a .dbc archive
 databricks workspace export-dir /Shared/analytics ./export/analytics --format DBC
 
 # Import into the target workspace
@@ -47,7 +47,7 @@ Regardless of export method, audit notebook code for:
 | Cluster/warehouse IDs referenced directly (rare but real) | Update to target IDs, or better, remove the hardcoding in favor of widget/parameter-based configuration |
 | DBFS mount paths | Migrate to Unity Catalog volumes or external locations, don't recreate DBFS mounts on target |
 
-<CodeBlock language="bash" filename="audit_notebooks.sh" code={`# Scan exported notebooks for likely hardcoded references before importing to target
+<CodeBlock client:visible language="bash" filename="audit_notebooks.sh" code={`# Scan exported notebooks for likely hardcoded references before importing to target
 grep -rlE 'abfss://|s3://|gs://|dbfs:/mnt/' ./export/ | sort
 `} />
 
@@ -66,7 +66,7 @@ Notebooks and repos are code; if a migrated notebook is broken, fix and re-run i
 - Run the hardcoded-reference audit script as a CI check on every notebook before it's considered migration-complete, not as a one-time manual pass.
 - Batch-migrate un-versioned notebooks into Git as part of this step using a scripted `.dbc` export → Git commit → Repos sync pipeline, rather than doing it ad hoc per notebook.
 
-<Checklist title="Notebooks and repos migration" items={[
+<Checklist client:visible title="Notebooks and repos migration" items={[
   { id: 'versioned', label: 'Un-versioned notebooks moved into Git during migration, not deferred' },
   { id: 'repos-recloned', label: 'Git-backed repos re-cloned in target with working credentials' },
   { id: 'audit', label: 'Hardcoded path/catalog/ID references audited and rewritten' },

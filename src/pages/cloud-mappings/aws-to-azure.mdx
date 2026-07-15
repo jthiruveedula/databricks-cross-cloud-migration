@@ -35,7 +35,7 @@ AWS IAM roles, S3 paths, and VPC PrivateLink connections do not carry over to Az
 
 ## Storage and path rewrite
 
-<Tabs tabs={[
+<Tabs client:visible tabs={[
   {
     label: 'Path pattern',
     content: 'S3: s3://bucket/path  →  ADLS Gen2: abfss://container@account.dfs.core.windows.net/path. One S3 bucket typically becomes one container under a shared storage account per environment — decide the storage-account-to-container topology before copying data.'
@@ -46,7 +46,7 @@ AWS IAM roles, S3 paths, and VPC PrivateLink connections do not carry over to Az
   },
 ]} />
 
-<CodeBlock language="python" filename="path_rewrite.py" code={`MAPPING = {
+<CodeBlock client:visible language="python" filename="path_rewrite.py" code={`MAPPING = {
     "s3://prod-raw-us-east-1": "abfss://raw@prodadls.dfs.core.windows.net",
     "s3://prod-curated-us-east-1": "abfss://curated@prodadls.dfs.core.windows.net",
 }
@@ -85,7 +85,7 @@ Keep the AWS workspace, S3 storage, and IAM Identity Center federation live thro
 - Drive ADLS container creation and Entra ID app registration from Terraform using the [Terraform patterns](/templates/terraform-patterns) as a base module.
 - Generate the path-rewrite mapping from the [asset inventory](/discovery/asset-inventory) output rather than hand-maintaining it.
 
-<Checklist title="AWS → Azure cutover readiness" items={[
+<Checklist client:visible title="AWS → Azure cutover readiness" items={[
   { id: 'account', label: 'Target Azure subscription, VNet, and Unity Catalog metastore provisioned' },
   { id: 'identity', label: 'Entra ID federation validated with a pilot group' },
   { id: 'storage', label: 'ADLS Gen2 containers provisioned and Deep Clone replication complete' },

@@ -26,7 +26,7 @@ Data reconciliation proves that target data matches source data within agreed to
 
 ## Row-count and checksum query
 
-<CodeBlock language="sql" filename="reconcile.sql" code={`-- Reconcile row count
+<CodeBlock client:visible language="sql" filename="reconcile.sql" code={`-- Reconcile row count
 SELECT 'source' AS env, COUNT(*) AS cnt FROM source_catalog.schema.table
 UNION ALL
 SELECT 'target' AS env, COUNT(*) AS cnt FROM target_catalog.schema.table;
@@ -40,7 +40,7 @@ ORDER BY hash;}`} />
 
 For non-tabular files:
 
-<CodeBlock language="bash" code={`# AWS example: compare file counts and total size
+<CodeBlock client:visible language="bash" code={`# AWS example: compare file counts and total size
 aws s3 sync s3://source-bucket/path s3://target-bucket/path --dryrun
 
 # GCP example
@@ -72,7 +72,7 @@ If reconciliation fails beyond tolerance, halt cutover and re-sync. Do not proce
 - Run reconciliation queries via a Databricks job and store results in a Delta table.
 - Generate alerts when any table exceeds tolerance.
 
-<Checklist title="Data reconciliation" items={[
+<Checklist client:visible title="Data reconciliation" items={[
   { id: 'counts', label: 'Row counts match for all tables' },
   { id: 'checksums', label: 'Column checksums match' },
   { id: 'files', label: 'File counts and checksums match for volumes' },

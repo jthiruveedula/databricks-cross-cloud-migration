@@ -27,7 +27,7 @@ Saved queries in Databricks SQL reference a warehouse, a catalog/schema, and oft
 
 ## Migration steps
 
-<CodeBlock language="python" filename="migrate_queries.py" code={`import requests
+<CodeBlock client:visible language="python" filename="migrate_queries.py" code={`import requests
 
 queries = requests.get(
     f"{SOURCE_HOST}/api/2.0/preview/sql/queries",
@@ -65,7 +65,7 @@ Saved queries are configuration; if a migrated query is wrong, fix and redeploy 
 - Generate the catalog/warehouse rewrite mapping once and reuse it across queries, dashboards ([dashboards](/analytics/dashboards)), and alerts ([alerts](/analytics/alerts)) rather than maintaining three separate mappings.
 - Diff query result sets automatically as part of CI rather than manual spot-checks.
 
-<Checklist title="SQL query migration" items={[
+<Checklist client:visible title="SQL query migration" items={[
   { id: 'inventory', label: 'All saved queries inventoried via the SQL API' },
   { id: 'rewrite', label: 'Catalog and warehouse references rewritten per the naming standard' },
   { id: 'permissions', label: 'Query folder permissions replayed with mapped principals' },

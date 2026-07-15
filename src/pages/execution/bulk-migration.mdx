@@ -20,7 +20,7 @@ Bulk migration is the pilot's runbook, repeated across every remaining wave from
 
 Waves group workloads by dependency, not by migration mechanics — within a wave, migrate independent tables/jobs in parallel to compress the timeline:
 
-<CodeBlock language="python" filename="bulk_migrate.py" code={`from concurrent.futures import ThreadPoolExecutor, as_completed
+<CodeBlock client:visible language="python" filename="bulk_migrate.py" code={`from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def migrate_table(table_name: str) -> dict:
     deep_clone(source=f"source_catalog.{table_name}", target=f"target_catalog.{table_name}")
@@ -80,7 +80,7 @@ Roll back at wave granularity, not migration-wide — see [rollback](/execution/
 - Generate wave manifests directly from the [dependency mapping](/discovery/dependency-mapping) output rather than hand-curating table lists.
 - Build a dashboard from the wave-tracking table above so stakeholders can self-serve status instead of asking in standup.
 
-<Checklist title="Bulk migration discipline" items={[
+<Checklist client:visible title="Bulk migration discipline" items={[
   { id: 'freeze', label: 'Wave scope frozen before migration starts' },
   { id: 'parallel', label: 'Parallelism tuned to cloud API rate limits' },
   { id: 'reconcile', label: 'Every table/job reconciled with the pilot harness' },

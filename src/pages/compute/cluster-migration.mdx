@@ -56,7 +56,7 @@ Map node types by workload profile (CPU, memory, GPU, local SSD) rather than by 
 5. Recreate pools with appropriate idle termination.
 6. Run smoke tests and validate autoscaling behavior.
 
-<CodeBlock language="python" filename="translate-cluster.py" code={`source_cluster = {
+<CodeBlock client:visible language="python" filename="translate-cluster.py" code={`source_cluster = {
     "cluster_name": "etl-shared",
     "node_type_id": "Standard_DS3_v2",  # Azure
     "num_workers": 2,
@@ -88,7 +88,7 @@ If a cluster fails, delete the target cluster and recreate with a corrected conf
 - Generate target cluster JSON from a mapping table.
 - Use Terraform or the Databricks Terraform provider to create clusters, policies, and pools.
 
-<Checklist title="Cluster migration" items={[
+<Checklist client:visible title="Cluster migration" items={[
   { id: 'export', label: 'Export cluster definitions and policies' },
   { id: 'map', label: 'Map node types and access modes' },
   { id: 'init', label: 'Migrate init scripts and libraries' },

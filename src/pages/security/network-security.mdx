@@ -19,7 +19,7 @@ Network security cannot be exported and imported — every construct (private co
 
 ## Private control-plane connectivity
 
-<Tabs tabs={[
+<Tabs client:visible tabs={[
   { label: 'Azure', content: 'Private Link connects the workspace to the Databricks control plane without traversing the public internet. Verify Private Link is configured for both the webapp/API and the secure cluster connectivity relay, not just one.' },
   { label: 'AWS', content: 'AWS PrivateLink serves the same role. Confirm both the REST API endpoint and the SCC relay endpoint have PrivateLink connections — a partial setup silently falls back to public connectivity for the missed endpoint.' },
   { label: 'GCP', content: 'Private Service Connect (PSC) provides equivalent private connectivity. GCP requires explicit PSC endpoints per workspace; confirm DNS resolves to the private endpoint, not the public one.' },
@@ -29,7 +29,7 @@ Network security cannot be exported and imported — every construct (private co
 
 If source clusters ran with secure cluster connectivity (no public IPs on worker/driver nodes), replicate that exactly in the target — do not default to public subnets "to get migration moving faster."
 
-<CodeBlock language="hcl" filename="no-public-ip.tf" code={`# Example: enforce no-public-IP at the cluster policy level so it can't be
+<CodeBlock client:visible language="hcl" filename="no-public-ip.tf" code={`# Example: enforce no-public-IP at the cluster policy level so it can't be
 # silently reverted by an individual cluster configuration
 resource "databricks_cluster_policy" "secure" {
   name = "secure-no-public-ip"
@@ -64,7 +64,7 @@ Network rollback is DNS/endpoint redirection back to source, covered in [rollbac
 - Define private connectivity and egress rules as Terraform modules per cloud, parameterized per workspace, rather than manually clicking through cloud consoles per environment.
 - Generate the egress allow-list from observed traffic in the pilot wave instead of hand-authoring it from documentation that may be stale.
 
-<Checklist title="Network security migration" items={[
+<Checklist client:visible title="Network security migration" items={[
   { id: 'private-link', label: 'Private control-plane connectivity configured for all required endpoints' },
   { id: 'no-public-ip', label: 'No-public-IP posture enforced via cluster policy, not convention' },
   { id: 'egress', label: 'Egress allow-list rebuilt from actual traffic, not assumed' },

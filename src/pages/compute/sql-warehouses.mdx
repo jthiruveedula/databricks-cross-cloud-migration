@@ -34,7 +34,7 @@ Don't copy the source cluster-size label 1:1 — validate against actual target-
 4. Re-apply query/warehouse-level access controls (see grants below).
 5. Run representative queries from the pilot wave and compare latency/concurrency against source before wider cutover.
 
-<CodeBlock language="python" filename="export_warehouses.py" code={`import requests
+<CodeBlock client:visible language="python" filename="export_warehouses.py" code={`import requests
 
 resp = requests.get(
     f"{SOURCE_HOST}/api/2.0/sql/warehouses",
@@ -75,7 +75,7 @@ Keep source warehouses running and reachable through hypercare. Rollback is redi
 - Drive warehouse creation from Terraform (`databricks_sql_endpoint`) so sizing and access controls are reviewable and reproducible per environment.
 - Script the BI-tool connection-string cutover instead of manually updating each dashboard/tool — a checklist item per tool is what gets missed under time pressure.
 
-<Checklist title="SQL warehouse migration" items={[
+<Checklist client:visible title="SQL warehouse migration" items={[
   { id: 'availability', label: 'Serverless/Pro availability confirmed for target region' },
   { id: 'sizing', label: 'Warehouse sizing validated against real target-cloud query latency' },
   { id: 'connections', label: 'Every BI tool and scheduled query re-pointed to target endpoint' },

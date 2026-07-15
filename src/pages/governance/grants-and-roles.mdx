@@ -20,7 +20,7 @@ Creating the target metastore, catalogs, and schemas from [Unity Catalog strateg
 
 Before writing a single target `GRANT`, extract the full source grant set — do not reconstruct it from memory or tribal knowledge:
 
-<CodeBlock language="sql" filename="inventory_grants.sql" code={`-- Run against the source metastore for every catalog in scope
+<CodeBlock client:visible language="sql" filename="inventory_grants.sql" code={`-- Run against the source metastore for every catalog in scope
 SHOW GRANTS ON CATALOG source_catalog;
 SHOW GRANTS ON SCHEMA source_catalog.sales;
 SHOW GRANTS ON TABLE source_catalog.sales.orders;
@@ -41,7 +41,7 @@ WHERE object_catalog = 'source_catalog';
 | 4 | Apply grants at catalog/schema level first, table-level exceptions second |
 | 5 | Diff target `SHOW GRANTS` output against the source export |
 
-<CodeBlock language="python" filename="generate_grants.py" code={`import json
+<CodeBlock client:visible language="python" filename="generate_grants.py" code={`import json
 
 PRINCIPAL_MAP = json.load(open("principal_mapping.json"))  # source group -> target group
 
@@ -79,7 +79,7 @@ Grants are additive and low-risk to fix forward — if a grant is missing or wro
 - Store the full grant set as declarative Terraform (`databricks_grants` resource) per catalog/schema so drift is visible in a `terraform plan`, not discovered by a user losing access.
 - Run the source-vs-target grant diff as a scheduled check throughout hypercare, not just once at cutover.
 
-<Checklist title="Grants and roles migration" items={[
+<Checklist client:visible title="Grants and roles migration" items={[
   { id: 'inventory', label: 'Full source grant inventory extracted' },
   { id: 'mapping', label: 'Source principals mapped to target account-level groups' },
   { id: 'apply', label: 'Grants applied top-down: catalog → schema → table' },

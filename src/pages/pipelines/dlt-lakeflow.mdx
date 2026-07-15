@@ -22,7 +22,7 @@ Delta Live Tables (DLT) and Lakeflow pipelines are declarative streaming and bat
 
 ## Recreating a pipeline
 
-<CodeBlock language="bash" code={`# Export pipeline definition
+<CodeBlock client:visible language="bash" code={`# Export pipeline definition
 databricks pipelines get --pipeline-id <PIPELINE_ID> --output json > pipeline.json
 
 # Edit target_catalog, target_schema, storage, cluster, and expectations
@@ -66,7 +66,7 @@ If the target pipeline produces incorrect output, stop it, fix the definition, a
 - Store pipeline definitions as code and deploy via CI/CD.
 - Parameterize catalog and storage so the same code targets source or target.
 
-<Checklist title="DLT and Lakeflow" items={[
+<Checklist client:visible title="DLT and Lakeflow" items={[
   { id: 'defs', label: 'Export all pipeline definitions' },
   { id: 'rewrite', label: 'Rewrite catalog, storage, and cluster references' },
   { id: 'checkpoints', label: 'Plan checkpoint strategy' },

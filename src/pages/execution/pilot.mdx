@@ -40,7 +40,7 @@ Pick a workload that is:
 | 5 | Grant pilot user group access via Unity Catalog | IAM/grants mapping |
 | 6 | Time every step | Real estimates for wave planning |
 
-<CodeBlock language="python" filename="pilot_reconcile.py" code={`# Minimal pilot reconciliation: row count + checksum parity
+<CodeBlock client:visible language="python" filename="pilot_reconcile.py" code={`# Minimal pilot reconciliation: row count + checksum parity
 source_count = spark.table("source_catalog.pilot.orders").count()
 target_count = spark.table("target_catalog.pilot.orders").count()
 assert source_count == target_count, f"Row count mismatch: {source_count} vs {target_count}"
@@ -73,7 +73,7 @@ Pilot rollback is trivial by design: the source workload keeps running untouched
 - Turn the pilot's reconciliation script into the reusable validation harness for every subsequent wave.
 - Feed pilot timing data into the [wave plan template](/execution/wave-planning) to size later waves realistically.
 
-<Checklist title="Pilot exit criteria" items={[
+<Checklist client:visible title="Pilot exit criteria" items={[
   { id: 'foundation', label: 'Target foundation validated independently of the pilot' },
   { id: 'data', label: 'Pilot data reconciled with zero unexplained diffs' },
   { id: 'access', label: 'Pilot user group can query target with correct grants' },
