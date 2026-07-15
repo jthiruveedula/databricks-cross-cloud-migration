@@ -43,7 +43,7 @@ Trigger rollback if any of the following occur during or after cutover:
 | Networking | Revert DNS / endpoint changes |
 | Secrets | Re-enable source secret scopes if needed |
 
-<Callout variant="warning" title="Do not leave both environments writable">
+<Callout client:visible variant="warning" title="Do not leave both environments writable">
   Split-brain—where source and target both accept writes—is the most dangerous rollback failure mode. Always make one environment read-only before re-enabling the other.
 </Callout>
 

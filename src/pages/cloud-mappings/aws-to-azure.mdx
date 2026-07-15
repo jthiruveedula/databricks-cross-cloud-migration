@@ -29,7 +29,7 @@ AWS IAM roles, S3 paths, and VPC PrivateLink connections do not carry over to Az
 | IAM role + external ID (automation) | Entra ID app registration / service principal | Used by CI/CD and Terraform |
 | IAM Identity Center SCIM | Entra ID provisioning | Audit for orphaned groups after cutover |
 
-<Callout variant="warning" title="Least-privilege redesign, not a copy">
+<Callout client:visible variant="warning" title="Least-privilege redesign, not a copy">
   An AWS IAM role's policy document does not translate line-for-line into an Entra ID role assignment. Redesign least-privilege access against Azure's RBAC model rather than attempting a mechanical translation.
 </Callout>
 

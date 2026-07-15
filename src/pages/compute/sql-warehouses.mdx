@@ -12,7 +12,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 SQL warehouses power BI dashboards, ad hoc queries, and scheduled SQL jobs — a different consumption pattern than the interactive/job clusters covered in [cluster migration](/compute/cluster-migration), with its own sizing, concurrency, and access-control concerns.
 
-<Callout variant="tip" title="Serverless availability varies by region and cloud">
+<Callout client:visible variant="tip" title="Serverless availability varies by region and cloud">
   Serverless SQL warehouses are not available in every region on every cloud. Confirm serverless availability for your target region before assuming a like-for-like recreation — see the [Unity Catalog strategy](/governance/unity-catalog-strategy#regional-constraints) regional-constraints checklist.
 </Callout>
 

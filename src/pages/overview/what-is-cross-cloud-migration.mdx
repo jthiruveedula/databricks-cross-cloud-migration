@@ -60,15 +60,15 @@ This runbook covers migration of the Databricks platform and its runtime depende
 
 ## Key principles
 
-<Callout variant="prerequisite" title="Modernize as you migrate">
+<Callout client:visible variant="prerequisite" title="Modernize as you migrate">
   Do not reproduce legacy Hive, DBFS mounts, or unsupported runtimes in the target. Use the migration as a forcing function to adopt Unity Catalog, Unity Catalog volumes, and DBR 13.3 LTS or above.
 </Callout>
 
-<Callout variant="tip" title="Federate, then upgrade">
+<Callout client:visible variant="tip" title="Federate, then upgrade">
   Databricks recommends a federate-then-upgrade path for large Unity Catalog migrations. UCX can accelerate the assessment and upgrade of Hive assets. This is especially true when the migration is combined with a cloud move.
 </Callout>
 
-<Callout variant="warning" title="Identity is not portable">
+<Callout client:visible variant="warning" title="Identity is not portable">
   Users, groups, and service principals must be recreated or remapped in the target account. Convert workspace-local groups to account-level groups before migration.
 </Callout>
 

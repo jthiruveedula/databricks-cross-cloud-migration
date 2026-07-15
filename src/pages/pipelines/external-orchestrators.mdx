@@ -13,7 +13,7 @@ import Tabs from '../../components/Tabs.tsx';
 
 Not every job runs inside Databricks Workflows — [workflows and jobs](/pipelines/workflows-jobs) covers native orchestration, but many estates also trigger Databricks work from Airflow, Azure Data Factory, AWS Step Functions/Glue, or GCP Cloud Composer. Every one of those needs re-pointing at the target workspace, and several use cloud-specific connection/authentication mechanisms that don't survive a cross-cloud move.
 
-<Callout variant="warning" title="External orchestration is easy to miss in discovery">
+<Callout client:visible variant="warning" title="External orchestration is easy to miss in discovery">
   A job triggered from Airflow or ADF doesn't show up in a Databricks-only [asset inventory](/discovery/asset-inventory) scan. Explicitly inventory every external scheduler/orchestrator with a Databricks connection before assuming your job inventory is complete.
 </Callout>
 

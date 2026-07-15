@@ -12,7 +12,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 CI/CD pipelines that deploy notebooks, jobs, and Terraform-managed infrastructure to Databricks need more than a new target URL — the auth mechanism, environment-specific variables, and often the entire deployment tool's cloud integration point (e.g. an Azure DevOps service connection using managed identity) need rebuilding for the target cloud.
 
-<Callout variant="prerequisite" title="CI/CD is target-foundation work, not a cutover-day task">
+<Callout client:visible variant="prerequisite" title="CI/CD is target-foundation work, not a cutover-day task">
   Get CI/CD deploying to the target workspace successfully before the [pilot](/execution/pilot) starts — the pilot should be exercising the real deployment pipeline, not a manual one-off `databricks jobs create` you don't intend to keep using.
 </Callout>
 
@@ -47,7 +47,7 @@ jobs:
         run: databricks bundle deploy --target prod
 `} />
 
-<Callout variant="tip" title="Databricks Asset Bundles decouple this from the specific cloud">
+<Callout client:visible variant="tip" title="Databricks Asset Bundles decouple this from the specific cloud">
   If source jobs/pipelines are still deployed via ad hoc scripts or manual clicks, migrating to [Databricks Asset Bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/) during this step pays for itself immediately — bundle definitions are target-workspace-agnostic; only the environment variables above change per cloud.
 </Callout>
 

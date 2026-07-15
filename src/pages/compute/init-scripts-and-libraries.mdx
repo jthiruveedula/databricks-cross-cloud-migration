@@ -12,7 +12,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 Init scripts and libraries are the part of a cluster's bootstrap that most often has quiet, cloud-specific assumptions baked in — a hardcoded storage path, a cloud CLI call, or a private package repository reachable only from the source cloud's network. [Cluster migration](/compute/cluster-migration) covers the cluster shell; this page covers what runs during its startup.
 
-<Callout variant="warning" title="DBFS init scripts are deprecated — don't re-create the old pattern">
+<Callout client:visible variant="warning" title="DBFS init scripts are deprecated — don't re-create the old pattern">
   If source clusters still use DBFS-stored init scripts, migrate them to Unity Catalog volumes or workspace files rather than reproducing a deprecated pattern in the target. This migration is a natural point to close out that modernization, not defer it again.
 </Callout>
 
@@ -42,7 +42,7 @@ grep -nE 'abfss://|s3://|gs://|azcopy|aws s3|gsutil|169\\.254\\.169\\.254' "$1" 
 | Wheel/JAR uploaded to DBFS/workspace files | Re-upload to a Unity Catalog volume; update the cluster/job library reference path |
 | Cluster-installed libraries via init script | Migrate alongside the init script itself, following the same path-rewrite and testing steps above |
 
-<Callout variant="tip" title="Pin versions during migration, even if source didn't">
+<Callout client:visible variant="tip" title="Pin versions during migration, even if source didn't">
   If the source cluster resolved "latest" for a library, you may get a different transitive dependency graph on a freshly created target cluster months or years later. Pin explicit versions during migration so a library-version drift isn't mixed in with everything else you're validating.
 </Callout>
 

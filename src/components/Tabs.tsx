@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import RevealOnView from './motion/RevealOnView';
 
 interface Tab {
   label: string;
@@ -13,7 +15,7 @@ export default function Tabs({ tabs }: Props) {
   const [active, setActive] = useState(0);
 
   return (
-    <div className="my-6 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] overflow-hidden">
+    <RevealOnView className="my-6 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] overflow-hidden">
       <div className="flex border-b border-[var(--border)] overflow-x-auto">
         {tabs.map((tab, idx) => (
           <button
@@ -29,7 +31,17 @@ export default function Tabs({ tabs }: Props) {
           </button>
         ))}
       </div>
-      <div className="p-4 text-sm text-[var(--ink-muted)]">{tabs[active].content}</div>
-    </div>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={active}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.15, ease: 'easeOut' }}
+          className="p-4 text-sm text-[var(--ink-muted)]"
+        >
+          {tabs[active].content}
+        </motion.div>
+      </AnimatePresence>
+    </RevealOnView>
   );
 }

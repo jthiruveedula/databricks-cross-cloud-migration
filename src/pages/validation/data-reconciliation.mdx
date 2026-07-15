@@ -53,7 +53,7 @@ gsutil -m rsync -r gs://source-bucket/path gs://target-bucket/path -d -n}`} />
 3. Investigate if the mismatch is due to ongoing source changes during sync.
 4. Document the resolution before signing off.
 
-<Callout variant="warning" title="Do not ignore small mismatches">
+<Callout client:visible variant="warning" title="Do not ignore small mismatches">
   Even a single-row mismatch can indicate a bug in the migration logic or a permissions issue. Treat every mismatch as a severity-2 finding until explained.
 </Callout>
 

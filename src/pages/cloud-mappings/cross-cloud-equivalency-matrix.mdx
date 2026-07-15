@@ -72,11 +72,11 @@ Databricks abstracts the control plane, but the underlying cloud primitives diff
 
 ## Common transformations
 
-<Callout variant="tip" title="Path rewrite is unavoidable">
+<Callout client:visible variant="tip" title="Path rewrite is unavoidable">
   Every table, notebook, and job that references a cloud storage path must be rewritten. Use a centralized mapping file and apply it with scripts, not manual edits.
 </Callout>
 
-<Callout variant="warning" title="Identity is not one-to-one">
+<Callout client:visible variant="warning" title="Identity is not one-to-one">
   A managed identity in Azure does not map directly to an IAM role in AWS. You must redesign the least-privilege model for the target cloud.
 </Callout>
 

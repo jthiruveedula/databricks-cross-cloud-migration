@@ -29,7 +29,7 @@ AWS IAM roles, S3 paths, and VPC PrivateLink have no direct GCP equivalent — i
 | IAM role + external ID (automation) | Service account with key or impersonation | Prefer workload identity federation over long-lived keys |
 | IAM Identity Center SCIM | Google Workspace / Cloud Identity SCIM | Audit for orphaned groups after cutover |
 
-<Callout variant="warning" title="Don't carry over long-lived keys">
+<Callout client:visible variant="warning" title="Don't carry over long-lived keys">
   AWS IAM roles use short-lived STS tokens by default. Don't regress to long-lived GCP service account JSON keys for convenience — use workload identity federation to keep the same short-lived-credential posture in the new environment.
 </Callout>
 

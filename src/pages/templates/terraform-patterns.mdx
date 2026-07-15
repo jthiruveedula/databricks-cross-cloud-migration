@@ -117,6 +117,6 @@ resource "databricks_metastore" "this" {
   region       = var.region
 }}`} />
 
-<Callout variant="tip" title="Modularize">
+<Callout client:visible variant="tip" title="Modularize">
   Keep cloud-specific modules separate and use a common variables interface. This makes multi-cloud migrations easier to maintain and review.
 </Callout>

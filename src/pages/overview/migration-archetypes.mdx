@@ -68,7 +68,7 @@ Run source and target in parallel, dual-write or dual-read, then switch traffic 
 
 ## Decision factors
 
-<Callout variant="decision" title="Use this flow">
+<Callout client:visible variant="decision" title="Use this flow">
   1. Is the target in the same cloud? → Consider cross-subscription/account first.
   2. Is Unity Catalog already in use? → Prefer workspace + metastore.
   3. Is downtime acceptable? → If no, design blue-green or dual-run.

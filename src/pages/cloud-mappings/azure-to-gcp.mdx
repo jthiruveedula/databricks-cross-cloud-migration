@@ -29,7 +29,7 @@ Entra ID federation, ADLS Gen2 paths, and VNet Private Link have no direct GCP e
 | Service principal (automation) | Service account with key or impersonation | Prefer workload identity federation over long-lived keys |
 | Entra ID SCIM provisioning | Google Workspace / Cloud Identity SCIM | Audit for orphaned groups after cutover |
 
-<Callout variant="warning" title="Service account keys are a step backward">
+<Callout client:visible variant="warning" title="Service account keys are a step backward">
   Don't replicate Entra ID service principal secrets as long-lived GCP service account JSON keys. Use workload identity federation or short-lived tokens — carrying over a "secret in a vault" pattern from Azure Key Vault without adopting GCP's federation model reintroduces a credential-leak risk you were trying to close.
 </Callout>
 

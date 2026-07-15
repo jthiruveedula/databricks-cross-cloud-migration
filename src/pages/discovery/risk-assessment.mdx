@@ -24,7 +24,7 @@ import Checklist from '../../components/Checklist.tsx';
 | Owner engagement | Actively maintained, responsive team | Orphaned, no clear owner, tribal knowledge only |
 | Rollback complexity | Stateless, easily re-run | Stateful streaming, hard to replay exactly |
 
-<Callout variant="warning" title="Orphaned workloads are the highest-risk category, not the lowest">
+<Callout client:visible variant="warning" title="Orphaned workloads are the highest-risk category, not the lowest">
   It's tempting to deprioritize a workload with no responsive owner as "low activity, low risk." The opposite is usually true — no owner means no one to validate the migration worked, no one to explain undocumented behavior, and no one to notice quietly broken output until a downstream consumer complains weeks later.
 </Callout>
 

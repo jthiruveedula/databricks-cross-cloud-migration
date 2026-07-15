@@ -11,7 +11,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 Hypercare is the bounded period immediately after [cutover](/execution/cutover) where the target environment runs under close watch, the [rollback](/execution/rollback) path is still live, and the source environment stays intact. It ends when the target has proven itself, not on a fixed calendar date picked before cutover happened.
 
-<Callout variant="decision" title="Hypercare is not indefinite">
+<Callout client:visible variant="decision" title="Hypercare is not indefinite">
   Set an explicit hypercare exit gate before cutover (e.g. "N consecutive clean SLA days plus one full business cycle"). Without one, hypercare quietly becomes permanent — source decommission keeps getting deferred and the migration never actually closes out.
 </Callout>
 
@@ -51,7 +51,7 @@ Only after hypercare exit criteria are met and signed off:
 4. After the grace period, decommission source storage and identity federation.
 5. Close out the migration with a retrospective — feed lessons back into the [anti-patterns](/troubleshooting/anti-patterns) and [checklists](/templates/checklists) pages for the next wave or the next migration.
 
-<Callout variant="warning" title="Decommission source last, not first">
+<Callout client:visible variant="warning" title="Decommission source last, not first">
   Don't decommission source infrastructure the moment cutover looks successful. The whole point of hypercare is that "looks successful on day one" and "is actually stable" are different claims — keep the rollback path alive until you've proven the second one.
 </Callout>
 
