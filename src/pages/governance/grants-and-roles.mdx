@@ -1,0 +1,88 @@
+---
+title: 'Grants and roles'
+layout: ../../layouts/Layout.astro
+description: 'Replicate Unity Catalog grants and role assignments in the target metastore.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Grants and roles
+
+Creating the target metastore, catalogs, and schemas from [Unity Catalog strategy](/governance/unity-catalog-strategy) only reproduces structure. Grants are what make data usable — and they are the part most teams under-budget time for, because there is no bulk "copy grants" operation across metastores.
+
+<Callout variant="warning" title="Grants do not travel with data">
+  Cloning a table with Delta Deep Clone copies data and history, not Unity Catalog grants. Every `GRANT` statement on the source metastore must be re-issued explicitly against the target — plan for this as its own migration step, not an assumed side effect of data replication.
+</Callout>
+
+## Inventory source grants first
+
+Before writing a single target `GRANT`, extract the full source grant set — do not reconstruct it from memory or tribal knowledge:
+
+<CodeBlock language="sql" filename="inventory_grants.sql" code={`-- Run against the source metastore for every catalog in scope
+SHOW GRANTS ON CATALOG source_catalog;
+SHOW GRANTS ON SCHEMA source_catalog.sales;
+SHOW GRANTS ON TABLE source_catalog.sales.orders;
+
+-- Or query the information_schema for a full, exportable inventory
+SELECT grantee, privilege_type, object_type, object_name
+FROM system.information_schema.grants
+WHERE object_catalog = 'source_catalog';
+`} />
+
+## Grant migration pattern
+
+| Step | Action |
+|------|--------|
+| 1 | Export source grants via `information_schema.grants` or `SHOW GRANTS` |
+| 2 | Translate source principal names to target account-level group names |
+| 3 | Generate target `GRANT` statements from the translated mapping |
+| 4 | Apply grants at catalog/schema level first, table-level exceptions second |
+| 5 | Diff target `SHOW GRANTS` output against the source export |
+
+<CodeBlock language="python" filename="generate_grants.py" code={`import json
+
+PRINCIPAL_MAP = json.load(open("principal_mapping.json"))  # source group -> target group
+
+def translate_grant(row: dict) -> str:
+    target_principal = PRINCIPAL_MAP.get(row["grantee"])
+    if not target_principal:
+        raise KeyError(f"No target mapping for principal: {row['grantee']}")
+    return f"GRANT {row['privilege_type']} ON {row['object_type']} {row['object_name']} TO \`{target_principal}\`;"
+
+statements = [translate_grant(r) for r in source_grants]
+`} />
+
+## Role hierarchy
+
+- Grant at the **catalog** or **schema** level by default; reserve **table-level** grants for genuine exceptions — table-by-table grants are the ones that get missed during migration and drift afterward.
+- Use Unity Catalog groups, not individual users, as grantees everywhere possible — it's the difference between updating one group membership and rewriting grants when someone changes teams.
+- Keep a `data-engineering-admin`-style ownership group per domain, separate from the broader read-access group, so ownership transfer doesn't require re-granting every privilege.
+
+<Callout variant="tip" title="Grant catalogs and schemas before tables">
+  If you grant table-level access before the schema exists, or in the wrong order, some Unity Catalog operations fail with confusing permission errors. Apply grants top-down: catalog → schema → table/view/volume.
+</Callout>
+
+## Validation
+
+- Diff `SHOW GRANTS` output between source and target for every catalog — do not sample; a missed grant surfaces as a support ticket weeks after cutover, not during testing.
+- Have the owning team run their actual queries/dashboards against the target with their real (non-admin) credentials — an admin token testing access proves nothing about a regular user's grants.
+- Confirm service principals used by jobs and CI/CD have the grants they need, not just interactive users.
+
+## Rollback
+
+Grants are additive and low-risk to fix forward — if a grant is missing or wrong, correct it directly in the target metastore. There is no need to roll back data for a grants issue; keep source grants untouched as the reference until hypercare ends.
+
+## Automation opportunity
+
+- Store the full grant set as declarative Terraform (`databricks_grants` resource) per catalog/schema so drift is visible in a `terraform plan`, not discovered by a user losing access.
+- Run the source-vs-target grant diff as a scheduled check throughout hypercare, not just once at cutover.
+
+<Checklist title="Grants and roles migration" items={[
+  { id: 'inventory', label: 'Full source grant inventory extracted' },
+  { id: 'mapping', label: 'Source principals mapped to target account-level groups' },
+  { id: 'apply', label: 'Grants applied top-down: catalog → schema → table' },
+  { id: 'diff', label: 'Target grants diffed against source export with zero gaps' },
+  { id: 'real-user-test', label: 'Access validated with real (non-admin) user credentials' },
+]} />

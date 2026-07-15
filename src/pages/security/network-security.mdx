@@ -1,0 +1,73 @@
+---
+title: 'Network security'
+layout: ../../layouts/Layout.astro
+description: 'Recreate private connectivity, egress control, and network isolation in the target cloud.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Tabs from '../../components/Tabs.tsx';
+
+# Network security
+
+Network security cannot be exported and imported — every construct (private connectivity, egress control, DNS) is rebuilt natively against the target cloud's networking primitives. See the [cross-cloud equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix#networking) for the construct-level mapping; this page covers the security posture to preserve while rebuilding it.
+
+<Callout variant="prerequisite" title="Match posture, not just topology">
+  The goal isn't "a VPC exists in the target cloud" — it's that the target network enforces the *same security posture* as source: no public IPs on compute, private control-plane connectivity, and explicit (not default-allow) egress.
+</Callout>
+
+## Private control-plane connectivity
+
+<Tabs tabs={[
+  { label: 'Azure', content: 'Private Link connects the workspace to the Databricks control plane without traversing the public internet. Verify Private Link is configured for both the webapp/API and the secure cluster connectivity relay, not just one.' },
+  { label: 'AWS', content: 'AWS PrivateLink serves the same role. Confirm both the REST API endpoint and the SCC relay endpoint have PrivateLink connections — a partial setup silently falls back to public connectivity for the missed endpoint.' },
+  { label: 'GCP', content: 'Private Service Connect (PSC) provides equivalent private connectivity. GCP requires explicit PSC endpoints per workspace; confirm DNS resolves to the private endpoint, not the public one.' },
+]} />
+
+## No-public-IP compute
+
+If source clusters ran with secure cluster connectivity (no public IPs on worker/driver nodes), replicate that exactly in the target — do not default to public subnets "to get migration moving faster."
+
+<CodeBlock language="hcl" filename="no-public-ip.tf" code={`# Example: enforce no-public-IP at the cluster policy level so it can't be
+# silently reverted by an individual cluster configuration
+resource "databricks_cluster_policy" "secure" {
+  name = "secure-no-public-ip"
+  definition = jsonencode({
+    "custom_tags.no_public_ip" = { type = "fixed", value = "true" }
+  })
+}
+`} />
+
+## Egress control
+
+- Recreate NAT/egress allow-lists explicitly — a lift-and-shift of "allow all egress" from a source environment that had tightly scoped rules is a regression, not a migration.
+- Enumerate every external endpoint your workloads actually call (package registries, external APIs, SaaS connectors) from the [asset inventory](/discovery/asset-inventory) and allow-list them individually in the target.
+- Route metastore/storage traffic through private endpoints, not public internet egress, even when it would technically work either way.
+
+## DNS and endpoint cutover
+
+Network cutover is part of the [cutover](/execution/cutover) sequence, not a separate event — DNS/endpoint changes must be sequenced with job pausing and final sync, not fired independently.
+
+## Validation
+
+- Confirm workspace connectivity end-to-end through the private path only — temporarily block public internet access to the workspace URL and verify it still resolves via the private endpoint.
+- Run a network penetration/config review against the target before cutover, not after — see [security validation](/validation/security-validation).
+- Verify egress allow-lists against actual traffic logs from a pilot workload, not just the documented external dependency list (undocumented calls are common).
+
+## Rollback
+
+Network rollback is DNS/endpoint redirection back to source, covered in [rollback](/execution/rollback). Keep source Private Link/PrivateLink/PSC connectivity live and untouched through hypercare so rollback doesn't also require rebuilding networking under pressure.
+
+## Automation opportunity
+
+- Define private connectivity and egress rules as Terraform modules per cloud, parameterized per workspace, rather than manually clicking through cloud consoles per environment.
+- Generate the egress allow-list from observed traffic in the pilot wave instead of hand-authoring it from documentation that may be stale.
+
+<Checklist title="Network security migration" items={[
+  { id: 'private-link', label: 'Private control-plane connectivity configured for all required endpoints' },
+  { id: 'no-public-ip', label: 'No-public-IP posture enforced via cluster policy, not convention' },
+  { id: 'egress', label: 'Egress allow-list rebuilt from actual traffic, not assumed' },
+  { id: 'validated', label: 'Connectivity validated with public access temporarily blocked' },
+  { id: 'source-live', label: 'Source network kept live and untouched through hypercare' },
+]} />
