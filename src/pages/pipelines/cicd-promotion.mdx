@@ -1,0 +1,83 @@
+---
+title: 'CI/CD promotion'
+layout: ../../layouts/Layout.astro
+description: 'Rebuild CI/CD pipelines to deploy against the target workspace, not just re-point them.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# CI/CD promotion
+
+CI/CD pipelines that deploy notebooks, jobs, and Terraform-managed infrastructure to Databricks need more than a new target URL — the auth mechanism, environment-specific variables, and often the entire deployment tool's cloud integration point (e.g. an Azure DevOps service connection using managed identity) need rebuilding for the target cloud.
+
+<Callout variant="prerequisite" title="CI/CD is target-foundation work, not a cutover-day task">
+  Get CI/CD deploying to the target workspace successfully before the [pilot](/execution/pilot) starts — the pilot should be exercising the real deployment pipeline, not a manual one-off `databricks jobs create` you don't intend to keep using.
+</Callout>
+
+## What has to change
+
+| Component | Change required |
+|---|---|
+| Databricks auth in CI/CD | New service principal/OAuth credential scoped to the target workspace; cloud-native identity federation (e.g. GitHub OIDC to Azure) must be rebuilt for the target cloud's federation model |
+| Environment/stage config | Target workspace URL, catalog names, warehouse IDs, cluster policy IDs all change |
+| Terraform state | New state backend location if the backend itself is cloud storage (e.g. an Azure Storage-backed state moving to an S3-backed one) |
+| Secrets used by CI/CD | Re-created in the target cloud's secret manager, not copied from source |
+| Deployment target mapping | Any dev/staging/prod branch-to-workspace mapping needs updating to target workspace IDs |
+
+## Rebuilding the deployment pipeline
+
+<CodeBlock language="yaml" filename="deploy.yml" code={`# Example: GitHub Actions deploying Databricks Asset Bundles to the target workspace
+name: Deploy to Databricks (target)
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Deploy bundle
+        env:
+          DATABRICKS_HOST: \${{ vars.TARGET_WORKSPACE_HOST }}
+          DATABRICKS_CLIENT_ID: \${{ secrets.TARGET_SP_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: \${{ secrets.TARGET_SP_CLIENT_SECRET }}
+        run: databricks bundle deploy --target prod
+`} />
+
+<Callout variant="tip" title="Databricks Asset Bundles decouple this from the specific cloud">
+  If source jobs/pipelines are still deployed via ad hoc scripts or manual clicks, migrating to [Databricks Asset Bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/) during this step pays for itself immediately — bundle definitions are target-workspace-agnostic; only the environment variables above change per cloud.
+</Callout>
+
+## Terraform state migration
+
+If infrastructure (metastores, catalogs, clusters, policies) is managed via the [Terraform provider](https://registry.terraform.io/providers/databricks/databricks/latest/docs) against source, the target needs its own state, not a copy of source state pointing at source resource IDs:
+
+1. Start target infrastructure as new Terraform configuration/state — do not attempt `terraform import` from source resource IDs into a shared state file.
+2. Parameterize modules (see the [Terraform patterns](/templates/terraform-patterns)) so the same module code deploys to either cloud via variables, not copy-pasted per-cloud files.
+3. Migrate the state backend itself if it lived in source-cloud storage (e.g. move from an Azure Storage backend to an S3 backend) as its own small, explicit step.
+
+## Validation
+
+- Run a full CI/CD deploy against target from a clean branch before the pilot starts — confirm it creates/updates resources correctly, not just that auth succeeds.
+- Confirm rollback of a bad deploy actually works in target (e.g. `databricks bundle deploy` of a previous commit) before you need it under pressure.
+- Verify secrets used by CI/CD are the target cloud's secrets, not the source ones left in place as a "temporary" shortcut.
+
+## Rollback
+
+Keep the source CI/CD pipeline and its deployment target intact and functioning through hypercare — if target CI/CD has an unresolved issue, continue deploying to source rather than blocking all releases on the migration.
+
+## Automation opportunity
+
+- Adopt Databricks Asset Bundles if not already in use — it's the single highest-leverage change for making CI/CD cloud-portable going forward, not just for this migration.
+- Template the CI/CD pipeline definition itself (GitHub Actions/Azure Pipelines/GitLab CI YAML) so cloud-specific auth blocks are the only thing that changes between source and target pipeline definitions.
+
+<Checklist title="CI/CD promotion" items={[
+  { id: 'auth', label: 'CI/CD auth rebuilt for target cloud (not copied from source)' },
+  { id: 'config', label: 'Environment/stage config updated to target workspace IDs' },
+  { id: 'state', label: 'Terraform state migrated as new target state, not imported from source IDs' },
+  { id: 'secrets', label: 'CI/CD secrets re-created in target cloud secret manager' },
+  { id: 'e2e-deploy', label: 'Full deploy run against target validated before pilot starts' },
+]} />
