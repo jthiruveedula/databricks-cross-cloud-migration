@@ -1,0 +1,80 @@
+---
+title: 'MLflow'
+layout: ../../layouts/Layout.astro
+description: 'Migrate MLflow experiments, runs, and tracking data to the target workspace.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# MLflow
+
+MLflow experiment tracking is workspace-local — experiments, runs, metrics, and logged artifacts don't move automatically when you stand up a target workspace. This page covers experiment/run migration; [model registry](/ml/model-registry) covers registered models specifically, and [serving and artifacts](/ml/serving-and-artifacts) covers what happens after a model is deployed.
+
+<Callout client:visible variant="warning" title="Run history has no built-in export/import">
+  Unlike Unity Catalog tables, there is no first-class "clone this experiment to another workspace" operation. Migrating MLflow history means reading it via the API on source and re-logging it on target — budget real engineering time for this, not just a config change.
+</Callout>
+
+## What migrates and how
+
+| Asset | Migration approach |
+|---|---|
+| Experiments | Recreate by name in target; map source experiment ID → target experiment ID |
+| Runs (params, metrics, tags) | Read via `MlflowClient` on source, re-log via `mlflow.start_run()` on target |
+| Logged artifacts (models, plots, files) | Download from source artifact store, re-upload to target artifact store |
+| Run lineage / parent-child runs | Preserve `mlflow.parentRunId` tag when re-logging so nested-run structure survives |
+
+## Migration script pattern
+
+<CodeBlock client:visible language="python" filename="migrate_mlflow_runs.py" code={`import mlflow
+from mlflow.tracking import MlflowClient
+
+source_client = MlflowClient(tracking_uri=SOURCE_TRACKING_URI)
+mlflow.set_tracking_uri(TARGET_TRACKING_URI)
+
+experiment = source_client.get_experiment_by_name("churn_model")
+target_exp_id = mlflow.create_experiment("churn_model")
+
+for run in source_client.search_runs([experiment.experiment_id]):
+    with mlflow.start_run(experiment_id=target_exp_id) as target_run:
+        for key, value in run.data.params.items():
+            mlflow.log_param(key, value)
+        for key, value in run.data.metrics.items():
+            mlflow.log_metric(key, value)
+        for key, value in run.data.tags.items():
+            if not key.startswith("mlflow."):  # mlflow.* tags are system-managed, don't copy verbatim
+                mlflow.set_tag(key, value)
+
+        local_path = source_client.download_artifacts(run.info.run_id, ".")
+        mlflow.log_artifacts(local_path)
+`} />
+
+## Deciding what to actually migrate
+
+<Callout client:visible variant="tip" title="Not every run deserves migration">
+  Full experiment history can be enormous, and most exploratory runs have no lasting value. Migrate the runs that fed production models (traceable via the [model registry](/ml/model-registry) lineage) and any runs required for compliance/audit purposes; archive or leave the rest on source rather than paying to replicate everything.
+</Callout>
+
+## Validation
+
+- Confirm migrated runs' metrics and params exactly match source for a sample of runs, not just that "a run exists."
+- Verify parent-child run relationships (e.g. hyperparameter sweep parent runs and their child runs) survived the migration correctly.
+- Confirm logged model artifacts can actually be loaded and produce the same predictions as the source-logged model on a fixed test input.
+
+## Rollback
+
+MLflow tracking data is additive; if a migration script produces bad runs in target, delete them and re-run rather than treating it as an environment rollback. Source tracking data stays untouched and available as the reference copy throughout.
+
+## Automation opportunity
+
+- Parameterize the migration script by experiment name/tag so it can be re-run incrementally as new runs accumulate during a phased migration, rather than a single one-time bulk copy.
+- Skip re-uploading artifacts whose content hash already matches an existing target artifact, to avoid redundant transfer on re-runs.
+
+<Checklist client:visible title="MLflow migration" items={[
+  { id: 'inventory', label: 'Experiments to migrate identified (not a blanket "migrate everything")' },
+  { id: 'script', label: 'Migration script re-logs params, metrics, tags, and artifacts' },
+  { id: 'lineage', label: 'Parent-child run relationships preserved' },
+  { id: 'validated', label: 'Migrated run metrics/artifacts validated against source for a sample' },
+  { id: 'incremental', label: 'Script supports incremental re-runs for runs created during migration' },
+]} />

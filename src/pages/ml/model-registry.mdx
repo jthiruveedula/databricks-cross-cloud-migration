@@ -1,0 +1,81 @@
+---
+title: 'Model registry'
+layout: ../../layouts/Layout.astro
+description: 'Migrate registered models, versions, stage transitions, and serving references to Unity Catalog in the target workspace.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Model registry
+
+Registered models carry more than the model artifact itself — version history, stage transitions (staging/production), and every downstream job or serving endpoint that references a specific model version. [MLflow](/ml/mlflow) covers experiment/run history; this page covers what happens once a run graduates to a registered, deployable model.
+
+<Callout client:visible variant="prerequisite" title="Unity Catalog-based registry, not the legacy workspace registry">
+  If source models live in the legacy workspace model registry, migrate to Unity Catalog's model registry in the target rather than reproducing the legacy pattern — it's the only registry model that gives you cross-workspace governance and lineage going forward, and you'd otherwise face this exact migration problem again next time.
+</Callout>
+
+## What to migrate per model
+
+| Asset | Migration approach |
+|---|---|
+| Model versions | Re-register each version in target from its source artifact, preserving version order |
+| Stage/alias assignments (Production, Staging) | Re-apply explicitly — do not assume version numbers line up between source and target |
+| Model signature and input example | Carried automatically if you re-log via `mlflow.pyfunc.log_model` with the original signature |
+| Description and tags | Copy explicitly; these are metadata, not part of the artifact |
+| Consumers (jobs, serving endpoints referencing a specific version/alias) | Update every reference to the target model name/version — see the reference audit below |
+
+## Migration pattern
+
+<CodeBlock client:visible language="python" filename="migrate_model_versions.py" code={`import mlflow
+from mlflow import MlflowClient
+
+source_client = MlflowClient(tracking_uri=SOURCE_TRACKING_URI)
+mlflow.set_registry_uri(TARGET_REGISTRY_URI)
+target_client = MlflowClient(tracking_uri=TARGET_TRACKING_URI, registry_uri=TARGET_REGISTRY_URI)
+
+model_name = "churn_model"
+target_client.create_registered_model(model_name)
+
+for mv in source_client.search_model_versions(f"name='{model_name}'"):
+    local_path = source_client.download_artifacts(mv.run_id, "model")
+    result = mlflow.register_model(f"file://{local_path}", model_name)
+
+    # Re-apply the stage/alias this version had on source -- don't assume it carries over
+    if mv.current_stage == "Production":
+        target_client.transition_model_version_stage(model_name, result.version, "Production")
+`} />
+
+## Auditing consumers before cutover
+
+<Callout client:visible variant="warning" title="A model reference is a dependency, same as a table reference">
+  Every job, pipeline, or serving endpoint that loads `models:/churn_model/Production` breaks the moment that alias doesn't exist in target with the right model behind it. Treat this exactly like the table dependency mapping in [dependency mapping](/discovery/dependency-mapping) — trace every consumer before cutover, don't discover them from broken jobs afterward.
+</Callout>
+
+<CodeBlock client:visible language="bash" filename="find_model_references.sh" code={`# Search notebooks and job definitions for model registry references
+grep -rn "models:/" ./exported-notebooks/ ./exported-jobs/
+`} />
+
+## Validation
+
+- Load each migrated model version in target and run it against a fixed test input; compare predictions to the source model's output for the same input.
+- Confirm stage/alias assignments in target match the intended production model, not just "a version exists at some stage."
+- Verify every consumer found in the reference audit above resolves correctly against the target registry before cutover.
+
+## Rollback
+
+Keep the source model registry and its serving endpoints live through hypercare. If a target model version is wrong, fix the registration or re-run the migration script for that version — this is a registry-metadata fix, not an environment rollback.
+
+## Automation opportunity
+
+- Script the consumer reference audit as a repeatable check (grep across the [asset inventory](/discovery/asset-inventory) notebook/job export), not a one-time manual search.
+- Automate the stage/alias re-application step directly from a source-to-target mapping file so it's not manually re-typed per model.
+
+<Checklist client:visible title="Model registry migration" items={[
+  { id: 'uc-registry', label: 'Migrating to Unity Catalog model registry, not the legacy workspace registry' },
+  { id: 'versions', label: 'All model versions re-registered in correct order' },
+  { id: 'stages', label: 'Stage/alias assignments explicitly re-applied, not assumed' },
+  { id: 'consumers', label: 'Every consumer (job/pipeline/serving endpoint) referencing a model audited' },
+  { id: 'predictions-match', label: 'Migrated model predictions validated against source for a fixed test input' },
+]} />
