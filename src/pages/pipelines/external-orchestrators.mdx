@@ -1,0 +1,80 @@
+---
+title: 'External orchestrators'
+layout: ../../layouts/Layout.astro
+description: 'Re-point Airflow, Azure Data Factory, Step Functions, and Cloud Composer at the migrated target workspace.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Tabs from '../../components/Tabs.tsx';
+
+# External orchestrators
+
+Not every job runs inside Databricks Workflows — [workflows and jobs](/pipelines/workflows-jobs) covers native orchestration, but many estates also trigger Databricks work from Airflow, Azure Data Factory, AWS Step Functions/Glue, or GCP Cloud Composer. Every one of those needs re-pointing at the target workspace, and several use cloud-specific connection/authentication mechanisms that don't survive a cross-cloud move.
+
+<Callout variant="warning" title="External orchestration is easy to miss in discovery">
+  A job triggered from Airflow or ADF doesn't show up in a Databricks-only [asset inventory](/discovery/asset-inventory) scan. Explicitly inventory every external scheduler/orchestrator with a Databricks connection before assuming your job inventory is complete.
+</Callout>
+
+## Per-orchestrator migration notes
+
+<Tabs tabs={[
+  {
+    label: 'Airflow',
+    content: 'Update the Databricks connection (host + token or service principal) in Airflow\'s connection store to point at the target workspace. If DAGs reference job/cluster IDs directly rather than by name, every hardcoded ID needs updating post-migration — prefer referencing jobs by name lookup where the operator supports it.'
+  },
+  {
+    label: 'Azure Data Factory',
+    content: 'ADF\'s Databricks linked service uses either a Databricks access token or Azure AD (Entra ID) authentication. If the target is not Azure, ADF cannot use Entra ID auth against it — switch to a Databricks personal access token or, better, a Databricks service principal with OAuth.'
+  },
+  {
+    label: 'AWS Step Functions / Glue',
+    content: 'Step Functions calling the Databricks Jobs API via a Lambda or direct API integration need the target workspace URL and a new auth token/service principal. Glue-orchestrated triggers referencing a Databricks job by ID need the target job ID after re-creation.'
+  },
+  {
+    label: 'GCP Cloud Composer (Airflow)',
+    content: 'Same connection-update pattern as self-managed Airflow, plus: confirm Composer\'s VPC/networking can actually reach the target workspace\'s private endpoint (see network security) if the target enforces private-only connectivity.'
+  },
+]} />
+
+## Migration steps
+
+1. Inventory every external scheduler with a Databricks connection or job reference — not just the ones the platform team already knows about; ask application teams directly.
+2. For each, identify the auth mechanism in use (PAT, OAuth/service principal, cloud-native identity) and whether it survives a cross-cloud move — cloud-native identity federation (e.g. Entra ID auth from ADF) generally does not.
+3. Create the equivalent Databricks service principal or token in target, scoped to only what that orchestrator needs.
+4. Update connection configs and any hardcoded job/cluster IDs.
+5. Run each orchestrated pipeline end to end against target before cutover, not just a connectivity check.
+
+<CodeBlock language="python" filename="airflow_connection_update.py" code={`from airflow.models import Connection
+from airflow import settings
+
+session = settings.Session()
+conn = session.query(Connection).filter(Connection.conn_id == "databricks_default").first()
+conn.host = "https://<target-workspace-host>"
+conn.password = "<target-service-principal-oauth-token>"
+session.commit()
+`} />
+
+## Validation
+
+- Trigger each external pipeline manually against target and verify the full task graph completes, not just that the connection authenticates.
+- Confirm scheduled/event-based triggers (file arrival, cron) fire correctly against target — a cron trigger config sometimes silently keeps referencing a source-cloud storage event source.
+- Check notification/alerting paths (email, Slack, PagerDuty) still fire correctly when triggered from the orchestrator against target.
+
+## Rollback
+
+Keep source orchestrator connections and job definitions intact and pointed at source through hypercare — rollback is switching the connection config back, not a data-level rollback. Coordinate orchestrator rollback with the broader [rollback](/execution/rollback) runbook so the orchestrator and the Databricks jobs it triggers move together.
+
+## Automation opportunity
+
+- Store orchestrator connection configs as code (Airflow connections as JSON/Terraform, ADF linked services as ARM/Bicep) so the cutover is a reviewable config change, not a manual UI edit per environment.
+- Build a smoke-test DAG/pipeline per orchestrator that only exercises the Databricks connection, so connectivity issues surface before the first real pipeline run.
+
+<Checklist title="External orchestrator migration" items={[
+  { id: 'inventory', label: 'Every external orchestrator with a Databricks connection inventoried' },
+  { id: 'auth', label: 'Auth mechanism re-created for target (service principal preferred over PAT)' },
+  { id: 'ids', label: 'Hardcoded job/cluster IDs updated to target values' },
+  { id: 'e2e-test', label: 'Each orchestrated pipeline run end to end against target before cutover' },
+  { id: 'source-intact', label: 'Source orchestrator connections kept intact through hypercare' },
+]} />
