@@ -1,0 +1,77 @@
+---
+title: 'Security validation'
+layout: ../../layouts/Layout.astro
+description: 'Validate IAM, network, and data-protection controls before cutover.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Security validation
+
+[Technical validation](/validation/technical-validation) confirms the platform works; security validation confirms it's actually locked down the way [IAM mapping](/security/iam-mapping), [network security](/security/network-security), and [grants and roles](/governance/grants-and-roles) intended — not just "no errors when a user connects."
+
+<Callout client:visible variant="prerequisite" title="Security validation is a required gate, not a nice-to-have">
+  Cutover should not proceed on technical validation alone. Require an explicit security sign-off as its own gate — see [cutover](/execution/cutover) prerequisites — with evidence retained per [audit and compliance](/security/audit-and-compliance) requirements.
+</Callout>
+
+## Validation categories
+
+| Category | Objective | Steps | Evidence |
+|---|---|---|---|
+| Identity | Only intended principals can access target | Attempt access as a non-provisioned user; confirm denial | Access-denial log |
+| Least privilege | Grants match the intended model, not source's leftover permissiveness | Diff target grants against the [grants and roles](/governance/grants-and-roles) design | Grant diff report |
+| Network isolation | No unintended public exposure | Attempt access to workspace/storage from outside the private network | Network scan result |
+| Encryption | Data encrypted at rest and in transit per policy | Verify storage encryption config and TLS enforcement | Cloud console/API output |
+| Secrets | No secrets in plaintext or logs | Scan exported notebooks/jobs for hardcoded credentials | Secret-scan report |
+| Audit logging | Target audit logging is active and capturing events | Trigger a test event; confirm it appears in target audit logs | Audit log entry |
+
+## Access-denial testing
+
+<Callout client:visible variant="tip" title="Prove what's denied, not just what's allowed">
+  A validation pass that only confirms authorized users can access target proves half the story. Explicitly attempt unauthorized access and confirm it's denied — this is the check that catches an over-broad grant or a misconfigured network rule.
+</Callout>
+
+<CodeBlock client:visible language="python" filename="test_access_denial.py" code={`# Confirm a user with no grant on a sensitive catalog is actually denied
+try:
+    spark.table("target_catalog.finance.payroll").count()
+    raise AssertionError("Expected access denial, but query succeeded")
+except Exception as e:
+    assert "PERMISSION_DENIED" in str(e), f"Unexpected error type: {e}"
+    print("Access correctly denied for unauthorized principal")
+`} />
+
+## Secret scanning
+
+<CodeBlock client:visible language="bash" filename="scan_for_secrets.sh" code={`# Run before migrating notebooks/jobs, and again on the target as a final check
+grep -rniE '(api[_-]?key|secret|password|token)\\s*=\\s*["\\x27][A-Za-z0-9/+=]{16,}' ./exported-notebooks/
+`} />
+
+## Validation sign-off
+
+Security validation should produce a formal sign-off, not just a passing test suite — see the go/no-go gate in [cutover](/execution/cutover). Findings are categorized by severity, and unresolved Sev-1/Sev-2 findings block cutover.
+
+## Validation
+
+- Run access-denial tests for every sensitivity tier defined during [risk assessment](/discovery/risk-assessment), not just one representative case.
+- Confirm network isolation by testing from outside the private network boundary, not just confirming the private endpoint works.
+- Verify audit logging captures a real test event end to end — a misconfigured audit pipeline that silently drops events is worse than none, per [audit and compliance](/security/audit-and-compliance).
+
+## Rollback
+
+If security validation finds a Sev-1/Sev-2 issue, do not proceed to cutover — fix the finding and re-run the validation category, following the escalation path in your [risk register](/templates/risk-register). This blocks cutover; it doesn't require an environment rollback since cutover hasn't happened yet.
+
+## Automation opportunity
+
+- Run access-denial and secret-scanning checks as an automated CI gate on every wave, not a manual one-time pass before the whole migration.
+- Feed audit-logging validation into the same dashboard used for [audit and compliance](/security/audit-and-compliance) monitoring during hypercare.
+
+<Checklist client:visible title="Security validation" items={[
+  { id: 'identity', label: 'Unauthorized access explicitly tested and confirmed denied' },
+  { id: 'grants', label: 'Target grants diffed against the intended least-privilege design' },
+  { id: 'network', label: 'Network isolation tested from outside the private boundary' },
+  { id: 'secrets', label: 'Secret scan run against all migrated notebooks/jobs' },
+  { id: 'audit-logging', label: 'Target audit logging validated with a real test event' },
+  { id: 'signoff', label: 'Formal security sign-off obtained before cutover' },
+]} />

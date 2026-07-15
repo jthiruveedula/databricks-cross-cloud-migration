@@ -1,0 +1,87 @@
+---
+title: 'Risk register'
+layout: ../../layouts/Layout.astro
+description: 'Tracked-format risk register template fed by risk assessment scoring.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Risk register
+
+[Risk assessment](/discovery/risk-assessment) scores workloads; the risk register is where medium- and high-risk items are tracked as living entries — owner, mitigation, status, and review date — rather than a one-time scoring exercise that gets forgotten after wave planning.
+
+<Callout client:visible variant="warning" title="A risk register that's only reviewed once is just a report">
+  The value of a risk register is in re-review: a mitigation that was "planned" at kickoff needs to actually get checked off before the wave it applies to executes. Set a recurring review cadence, not a single kickoff meeting.
+</Callout>
+
+## Register format
+
+| Field | Purpose |
+|---|---|
+| Risk ID | Stable identifier for cross-referencing in wave plans and status reports |
+| Description | What could go wrong, specifically — not a vague category |
+| Risk tier | Low/Medium/High, from [risk assessment](/discovery/risk-assessment) scoring |
+| Affected wave(s) | Which wave(s) this risk applies to |
+| Owner | Single accountable person — cross-reference the [RACI](/templates/raci) |
+| Mitigation | Concrete action(s) to reduce likelihood or impact |
+| Status | Open / Mitigating / Mitigated / Accepted / Realized |
+| Review date | Next scheduled check-in for this risk |
+
+## Example entries
+
+| Risk ID | Description | Tier | Wave | Owner | Mitigation | Status |
+|---|---|---|---|---|---|---|
+| R-014 | Streaming pipeline checkpoint format incompatible with target storage | High | Wave 3 | Data eng lead | Validate checkpoint migration in pilot before wave 3 | Mitigating |
+| R-021 | Orphaned Hive tables with no identified owner | High | Wave 2 | Platform lead | Time-boxed owner search; escalate to data governance if unresolved by wave start | Open |
+| R-032 | BI tool connection strings hardcoded in dashboards, not centrally documented | Medium | Wave 1 | Analytics lead | Audit all dashboards for connection strings before cutover | Mitigated |
+| R-045 | Compliance sign-off for PII-scoped catalog not yet scheduled | High | Wave 4 | Compliance lead | Schedule review 3 weeks ahead of wave 4 cutover | Open |
+
+## Populating the register from risk assessment
+
+<CodeBlock client:visible language="python" filename="generate_risk_register.py" code={`# Feed directly from the risk-scoring output in risk-assessment.mdx
+# rather than re-keying medium/high items by hand.
+register_entries = [
+    {
+        "risk_id": f"R-{i:03d}",
+        "description": w["name"],
+        "tier": w["risk_tier"],
+        "wave": w["assigned_wave"],
+        "owner": None,  # must be assigned explicitly, not defaulted
+        "mitigation": None,
+        "status": "Open",
+    }
+    for i, w in enumerate(scored_workloads, start=1)
+    if w["risk_tier"] in ("Medium", "High")
+]
+`} />
+
+## Review cadence
+
+- **Weekly** during active wave execution: review all Open and Mitigating items for waves in progress or starting soon.
+- **At each wave boundary**: every risk tagged to the completing wave must be Mitigated, Accepted (with explicit sign-off), or explicitly carried forward with a reason.
+- **At hypercare exit**: confirm no High-tier risk remains Open or Mitigating for the migration to be considered closed.
+
+## Validation
+
+- Confirm every High-tier risk has a named owner who has acknowledged it — an unowned high risk is itself a risk.
+- Confirm mitigation actions are concrete and verifiable ("validate checkpoint migration in pilot"), not aspirational ("be careful with streaming pipelines").
+- Cross-check realized risks (status: Realized) against the [rollback](/execution/rollback) log — a realized high risk that triggered a rollback should feed back into the risk model for remaining waves.
+
+## Rollback
+
+The risk register itself has no environment state to roll back — it's a tracking artifact. If a risk materializes into an actual incident, follow [rollback](/execution/rollback), then update the register's status to Realized and capture what was missed for the retrospective.
+
+## Automation opportunity
+
+- Auto-populate the register from risk-assessment scoring output (as shown above) instead of manual transcription.
+- Send automated reminders for risks whose review date has passed without a status update.
+
+<Checklist client:visible title="Risk register discipline" items={[
+  { id: 'populated', label: 'Register populated from risk-assessment scoring, all medium/high items included' },
+  { id: 'owned', label: 'Every entry has a named, acknowledging owner' },
+  { id: 'cadence', label: 'Weekly review cadence established during active wave execution' },
+  { id: 'wave-gate', label: 'Wave-tagged risks resolved or explicitly accepted before that wave\'s cutover' },
+  { id: 'hypercare-gate', label: 'No High-tier risk left Open/Mitigating at hypercare exit' },
+]} />

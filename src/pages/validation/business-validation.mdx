@@ -1,0 +1,60 @@
+---
+title: 'Business validation'
+layout: ../../layouts/Layout.astro
+description: 'Get explicit business sign-off that the target platform actually meets user needs before cutover.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Business validation
+
+[Technical validation](/validation/technical-validation) and [security validation](/validation/security-validation) confirm the platform is correct and secure. Business validation confirms it's actually usable by the people who depend on it — a dashboard that's technically correct but confusingly different from what business users expect is still a migration failure from their perspective.
+
+<Callout client:visible variant="prerequisite" title="Business validation needs real business users, not just engineering sign-off">
+  An engineer confirming a query returns the right numbers is not the same as a business stakeholder confirming a report matches what they'll present to their leadership. Get the actual consumer to validate, not a proxy.
+</Callout>
+
+## What business validation covers
+
+| Area | Who validates | What "done" looks like |
+|---|---|---|
+| Dashboards and reports | Business/analytics consumers | Visual output matches source for the same period, reviewed by the actual audience |
+| Scheduled reports/exports | Report recipients | Recipients confirm they received the expected report on the expected schedule |
+| Ad hoc query access | Analysts/data consumers | Analysts can run their typical queries with expected performance |
+| ML model outputs | Model owners/business stakeholders | Predictions reviewed for reasonableness against known cases, not just statistical parity |
+| SLA and performance | Application/business owners | Reports/dashboards load within the time users expect, not just within a technical benchmark |
+| Regulatory/compliance reporting | Compliance stakeholders | Reports required for external filing are verified accurate and on schedule |
+
+## Structuring the validation session
+
+1. Identify the actual business consumer for each critical workload — not their manager, not the engineering liaison.
+2. Have them exercise the target system doing their normal task (running their usual report, checking their usual dashboard), not a scripted demo.
+3. Compare output against a known-good source result for the same period/inputs.
+4. Capture explicit sign-off per workload, not a single blanket "business approved migration" statement — see [RACI](/templates/raci) for who's accountable for each sign-off.
+
+<Callout client:visible variant="warning" title="Don't accept silence as sign-off">
+  If a business stakeholder doesn't respond to a validation request, that is an open risk, not implicit approval. Escalate through the [RACI](/templates/raci) accountable owner rather than proceeding to cutover on an assumption.
+</Callout>
+
+## Validation
+
+- Confirm sign-off was given by the actual consuming stakeholder for each critical workload, with evidence retained (email, signed document, or ticket) — see [audit and compliance](/security/audit-and-compliance) for retention expectations.
+- Cross-check that every workload flagged high-criticality in [risk assessment](/discovery/risk-assessment) has a corresponding business sign-off — a missing sign-off on a high-criticality workload should block cutover.
+- Verify SLA/performance expectations were validated against actual user perception (e.g. "loads fast enough"), not only a technical benchmark number.
+
+## Rollback
+
+If business validation surfaces a blocking issue, treat it the same as a failed technical or security validation — do not proceed to [cutover](/execution/cutover) for that workload. This blocks the go/no-go decision; it doesn't require an environment rollback since cutover for that workload hasn't happened yet.
+
+## Automation opportunity
+
+- Track sign-off status per workload in the same dashboard used for [risk register](/templates/risk-register) and wave tracking, so a missing business sign-off is visible alongside technical and security gates rather than in a separate email thread.
+
+<Checklist client:visible title="Business validation" items={[
+  { id: 'consumers-identified', label: 'Actual business consumer identified per critical workload' },
+  { id: 'real-task', label: 'Consumers exercised the target system with their normal tasks, not a scripted demo' },
+  { id: 'comparison', label: 'Output compared against known-good source result for the same period' },
+  { id: 'explicit-signoff', label: 'Explicit per-workload sign-off captured and retained, not assumed from silence' },
+  { id: 'high-crit-covered', label: 'Every high-criticality workload has a corresponding business sign-off' },
+]} />
