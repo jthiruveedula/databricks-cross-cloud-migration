@@ -1,0 +1,74 @@
+---
+title: 'Alerts'
+layout: ../../layouts/Layout.astro
+description: 'Migrate SQL alerts and notification channels without losing coverage during cutover.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Alerts
+
+SQL alerts are easy to under-prioritize during migration because they're invisible until they fail to fire — unlike a dashboard or query, no one looks at an alert on a normal day. That makes a silently broken alert during migration especially dangerous: the first sign of trouble is often the incident the alert was supposed to catch.
+
+<Callout variant="warning" title="A missing alert is a silent failure, not a visible one">
+  Track every migrated alert with the same rigor as a migrated job. An alert that didn't get re-created, or that references a now-broken query, produces no error message anywhere — it just doesn't fire when it should.
+</Callout>
+
+## What to migrate
+
+| Asset | Migration approach |
+|---|---|
+| Alert definition (query + threshold + schedule) | Export via API; ensure the underlying [SQL query](/analytics/sql-queries) is migrated first |
+| Notification channels (email, Slack, PagerDuty, webhook) | Recreate destinations in target; verify webhook URLs/tokens are current, not copied stale from source |
+| Alert evaluation schedule | Recreate against target warehouse; confirm evaluation frequency matches source (don't silently default to a different interval) |
+| Muting/snooze state | Decide explicitly whether to carry over any active mutes, rather than losing or silently preserving them |
+
+## Migration steps
+
+<CodeBlock language="python" filename="migrate_alerts.py" code={`import requests
+
+alerts = requests.get(
+    f"{SOURCE_HOST}/api/2.0/preview/sql/alerts",
+    headers={"Authorization": f"Bearer {SOURCE_TOKEN}"},
+).json()
+
+for alert in alerts:
+    target_alert = {
+        "name": alert["name"],
+        "query_id": TARGET_QUERY_ID_MAP[alert["query"]["id"]],  # migrated query IDs, not source IDs
+        "options": alert["options"],  # threshold, column, comparator
+        "rearm": alert.get("rearm"),
+    }
+    # POST target_alert to target workspace, then attach notification destinations
+`} />
+
+## Notification destination checklist
+
+- **Email**: verify recipient lists are still current — migration is a natural point to clean up alert distribution lists that accumulated stale addresses.
+- **Slack/Teams webhooks**: webhook URLs are workspace/channel-specific and must be re-created, not copied — a copied webhook URL from source will fail silently or post to the wrong channel.
+- **PagerDuty/Opsgenie**: verify the integration key is for the target's incident routing, not accidentally still pointing at source-environment on-call routing.
+
+## Validation
+
+- Force-trigger each migrated alert (e.g. temporarily lower the threshold) and confirm it actually fires through every configured notification channel — don't just confirm the alert definition was created.
+- Cross-check the full list of migrated alerts against the source alert list — a missed alert produces no error, so this has to be an explicit inventory diff, not "did anything complain."
+- Confirm alert evaluation frequency in target matches the intended cadence, especially for alerts tied to SLA or compliance monitoring.
+
+## Rollback
+
+Keep source alerts active through hypercare rather than disabling them the moment target alerts are created — running both in parallel for a window catches gaps in target alert coverage before source is decommissioned.
+
+## Automation opportunity
+
+- Generate the alert migration script from the same query-ID mapping used for [SQL queries](/analytics/sql-queries), so alert `query_id` references stay consistent with the rest of the analytics migration.
+- Build a single "alert coverage" report comparing source and target alert inventories, run automatically until hypercare exit.
+
+<Checklist title="Alert migration" items={[
+  { id: 'queries-first', label: 'Underlying queries migrated and validated before alert migration' },
+  { id: 'inventory-diff', label: 'Full source-vs-target alert inventory diffed for gaps' },
+  { id: 'channels', label: 'Notification channels (email/Slack/PagerDuty) re-created, not copied' },
+  { id: 'force-fired', label: 'Every migrated alert force-triggered and confirmed to notify correctly' },
+  { id: 'parallel-run', label: 'Source and target alerts run in parallel through part of hypercare' },
+]} />

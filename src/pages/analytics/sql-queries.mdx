@@ -1,0 +1,74 @@
+---
+title: 'SQL queries'
+layout: ../../layouts/Layout.astro
+description: 'Migrate saved queries, query history context, and scheduled SQL to the target workspace.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# SQL queries
+
+Saved queries in Databricks SQL reference a warehouse, a catalog/schema, and often other saved queries as CTEs or query-based visualizations. None of those references survive a straight export/import without rewriting — this page covers the query layer that runs on the [SQL warehouses](/compute/sql-warehouses) covered separately.
+
+## What to migrate
+
+| Asset | Migration approach |
+|---|---|
+| Saved queries | Export via the Lakeview/SQL API; rewrite catalog and warehouse references |
+| Query parameters | Re-create parameter definitions; verify default values still make sense against target data |
+| Query folders/permissions | Recreate folder structure; replay ACLs with mapped principals (see [grants and roles](/governance/grants-and-roles)) |
+| Scheduled queries (query-level schedules, not full jobs) | Recreate schedule against target warehouse; verify timezone handling |
+
+<Callout variant="warning" title="Catalog references are the most common breakage">
+  A saved query hardcoding `prod_catalog.sales.orders` breaks the moment the target catalog is named differently, or the moment `prod_catalog` in target actually refers to a different schema layout than source. Standardize catalog naming across clouds during [Unity Catalog strategy](/governance/unity-catalog-strategy) planning, before query migration, not after.
+</Callout>
+
+## Migration steps
+
+<CodeBlock language="python" filename="migrate_queries.py" code={`import requests
+
+queries = requests.get(
+    f"{SOURCE_HOST}/api/2.0/preview/sql/queries",
+    headers={"Authorization": f"Bearer {SOURCE_TOKEN}"},
+).json()["results"]
+
+CATALOG_MAP = {"prod_catalog": "prod_catalog_target"}  # adjust per your naming decision
+
+def rewrite_query(sql: str) -> str:
+    for source_cat, target_cat in CATALOG_MAP.items():
+        sql = sql.replace(f"{source_cat}.", f"{target_cat}.")
+    return sql
+
+for q in queries:
+    target_query = {
+        "name": q["name"],
+        "query": rewrite_query(q["query"]),
+        "data_source_id": TARGET_WAREHOUSE_DATA_SOURCE_ID,
+    }
+    # POST target_query to target workspace's /api/2.0/preview/sql/queries
+`} />
+
+## Validation
+
+- Run every migrated query against target and diff the result set against the source query's output for the same logical time window — a query that "runs successfully" but silently returns wrong rows (due to a partial catalog rewrite) is the dangerous failure mode here.
+- Check queries that reference other saved queries (nested/CTE-style) resolve correctly — these often get missed by a bulk rewrite script that only handles table references.
+- Verify query-level parameters and defaults still produce sensible results against target data volumes.
+
+## Rollback
+
+Saved queries are configuration; if a migrated query is wrong, fix and redeploy it rather than treating it as an environment rollback. Keep source queries and warehouse available through hypercare so users have a fallback while target queries are being corrected.
+
+## Automation opportunity
+
+- Generate the catalog/warehouse rewrite mapping once and reuse it across queries, dashboards ([dashboards](/analytics/dashboards)), and alerts ([alerts](/analytics/alerts)) rather than maintaining three separate mappings.
+- Diff query result sets automatically as part of CI rather than manual spot-checks.
+
+<Checklist title="SQL query migration" items={[
+  { id: 'inventory', label: 'All saved queries inventoried via the SQL API' },
+  { id: 'rewrite', label: 'Catalog and warehouse references rewritten per the naming standard' },
+  { id: 'permissions', label: 'Query folder permissions replayed with mapped principals' },
+  { id: 'diff', label: 'Migrated query output diffed against source for the same time window' },
+  { id: 'nested', label: 'Queries referencing other saved queries validated, not just top-level ones' },
+]} />

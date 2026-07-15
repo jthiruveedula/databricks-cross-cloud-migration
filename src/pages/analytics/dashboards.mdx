@@ -1,0 +1,65 @@
+---
+title: 'Dashboards'
+layout: ../../layouts/Layout.astro
+description: 'Migrate Lakeview dashboards and external BI tool connections without breaking visual parity.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Dashboards
+
+Dashboards sit on top of the [SQL queries](/analytics/sql-queries) and [SQL warehouses](/compute/sql-warehouses) covered elsewhere — migrating a dashboard means migrating the queries it depends on first, then the dashboard definition itself, then confirming visual output actually matches.
+
+<Callout variant="warning" title="A dashboard that loads is not the same as a dashboard that's correct">
+  A Lakeview dashboard can render successfully against target while quietly showing stale, partial, or wrongly-scoped data if any underlying query has an unrewritten catalog reference. Visual parity checks (below) are not optional polish — they're the actual validation for this asset type.
+</Callout>
+
+## What to migrate
+
+| Asset | Migration approach |
+|---|---|
+| Lakeview dashboards | Export JSON definition via API; rewrite embedded dataset/query references |
+| Legacy SQL dashboards | Consider migrating to Lakeview during this move rather than re-creating the legacy format |
+| External BI tool dashboards (Tableau, Power BI, Looker) | Re-point the underlying Databricks connection (warehouse endpoint, catalog) in the BI tool itself |
+| Scheduled dashboard refresh/subscriptions | Recreate subscription schedule against target; verify recipient list is current |
+| Dashboard-level permissions | Replay ACLs with mapped principals |
+
+## Migration steps
+
+<CodeBlock language="bash" filename="export_dashboard.sh" code={`# Export a Lakeview dashboard definition
+databricks lakeview export <dashboard-id> --output dashboard.json
+
+# After rewriting dataset/query references inside dashboard.json:
+databricks lakeview create --json-file dashboard.json --workspace <target-host>
+`} />
+
+## Visual parity validation
+
+- Render the migrated dashboard side by side with the source dashboard for the same date range/filters and compare every visualization, not just the ones that "look important."
+- Pay particular attention to: date/time filters (timezone handling can differ), aggregation defaults, and any visualization referencing a parameter whose default no longer matches target data shape.
+- For external BI tools, confirm the connection actually points at the target warehouse — a tool can retain a cached schema and appear to work while silently still querying source.
+
+## Validation
+
+- Have the dashboard's actual business consumer review it against target, not just an engineer confirming it renders.
+- Verify scheduled refresh and subscription delivery (email/Slack) fire correctly on the new schedule against target.
+- Confirm dashboard-level and underlying-query-level permissions both work — a user with dashboard access but no grant on the underlying table gets a confusing partial failure, not a clear error.
+
+## Rollback
+
+Dashboards are configuration; if a migrated dashboard shows wrong data, fix the underlying query/dataset reference and redeploy rather than treating it as an environment-level rollback. Keep the source dashboard and its warehouse reachable through hypercare as a fallback reference for consumers.
+
+## Automation opportunity
+
+- Reuse the catalog/warehouse rewrite mapping from [SQL queries](/analytics/sql-queries) so dashboards, queries, and alerts stay consistent instead of drifting.
+- Script a visual-diff check (screenshot comparison) for high-visibility dashboards as part of the pilot validation, not just a manual eyeball check.
+
+<Checklist title="Dashboard migration" items={[
+  { id: 'queries-first', label: 'Underlying queries migrated and validated before dashboard migration' },
+  { id: 'rewrite', label: 'Dataset/query references rewritten in dashboard definitions' },
+  { id: 'bi-tools', label: 'External BI tool connections re-pointed to target warehouse' },
+  { id: 'visual-parity', label: 'Visual parity confirmed against source for the same filters/date range' },
+  { id: 'business-review', label: 'Business consumer has reviewed the migrated dashboard, not just engineering' },
+]} />
