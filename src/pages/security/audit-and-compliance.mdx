@@ -1,0 +1,74 @@
+---
+title: 'Audit and compliance'
+layout: ../../layouts/Layout.astro
+description: 'Preserve audit trail continuity and compliance evidence across the migration.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Audit and compliance
+
+A cross-cloud migration creates a discontinuity in your audit trail: source-cloud logs stop being the system of record, and target-cloud logs start — at different times, in different formats, in different tools. Compliance and audit teams need this discontinuity documented and bridged, not discovered during the next audit cycle.
+
+<Callout variant="prerequisite" title="Loop in compliance before cutover, not after">
+  If any migrated workload is in scope for SOC 2, HIPAA, PCI, or similar, involve compliance/audit stakeholders during planning — not as a post-cutover notification. Evidence-collection gaps during the transition window are hard to backfill after the fact.
+</Callout>
+
+## What changes
+
+| Area | Source | Target |
+|------|--------|--------|
+| Control-plane audit logs | Cloud-native format (e.g. Azure diagnostic logs) | Different cloud-native format (e.g. CloudWatch, Cloud Logging) |
+| Unity Catalog audit | System tables / account console | Same mechanism, new metastore — history does not carry over |
+| Access reviews | Tied to source IAM/Entra ID groups | Tied to target IAM/service accounts — mapping must be traceable |
+| Billing/cost audit | Source cloud cost export | Target cloud cost export — no unified view without extra tooling |
+
+## Bridging the audit trail
+
+- **Export and retain source audit logs** for the compliance-mandated retention period before decommissioning source infrastructure — don't assume the source cloud account will still exist when the next audit happens.
+- **Document the cutover timestamp precisely** per workload, so auditors can identify which system of record applies to any given period.
+- **Preserve the principal mapping** from [IAM mapping](/security/iam-mapping) as a durable artifact — an auditor asking "who had access to this table on this date" needs to trace through both source and target identity systems for anything spanning the cutover.
+
+<CodeBlock language="sql" filename="export_uc_audit.sql" code={`-- Export Unity Catalog audit history before decommissioning the source metastore
+SELECT event_time, event_type, user_identity, request_params, response
+FROM system.access.audit
+WHERE event_date >= '2026-01-01'
+ORDER BY event_time;
+`} />
+
+## Compliance sign-off checklist
+
+Before hypercare exit, confirm with compliance/security stakeholders:
+
+- Source audit logs are exported and archived per retention policy.
+- Target audit logging (Unity Catalog system tables, cloud-native control-plane logs) is enabled and verified from day one of the target workspace — not enabled retroactively after go-live.
+- Access review processes have been updated to reference the target identity system.
+- Any compliance certifications scoped to the source environment have a documented transition plan to the target.
+
+<Callout variant="decision" title="Don't decommission source logs on the same timeline as source compute">
+  Compute and storage decommission (see [hypercare](/execution/hypercare)) typically happens faster than audit-log retention requirements allow. Export and archive logs independently of infrastructure decommission — the log retention clock rarely matches the infrastructure teardown clock.
+</Callout>
+
+## Validation
+
+- Have compliance stakeholders formally sign off that audit continuity is documented before source decommission — see [business validation](/validation/business-validation).
+- Spot-check that target audit logging actually captured events during the pilot wave; a misconfigured audit pipeline that silently drops events is worse than no migration at all from a compliance standpoint.
+
+## Rollback
+
+Audit and compliance concerns don't block a technical rollback, but any rollback event itself must be logged and retained with the same rigor as the migration — an unexplained gap where source was briefly re-enabled is exactly the kind of thing an audit will flag.
+
+## Automation opportunity
+
+- Automate source audit log export as a scheduled job with a defined retention target, rather than a manual one-time export before decommission.
+- Build a single query/dashboard that spans both source-export and target-native audit logs for any workload that crossed the cutover boundary, so auditors don't need to manually stitch two systems together.
+
+<Checklist title="Audit and compliance" items={[
+  { id: 'stakeholders', label: 'Compliance/audit stakeholders engaged during planning' },
+  { id: 'export', label: 'Source audit logs exported and archived per retention policy' },
+  { id: 'target-logging', label: 'Target audit logging verified active from day one' },
+  { id: 'mapping-preserved', label: 'Principal mapping retained as a durable, referenceable artifact' },
+  { id: 'signoff', label: 'Formal compliance sign-off obtained before source decommission' },
+]} />
