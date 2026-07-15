@@ -6,11 +6,21 @@ import { withBase } from '../lib/paths';
 import { ArrowLeft, FileText } from 'lucide-react';
 
 export function getStaticPaths() {
+  // Slugs that already have a dedicated .mdx page must not also get a path here --
+  // Astro would generate two competing route definitions for the same URL and
+  // silently prefer the static one, making this catch-all dead weight for them.
+  const mdxPages = import.meta.glob('./**/*.mdx', { eager: true });
+  const existingSlugs = new Set(
+    Object.keys(mdxPages).map((path) => path.replace(/^\.\//, '').replace(/\.mdx$/, ''))
+  );
+
   return nav.sections.flatMap((section) =>
-    section.items.map((item) => ({
-      params: { slug: item.slug },
-      props: { section, item },
-    }))
+    section.items
+      .filter((item) => !existingSlugs.has(item.slug))
+      .map((item) => ({
+        params: { slug: item.slug },
+        props: { section, item },
+      }))
   );
 }
 

@@ -1,0 +1,95 @@
+---
+title: 'GCP to AWS'
+layout: ../../layouts/Layout.astro
+description: 'Step-by-step construct mapping and sequencing for migrating Databricks from GCP to AWS.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Tabs from '../../components/Tabs.tsx';
+
+# GCP → AWS
+
+Google Cloud IAM, GCS paths, and Private Service Connect have no direct AWS equivalent — identity, storage, and networking are rebuilt against AWS IAM, S3, and VPC PrivateLink. See the [cross-cloud equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix) for the full reference; this page sequences the GCP → AWS-specific work.
+
+## Sequencing
+
+1. **Foundation first.** Provision the AWS account(s), Databricks account-level Unity Catalog metastore, VPC, and IAM roles before touching data.
+2. **Identity before data.** Federate AWS IAM Identity Center (or your IdP) so users and groups resolve identically before any table is registered.
+3. **Storage and paths.** Provision S3 buckets 1:1 with GCS buckets, replicate data, then rewrite paths.
+4. **Compute and jobs last.** Rebuild cluster policies, init scripts, and Workflows/DLT pipelines once storage and identity are validated.
+
+## Identity federation
+
+| GCP construct | AWS equivalent | Notes |
+|---|---|---|
+| Google Cloud Identity / Workspace SSO | AWS IAM Identity Center / external IdP | Group names and IDs rarely match; rebuild the mapping explicitly |
+| Service account attached to cluster | Instance profile | Attach to cluster instance role, not the notebook |
+| Service account with key / impersonation | IAM role + external ID | Replace long-lived JSON keys with short-lived STS tokens |
+| Google Workspace SCIM | SCIM via IAM Identity Center | Audit for orphaned groups after cutover |
+
+<Callout variant="warning" title="Project boundary vs. account boundary">
+  A GCP project is a much smaller isolation unit than an AWS account. Don't assume a 1:1 project-to-account mapping — consolidate or split boundaries deliberately based on your target governance model (AWS Organizations OUs), not on how GCP happened to be organized.
+</Callout>
+
+## Storage and path rewrite
+
+<Tabs tabs={[
+  {
+    label: 'Path pattern',
+    content: 'GCS: gs://bucket/path  →  S3: s3://bucket/path. Confirm the target bucket names are available in S3 (bucket names are globally unique in each partition) before finalizing the mapping.'
+  },
+  {
+    label: 'gsutil/gcloud storage → aws s3 sync',
+    content: 'Prefer Delta Deep Clone for table data over generic object copy — it preserves Delta transaction history and supports incremental re-runs.'
+  },
+]} />
+
+<CodeBlock language="python" filename="path_rewrite.py" code={`MAPPING = {
+    "gs://prod-raw-us-central1": "s3://prod-raw-us-east-1",
+    "gs://prod-curated-us-central1": "s3://prod-curated-us-east-1",
+}
+
+def rewrite_path(path: str) -> str:
+    for gcs_prefix, s3_prefix in MAPPING.items():
+        if path.startswith(gcs_prefix):
+            return path.replace(gcs_prefix, s3_prefix, 1)
+    raise ValueError(f"No mapping for path: {path}")
+`} />
+
+## Networking
+
+- Replace **VPC + Private Service Connect** with **VPC + AWS PrivateLink**; the Databricks control-plane connection is re-established per workspace.
+- Cloud NAT egress rules do not transfer — recreate them against the AWS NAT Gateway.
+- If the source used Private Google Access (no public IPs), replicate that with **secure cluster connectivity** on AWS.
+
+## Compute and jobs
+
+- Rebuild cluster policies against AWS instance types — GCP machine types have no direct AWS match; size by vCPU/memory, not by name.
+- Re-point instance profiles (not service accounts) on every cluster policy and job cluster spec.
+- Re-create Workflows/DLT pipelines against the new Unity Catalog catalogs — job IDs do not migrate; re-establish ownership and alerting.
+
+## Validation
+
+- Reconcile row counts and checksums between GCS source tables and their S3-backed Unity Catalog counterparts before cutover.
+- Pilot the full IAM mapping with a read-only workload first — see [IAM mapping](/security/iam-mapping).
+- Confirm CI/CD identities authenticate against the new AWS IAM role before promoting any pipeline.
+
+## Rollback
+
+Keep the GCP workspace, GCS storage, and Google Cloud Identity federation live through hypercare. Rollback is DNS/endpoint redirection back to GCP — do not decommission source service accounts or buckets until the AWS target passes business validation.
+
+## Automation opportunity
+
+- Drive S3 bucket creation and IAM role provisioning from Terraform using the [Terraform patterns](/templates/terraform-patterns) as a base module.
+- Generate the path-rewrite mapping from the [asset inventory](/discovery/asset-inventory) output rather than hand-maintaining it.
+
+<Checklist title="GCP → AWS cutover readiness" items={[
+  { id: 'account', label: 'Target AWS account, VPC, and Unity Catalog metastore provisioned' },
+  { id: 'identity', label: 'IAM Identity Center federation validated with a pilot group' },
+  { id: 'storage', label: 'S3 buckets provisioned and Deep Clone replication complete' },
+  { id: 'paths', label: 'Path-rewrite mapping applied and validated against a sample workload' },
+  { id: 'network', label: 'PrivateLink and secure cluster connectivity confirmed' },
+  { id: 'rollback', label: 'GCP source left running with documented rollback path' },
+]} />
