@@ -1,0 +1,81 @@
+---
+title: 'Cluster policies'
+layout: ../../layouts/Layout.astro
+description: 'Redesign cluster policies for the target cloud as a governance control, not a copy-paste config.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Cluster policies
+
+[Cluster migration](/compute/cluster-migration) covers recreating clusters themselves; this page is about the policies that constrain them — the actual enforcement point for cost control, security posture, and compliance in a Databricks workspace. A cluster policy migrated as a literal copy of the source JSON will reference the wrong node types, the wrong instance profile/service account, and often the wrong security defaults for the target cloud.
+
+<Callout variant="prerequisite" title="Policies are a governance decision, not a technical translation">
+  Use the migration as an opportunity to tighten policies you've been meaning to fix, not just to reproduce whatever existed on source — a policy that was "temporarily" permissive on day one of the source environment shouldn't be carried forward as permanent policy on the target.
+</Callout>
+
+## What must change per policy
+
+| Policy field | Why it can't be copied verbatim |
+|---|---|
+| `node_type_id` | Node type names differ entirely across clouds — see [node type mapping](/compute/cluster-migration#node-type-mapping) |
+| `aws_attributes` / `azure_attributes` / `gcp_attributes` | Cloud-specific blocks (spot config, instance profile, availability zone) don't transfer between clouds at all |
+| `instance_profile_arn` / managed identity / service account | Identity references must point at the new target-cloud principal, not the source one |
+| `custom_tags` | Cost-allocation tags often encode source-cloud account/subscription/project IDs |
+| `spark_conf` | Occasionally references cloud-specific paths (e.g. `fs.azure.account.key...`) that have no meaning on the target cloud |
+
+## Recreating policies as code
+
+<CodeBlock language="hcl" filename="cluster-policy.tf" code={`resource "databricks_cluster_policy" "etl_standard" {
+  name = "etl-standard"
+  definition = jsonencode({
+    "node_type_id" = {
+      type = "allowlist"
+      values = ["m5.xlarge", "m5.2xlarge"]  # target-cloud instance types, not source
+    }
+    "aws_attributes.instance_profile_arn" = {
+      type  = "fixed"
+      value = aws_iam_instance_profile.etl.arn  # new target IAM role, not a copied ARN
+    }
+    "custom_tags.cost_center" = {
+      type  = "fixed"
+      value = "data-engineering"
+    }
+    "custom_tags.no_public_ip" = {
+      type  = "fixed"
+      value = "true"
+    }
+  })
+}
+`} />
+
+## Policy governance model
+
+- **One policy family per workload tier** (e.g. `etl-standard`, `ml-gpu`, `ad-hoc-notebook`) rather than one policy per team — teams map to tiers, tiers map to policies.
+- **Enforce security posture at the policy level**, not by convention — no-public-IP, mandatory tags, and instance-profile restrictions belong in `type: "fixed"` policy fields so they can't be silently overridden by an individual cluster config.
+- **Re-review cost guardrails** (max workers, auto-termination) against target-cloud pricing — a policy tuned for source-cloud spot pricing may need different limits on the target.
+
+## Validation
+
+- Attempt to create a cluster that violates each policy constraint and confirm it's actually rejected — a policy JSON that "looks right" but has a typo in the field name silently fails to enforce anything.
+- Confirm every cluster policy referenced by a job cluster spec (from [asset inventory](/discovery/asset-inventory)) has a target-cloud equivalent created before that job is migrated.
+- Have security/governance stakeholders review the target policy set as a deliberate decision, not just a mechanical translation — see [audit and compliance](/security/audit-and-compliance).
+
+## Rollback
+
+Cluster policies are configuration, not data — if a target policy is wrong, fix and redeploy it (ideally via Terraform) rather than treating it as an environment rollback. Keep source policies unchanged and in place until hypercare ends.
+
+## Automation opportunity
+
+- Manage every cluster policy as Terraform (`databricks_cluster_policy`) so changes are reviewed via pull request rather than edited ad hoc in the workspace UI.
+- Write a policy-linter script that flags any policy definition still referencing a source-cloud instance type or ARN pattern before it's applied to the target workspace.
+
+<Checklist title="Cluster policy migration" items={[
+  { id: 'inventory', label: 'Every source policy inventoried and mapped to a target-cloud equivalent' },
+  { id: 'identity', label: 'Instance profile / managed identity / service account references updated to target' },
+  { id: 'security', label: 'Security posture (no-public-IP, mandatory tags) enforced as fixed policy fields' },
+  { id: 'enforcement-tested', label: 'Policy enforcement tested by attempting a violating cluster config' },
+  { id: 'as-code', label: 'Policies defined as Terraform, not created ad hoc in the UI' },
+]} />

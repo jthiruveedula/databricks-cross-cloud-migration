@@ -1,0 +1,84 @@
+---
+title: 'SQL warehouses'
+layout: ../../layouts/Layout.astro
+description: 'Recreate SQL warehouses in the target cloud and preserve BI/query performance and access controls.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# SQL warehouses
+
+SQL warehouses power BI dashboards, ad hoc queries, and scheduled SQL jobs — a different consumption pattern than the interactive/job clusters covered in [cluster migration](/compute/cluster-migration), with its own sizing, concurrency, and access-control concerns.
+
+<Callout variant="tip" title="Serverless availability varies by region and cloud">
+  Serverless SQL warehouses are not available in every region on every cloud. Confirm serverless availability for your target region before assuming a like-for-like recreation — see the [Unity Catalog strategy](/governance/unity-catalog-strategy#regional-constraints) regional-constraints checklist.
+</Callout>
+
+## Warehouse types and sizing
+
+| Type | Best for | Migration note |
+|---|---|---|
+| Serverless | Ad hoc/BI with unpredictable load, fastest startup | Confirm target region support before committing to this type |
+| Pro | Predictable BI workloads needing photon + advanced features | Size by cluster-size class, not literal node count, across clouds |
+| Classic | Cost-sensitive, tolerant of cold-start latency | Rarely worth recreating as classic in the target — reassess whether Pro/Serverless fits better now |
+
+Don't copy the source cluster-size label 1:1 — validate against actual target-cloud query latency during the pilot, since underlying node types differ (see the node type mapping in [cluster migration](/compute/cluster-migration#node-type-mapping)).
+
+## Migration steps
+
+1. Export warehouse configs (size, auto-stop, scaling, tags) via the SQL Warehouses API.
+2. Recreate warehouses in target with an initial size matched to source; treat it as a starting point, not final.
+3. Re-point every dashboard, scheduled query, and BI tool connection string to the new warehouse endpoint.
+4. Re-apply query/warehouse-level access controls (see grants below).
+5. Run representative queries from the pilot wave and compare latency/concurrency against source before wider cutover.
+
+<CodeBlock language="python" filename="export_warehouses.py" code={`import requests
+
+resp = requests.get(
+    f"{SOURCE_HOST}/api/2.0/sql/warehouses",
+    headers={"Authorization": f"Bearer {SOURCE_TOKEN}"},
+)
+warehouses = resp.json()["warehouses"]
+
+for wh in warehouses:
+    target_config = {
+        "name": wh["name"],
+        "cluster_size": wh["cluster_size"],  # validate against target during pilot, don't assume
+        "auto_stop_mins": wh["auto_stop_mins"],
+        "min_num_clusters": wh["min_num_clusters"],
+        "max_num_clusters": wh["max_num_clusters"],
+        "enable_serverless_compute": wh.get("enable_serverless_compute", False),
+    }
+    # POST target_config to the target workspace's /api/2.0/sql/warehouses endpoint
+`} />
+
+## Access control
+
+- Warehouse-level permissions (`CAN_USE`, `CAN_MANAGE`) are workspace-local and must be re-granted in target — they do not travel with a warehouse config export.
+- Table/schema-level access is governed by Unity Catalog grants, not the warehouse — see [grants and roles](/governance/grants-and-roles) for that half of the access story.
+- Re-validate row/column-level security policies (if used) against the target warehouse; UC-based fine-grained access control is enforced per-query, not per-warehouse, but it's worth a explicit re-check during pilot.
+
+## Validation
+
+- Compare query latency and concurrency handling against source for the representative query set used in the [pilot](/execution/pilot).
+- Confirm every BI tool connection (Tableau, Power BI, Looker, etc.) has been re-pointed — a missed connection string means a dashboard silently keeps querying the source warehouse after cutover.
+- Verify auto-stop and scaling behavior under real load, not just a manual test query — cost surprises from misconfigured scaling show up in [hypercare](/execution/hypercare), not before.
+
+## Rollback
+
+Keep source warehouses running and reachable through hypercare. Rollback is redirecting BI tools and scheduled queries back to source connection strings — no data migration is involved in a warehouse rollback since the warehouse is compute, not storage.
+
+## Automation opportunity
+
+- Drive warehouse creation from Terraform (`databricks_sql_endpoint`) so sizing and access controls are reviewable and reproducible per environment.
+- Script the BI-tool connection-string cutover instead of manually updating each dashboard/tool — a checklist item per tool is what gets missed under time pressure.
+
+<Checklist title="SQL warehouse migration" items={[
+  { id: 'availability', label: 'Serverless/Pro availability confirmed for target region' },
+  { id: 'sizing', label: 'Warehouse sizing validated against real target-cloud query latency' },
+  { id: 'connections', label: 'Every BI tool and scheduled query re-pointed to target endpoint' },
+  { id: 'access', label: 'Warehouse-level permissions re-granted in target' },
+  { id: 'source-live', label: 'Source warehouses kept live through hypercare for rollback' },
+]} />

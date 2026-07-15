@@ -1,0 +1,70 @@
+---
+title: 'Init scripts and libraries'
+layout: ../../layouts/Layout.astro
+description: 'Migrate cluster-scoped and global init scripts, and reinstall libraries against the target cloud.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Init scripts and libraries
+
+Init scripts and libraries are the part of a cluster's bootstrap that most often has quiet, cloud-specific assumptions baked in — a hardcoded storage path, a cloud CLI call, or a private package repository reachable only from the source cloud's network. [Cluster migration](/compute/cluster-migration) covers the cluster shell; this page covers what runs during its startup.
+
+<Callout variant="warning" title="DBFS init scripts are deprecated — don't re-create the old pattern">
+  If source clusters still use DBFS-stored init scripts, migrate them to Unity Catalog volumes or workspace files rather than reproducing a deprecated pattern in the target. This migration is a natural point to close out that modernization, not defer it again.
+</Callout>
+
+## Init script migration
+
+| Step | Action |
+|------|--------|
+| 1 | Inventory every init script referenced by a cluster policy or cluster spec (cross-check against [asset inventory](/discovery/asset-inventory)) |
+| 2 | Audit each script for cloud-specific assumptions: hardcoded paths, cloud CLI calls, IMDS/metadata-service calls |
+| 3 | Rewrite paths using the [cloud mapping](/cloud-mappings/cross-cloud-equivalency-matrix) path-rewrite pattern for your source/target pair |
+| 4 | Store the rewritten script in a Unity Catalog volume, not DBFS |
+| 5 | Test the script on a throwaway cluster in target before wiring it into a policy |
+
+<CodeBlock language="bash" filename="init-script-audit.sh" code={`#!/bin/bash
+# Flag common cloud-specific patterns worth auditing before migrating an init script
+grep -nE 'abfss://|s3://|gs://|azcopy|aws s3|gsutil|169\\.254\\.169\\.254' "$1" \\
+  && echo "Review: cloud-specific reference found in $1" \\
+  || echo "No obvious cloud-specific references in $1"
+`} />
+
+## Library migration
+
+| Source | Target approach |
+|---|---|
+| PyPI / Maven / CRAN public packages | Reinstall directly — version-pin explicitly rather than relying on "latest" resolving identically on a new cluster |
+| Internal/private package repository | Confirm the target cloud's clusters can actually reach it (network path), or mirror it to a target-reachable artifact store |
+| Wheel/JAR uploaded to DBFS/workspace files | Re-upload to a Unity Catalog volume; update the cluster/job library reference path |
+| Cluster-installed libraries via init script | Migrate alongside the init script itself, following the same path-rewrite and testing steps above |
+
+<Callout variant="tip" title="Pin versions during migration, even if source didn't">
+  If the source cluster resolved "latest" for a library, you may get a different transitive dependency graph on a freshly created target cluster months or years later. Pin explicit versions during migration so a library-version drift isn't mixed in with everything else you're validating.
+</Callout>
+
+## Validation
+
+- Start a cluster with the migrated init script and libraries from cold, not from a warm/cached state — this is what actually happens in production after autoscaling or a restart.
+- Confirm library versions installed on target match what was pinned, not whatever "latest" resolved to.
+- Re-run the audit script above against the final migrated init scripts to confirm no unrewritten cloud-specific reference remains.
+
+## Rollback
+
+Init scripts and libraries are configuration, not data. If a migrated script fails, fix it and redeploy to a throwaway cluster in target — this does not require reverting any environment; keep the source cluster's original script and library set available for reference until hypercare ends.
+
+## Automation opportunity
+
+- Run the init-script audit as a pre-migration CI check over every script in the [asset inventory](/discovery/asset-inventory), not just ad hoc during migration.
+- Mirror internal package repositories to a target-cloud-reachable location as part of the target foundation setup, before any cluster tries to install from them.
+
+<Checklist title="Init scripts and libraries" items={[
+  { id: 'inventory', label: 'Every init script and library dependency inventoried' },
+  { id: 'audit', label: 'Scripts audited for cloud-specific paths and CLI calls' },
+  { id: 'volumes', label: 'Scripts migrated to Unity Catalog volumes, not DBFS' },
+  { id: 'pinned', label: 'Library versions explicitly pinned, not left on "latest"' },
+  { id: 'cold-start-tested', label: 'Cluster startup tested cold with migrated scripts and libraries' },
+]} />
