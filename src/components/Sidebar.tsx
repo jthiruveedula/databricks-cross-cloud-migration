@@ -12,19 +12,25 @@ interface Props {
 export default function Sidebar({ open, onClose, currentSlug }: Props) {
   return (
     <>
-      {open && (
-        <div
-          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm lg:hidden"
-          onClick={onClose}
-        />
-      )}
+      <div
+        aria-hidden="true"
+        onClick={onClose}
+        className={`
+          fixed inset-0 z-40 bg-black/20 backdrop-blur-sm transition-opacity duration-300
+          ${open ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}
+        `}
+      />
       <aside
         id="primary-sidebar"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Site navigation"
+        aria-hidden={!open}
         className={`
           fixed left-0 top-[var(--header-height)] z-50 h-[calc(100vh-var(--header-height))] w-[var(--sidebar-width)]
           transform border-r border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-md
-          transition-transform duration-300 lg:translate-x-0
-          ${open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          transition-transform duration-300 ease-in-out
+          ${open ? 'translate-x-0' : '-translate-x-full'}
           sidebar-scroll overflow-y-auto pb-8
         `}
       >

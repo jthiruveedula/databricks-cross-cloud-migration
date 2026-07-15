@@ -32,11 +32,25 @@ Hypercare is the bounded period immediately after [cutover](/execution/cutover) 
 - **Data freshness / SLA adherence** for every migrated pipeline, not just the ones flagged as critical.
 - **Support ticket volume and theme** — a spike in a specific category (e.g. permission errors) points at a systemic gap, not isolated user error.
 
+## Incident severity matrix
+
+Define severity before cutover, not during the first incident — an undefined "Sev-1" gets argued about in the moment instead of acted on.
+
+| Severity | Definition | Example | Response time | Resolution target | Escalation |
+|---|---|---|---|---|---|
+| P1 / Sev-1 | Migration-caused outage or data-correctness issue affecting a production, customer-facing, or revenue workload | Target job silently writes incomplete data; SSO broken for a business unit | Immediate, 24/7 | Restore service or roll back within hours | Page migration lead + platform on-call immediately |
+| P2 / Sev-2 | Migration-caused degradation without full outage; workaround exists | Job succeeds but 3x slower than source baseline; a subset of users has permission errors | Within 1 business hour | Same business day | Migration lead notified same day |
+| P3 / Sev-3 | Cosmetic or low-impact issue; no workaround needed or affects non-critical workloads | Dashboard formatting difference; non-critical job cost variance | Next business day | Within the hypercare window | Tracked, reviewed in daily hypercare sync |
+
+<Callout client:visible variant="prerequisite" title="Agree severity definitions with business stakeholders before cutover">
+  Severity thresholds (what counts as "customer-facing," what response time is realistic for your on-call model) are organization-specific — treat the table above as a starting template to adapt and get signed off, not a fixed standard.
+</Callout>
+
 ## Exit criteria
 
 Define hypercare exit criteria before cutover, and hold every wave to the same bar:
 
-- No unresolved Sev-1/Sev-2 incidents attributable to the migration.
+- No unresolved P1/P2 (Sev-1/Sev-2) incidents attributable to the migration.
 - Job success rate and duration within agreed tolerance of source baseline for the full observation window.
 - Cost within budget or an explained/approved variance.
 - Business stakeholders have signed off — see [business validation](/validation/business-validation).
@@ -71,8 +85,18 @@ Hypercare is precisely the window where rollback must remain live and tested —
 
 <Checklist client:visible title="Hypercare readiness" items={[
   { id: 'gate', label: 'Explicit hypercare exit criteria defined before cutover' },
+  { id: 'severity', label: 'Incident severity matrix agreed with business stakeholders' },
   { id: 'staffing', label: 'Elevated on-call/support staffing in place' },
   { id: 'monitoring', label: 'Tightened alert thresholds active on target' },
   { id: 'source', label: 'Source environment kept live and rollback-ready' },
-  { id: 'decommission', label: 'Source decommission sequence documented and gated on sign-off' },
+]} />
+
+<Checklist client:visible title="Decommission readiness gate" items={[
+  { id: 'exit-met', label: 'All hypercare exit criteria met and formally signed off' },
+  { id: 'no-open-p1p2', label: 'No open P1/P2 incidents attributable to the migration' },
+  { id: 'backup', label: 'Final source metastore, config, and grants backup/export taken' },
+  { id: 'no-dependents', label: 'No dependent jobs, dashboards, or external systems still reading from source' },
+  { id: 'compliance-signoff', label: 'Compliance/audit sign-off obtained where retention rules apply' },
+  { id: 'grace-period', label: 'Read-only grace period defined and communicated before final teardown' },
+  { id: 'dns-iam-cleanup', label: 'DNS records, IAM roles/policies, and network resources scheduled for cleanup' },
 ]} />

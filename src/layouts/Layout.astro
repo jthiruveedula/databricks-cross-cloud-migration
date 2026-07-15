@@ -66,7 +66,7 @@ const pageTitle = title === siteName ? title : `${title} | ${siteName}`;
     <AppShell client:load currentSlug={currentSlug} hideSidebar={hideSidebar} />
     <ProgressIndicator client:load />
     <div class="flex pt-[var(--header-height)]">
-      <div class={`flex-1 ${!hideSidebar ? 'lg:ml-[var(--sidebar-width)]' : ''}`}>
+      <div class="flex-1">
         <main class="mx-auto min-h-[calc(100vh-var(--header-height))] max-w-6xl px-6 py-10 lg:px-10">
           <div class={`flex gap-8 ${!hideToc ? '' : ''}`}>
             <article class={bare ? 'w-full max-w-none' : 'prose w-full max-w-none'}>

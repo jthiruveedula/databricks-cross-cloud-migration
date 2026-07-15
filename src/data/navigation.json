@@ -6,7 +6,8 @@
       "items": [
         { "title": "What is cross-cloud migration?", "slug": "overview/what-is-cross-cloud-migration" },
         { "title": "Migration archetypes", "slug": "overview/migration-archetypes" },
-        { "title": "Decision framework", "slug": "overview/decision-framework" }
+        { "title": "Decision framework", "slug": "overview/decision-framework" },
+        { "title": "Remote governance vs. migration", "slug": "overview/remote-governance-and-when-not-to-migrate" }
       ]
     },
     {
@@ -40,7 +41,8 @@
         { "title": "Metastore migration", "slug": "governance/metastore-migration" },
         { "title": "Grants and roles", "slug": "governance/grants-and-roles" },
         { "title": "External locations and volumes", "slug": "governance/external-locations-and-volumes" },
-        { "title": "Legacy Hive transition", "slug": "governance/legacy-hive-transition" }
+        { "title": "Legacy Hive transition", "slug": "governance/legacy-hive-transition" },
+        { "title": "UCX-assisted migration", "slug": "governance/ucx-strategy" }
       ]
     },
     {

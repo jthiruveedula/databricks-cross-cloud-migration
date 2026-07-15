@@ -65,7 +65,7 @@ Grants are not portable across accounts because principals are account-scoped. U
 <CodeBlock client:visible language="sql" filename="grant-export.sql" code={`-- Export source grants
 SELECT table_catalog, table_schema, table_name, grantee, privilege_type, is_grantable
 FROM system.information_schema.table_privileges
-WHERE table_schema NOT IN ('information_schema');}`} />
+WHERE table_schema NOT IN ('information_schema');`} />
 
 <CodeBlock client:visible language="python" filename="replay-grants.py" code={`import pandas as pd
 from databricks.sdk import WorkspaceClient
@@ -78,7 +78,7 @@ for _, row in grants.iterrows():
     target_grantee = principal_map[row["grantee"]]  # Map source to target principal
     sql = f"""GRANT {row['privilege_type']} ON TABLE {row['table_catalog']}.{row['table_schema']}.{row['table_name']} TO \`{target_grantee}\`"""
     w.statement_execution.execute_statement(sql, warehouse_id="<WAREHOUSE_ID>")
-}`} />
+`} />
 
 ## Handling non-table objects
 

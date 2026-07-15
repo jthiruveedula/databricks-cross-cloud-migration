@@ -29,7 +29,7 @@ for id in $job_ids; do
     > "exported/jobs/job_$id.json"
 done
 
-echo "Exported $(ls exported/jobs | wc -l) jobs"}`} />
+echo "Exported $(ls exported/jobs | wc -l) jobs"`} />
 
 ## Deep clone a catalog of Delta tables
 
@@ -49,7 +49,7 @@ for t in tables:
                   LOCATION 's3://<target-bucket>/{t.schema_name}/{t.name}'"""
         target.statement_execution.execute_statement(sql, warehouse_id="<TARGET_WAREHOUSE>")
         print(f"Cloned {t.name}")
-}`} />
+`} />
 
 ## Reconcile row counts
 
@@ -60,7 +60,7 @@ tgt AS (
   SELECT 'target' AS env, COUNT(*) AS cnt FROM target_catalog.schema.table
 )
 SELECT src.env, src.cnt, tgt.env, tgt.cnt, src.cnt - tgt.cnt AS diff
-FROM src CROSS JOIN tgt;}`} />
+FROM src CROSS JOIN tgt;`} />
 
 ## Path rewrite helper
 
@@ -80,7 +80,7 @@ mappings = {
     "dbfs:/mnt/legacy/": "/Volumes/target_catalog/schema/legacy/"
 }
 
-print(rewrite_path("abfss://data@source.dfs.core.windows.net/raw/sales", "aws", mappings))}`} />
+print(rewrite_path("abfss://data@source.dfs.core.windows.net/raw/sales", "aws", mappings))`} />
 
 <Callout client:visible variant="warning" title="Test before production">
   Run all scripts in a non-production target workspace first. Validate outputs and review SQL before executing in production.

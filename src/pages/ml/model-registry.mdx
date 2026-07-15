@@ -25,6 +25,11 @@ Registered models carry more than the model artifact itself — version history,
 | Model signature and input example | Carried automatically if you re-log via `mlflow.pyfunc.log_model` with the original signature |
 | Description and tags | Copy explicitly; these are metadata, not part of the artifact |
 | Consumers (jobs, serving endpoints referencing a specific version/alias) | Update every reference to the target model name/version — see the reference audit below |
+| Source-run lineage (`mlflow.source_run` / lineage tags) | Re-point to the *migrated* target run ID — see the lineage caveat below |
+
+<Callout client:visible variant="warning" title="Re-registering a model orphans its lineage unless the source run was migrated too">
+  A model version's lineage pointer (`source_run`/`run_id`) references the MLflow run that produced it. If you re-register the model in target without also migrating that run via [MLflow](/ml/mlflow), the pointer either breaks or silently references a run ID that doesn't exist in the target tracking server — "which experiment produced this model" becomes unanswerable. Migrate the source run first, then re-register the model version against the *migrated* run's new ID, not the original source run ID.
+</Callout>
 
 ## Migration pattern
 

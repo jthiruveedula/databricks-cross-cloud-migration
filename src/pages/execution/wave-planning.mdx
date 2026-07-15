@@ -13,6 +13,16 @@ import Accordion from '../../components/Accordion.tsx';
 
 Divide the migration into waves that move related workloads together. Waves reduce blast radius, let teams learn, and make rollback simpler.
 
+## Applicability
+
+Applies to any migration with more than a handful of dependency-chain clusters. For a single-workspace, single-domain migration, a pilot plus one production wave may be all that's needed — don't force a five-wave structure onto a small estate.
+
+## Inputs required
+
+- Completed [dependency mapping](/discovery/dependency-mapping) clusters (not a flat asset list).
+- [Risk assessment](/discovery/risk-assessment) scores per cluster.
+- Confirmed owner/team availability from [workspace inventory](/discovery/workspace-inventory).
+
 ## Wave design principles
 
 - Group by **dependency chain**, not by asset type. A wave is "the table, the pipeline that populates it, and every dashboard/job that reads it" — never just "all the dashboards" or "all the pipelines" as separate waves. See [dependency mapping](/discovery/dependency-mapping) for how to derive these clusters instead of guessing.
@@ -49,15 +59,33 @@ Divide the migration into waves that move related workloads together. Waves redu
   }
 ]} />
 
-## Wave scoring matrix
+## Wave scoring model
 
-| Criterion | Weight | Notes |
-|-----------|--------|-------|
-| Business criticality | High | Critical workloads go late or use blue-green |
-| Data size | Medium | Large data drives longer sync windows |
-| Dependency count | High | High-dependency workloads need careful sequencing |
-| Risk tolerance | High | Low-tolerance workloads need more validation |
-| Owner readiness | Medium | Teams must be available during cutover |
+Score each dependency-chain cluster (not each individual asset — see [dependency mapping](/discovery/dependency-mapping)) on a 1–5 scale per criterion, then combine with weights so wave assignment is a reproducible number, not a gut call:
+
+`score = (0.30 × criticality) + (0.25 × dependency_count) + (0.20 × risk_tolerance) + (0.15 × data_size) + (0.10 × owner_readiness)`
+
+| Criterion | Weight | 1 (low) | 5 (high) |
+|-----------|--------|---------|----------|
+| Business criticality | 0.30 | Internal, non-production | Customer-facing, revenue-impacting |
+| Dependency count | 0.25 | Standalone table + one consumer | Deeply cross-referenced by many domains |
+| Risk tolerance (inverse) | 0.20 | High tolerance for issues | Zero tolerance — regulated or SLA-bound |
+| Data size | 0.15 | < 100 GB, static | > 10 TB or high mutation rate |
+| Owner readiness | 0.10 | Team unavailable/unresponsive | Team dedicated and available for cutover |
+
+<Callout client:visible variant="tip" title="Higher score = later wave, not higher priority">
+  A high score means "harder to get wrong" — these clusters go in a later wave, after tooling, IAM, and runbook timing have been proven on lower-scoring clusters. Do not read a high score as "migrate first."
+</Callout>
+
+### Worked example
+
+| Workload cluster | Criticality (30%) | Dependencies (25%) | Risk tolerance (20%) | Data size (15%) | Owner readiness (10%) | Weighted score | Wave |
+|---|---|---|---|---|---|---|---|
+| Internal cost-reporting dashboard + its batch job | 1 | 1 | 1 | 1 | 4 | **1.30** | Wave 1 |
+| Regional sales domain (tables + pipeline + BI) | 3 | 3 | 3 | 3 | 3 | **3.00** | Wave 2 |
+| Real-time fraud-detection pipeline + model serving | 5 | 4 | 5 | 3 | 4 | **4.35** | Wave 3 |
+
+Set wave-boundary thresholds once, before scoring any real workload, so the cutoffs can't be quietly adjusted to fit a preferred sequencing: for example, score < 2.0 → Wave 1, 2.0–3.5 → Wave 2, > 3.5 → Wave 3.
 
 ## Wave plan template
 
@@ -79,7 +107,7 @@ Divide the migration into waves that move related workloads together. Waves redu
     rollback:
       - re-enable source jobs
       - redirect users to source workspace
-}`} />
+`} />
 
 ## Validation
 

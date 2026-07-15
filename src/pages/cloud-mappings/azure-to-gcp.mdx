@@ -46,6 +46,8 @@ Entra ID federation, ADLS Gen2 paths, and VNet Private Link have no direct GCP e
   },
 ]} />
 
+Register the replicated data as a Unity Catalog **external location** in the target metastore, backed by a **Databricks-managed GCP service account** storage credential (`databricks_gcp_service_account` on `databricks_storage_credential`) — not a manually created service-account key. See [external locations and volumes](/governance/external-locations-and-volumes) for the general pattern and [Terraform patterns](/templates/terraform-patterns) for provisioning it as code.
+
 <CodeBlock client:visible language="python" filename="path_rewrite.py" code={`MAPPING = {
     "abfss://raw@prodadls.dfs.core.windows.net": "gs://prod-raw-us-central1",
     "abfss://curated@prodadls.dfs.core.windows.net": "gs://prod-curated-us-central1",

@@ -46,6 +46,8 @@ Google Cloud IAM, GCS paths, and Private Service Connect have no direct Azure eq
   },
 ]} />
 
+Register the replicated data as a Unity Catalog **external location** in the target metastore, backed by an **Azure Databricks Access Connector** with a managed identity (`azure_managed_identity { access_connector_id = ... }` on `databricks_storage_credential`) — not a raw storage-account key. See [external locations and volumes](/governance/external-locations-and-volumes) for the general pattern and [Terraform patterns](/templates/terraform-patterns) for provisioning it as code.
+
 <CodeBlock client:visible language="python" filename="path_rewrite.py" code={`MAPPING = {
     "gs://prod-raw-us-central1": "abfss://raw@prodadls.dfs.core.windows.net",
     "gs://prod-curated-us-central1": "abfss://curated@prodadls.dfs.core.windows.net",
