@@ -65,7 +65,7 @@ If rollback is not viable due to source decommissioning or business pressure, ch
 - Maintain a rollback script that stops target jobs, re-enables source jobs, and flips endpoints.
 - Automate alerts for rollback triggers (failed reconciliation, job failure rate).
 
-<Checklist title="Rollback readiness" items={[
+<Checklist client:visible title="Rollback readiness" items={[
   { id: 'criteria', label: 'Rollback criteria defined and agreed' },
   { id: 'runbook', label: 'Step-by-step rollback runbook written' },
   { id: 'test', label: 'Rollback tested in pilot wave' },

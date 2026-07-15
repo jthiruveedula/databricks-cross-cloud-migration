@@ -62,7 +62,7 @@ If active-active or DR is required, replicate Delta tables and use a second meta
 
 Use the Databricks CLI or Accounts API to list and convert groups:
 
-<CodeBlock language="bash" code={`databricks account groups list --output json | jq '.[] | {id, displayName, externalId}'
+<CodeBlock client:visible language="bash" code={`databricks account groups list --output json | jq '.[] | {id, displayName, externalId}'
 
 # Create account-level group in target if not present
 databricks account groups create --display-name "data-engineering-prod"}`} />
@@ -90,7 +90,7 @@ If UC topology is wrong, detach the workspace, fix the metastore or credential, 
 - Use Terraform to define metastores, storage credentials, external locations, and catalog structure.
 - Store group-to-principal mappings in a YAML file and apply grants via a CI/CD pipeline.
 
-<Checklist title="UC strategy" items={[
+<Checklist client:visible title="UC strategy" items={[
   { id: 'region', label: 'Target region and metastore created' },
   { id: 'workspace-attach', label: 'Target workspace attached to metastore' },
   { id: 'groups', label: 'Account-level groups created and mapped' },

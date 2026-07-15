@@ -30,13 +30,13 @@ The [asset inventory](/discovery/asset-inventory) tells you *what* exists. Depen
 
 ## Building the dependency graph
 
-<CodeBlock language="sql" filename="table_lineage.sql" code={`-- Databricks system tables expose lineage directly -- don't hand-parse SQL/notebooks
+<CodeBlock client:visible language="sql" filename="table_lineage.sql" code={`-- Databricks system tables expose lineage directly -- don't hand-parse SQL/notebooks
 SELECT source_table_full_name, target_table_full_name, source_type, target_type
 FROM system.access.table_lineage
 WHERE target_table_full_name LIKE 'prod_catalog.%';
 `} />
 
-<CodeBlock language="python" filename="build_dependency_graph.py" code={`import networkx as nx
+<CodeBlock client:visible language="python" filename="build_dependency_graph.py" code={`import networkx as nx
 
 graph = nx.DiGraph()
 for row in lineage_rows:
@@ -69,7 +69,7 @@ Dependency mapping is read-only and produces no environment changes — there is
 - Regenerate the dependency graph on a schedule during discovery so it reflects code changes made while migration planning is underway.
 - Feed the connected-components output directly into the [wave plan template](/execution/wave-planning) as a starting point for wave scope, rather than starting wave design from a blank page.
 
-<Checklist title="Dependency mapping" items={[
+<Checklist client:visible title="Dependency mapping" items={[
   { id: 'lineage', label: 'Table lineage extracted from system.access.table_lineage' },
   { id: 'job-deps', label: 'Job → cluster policy, secret scope, and cluster dependencies traced' },
   { id: 'graph', label: 'Full dependency graph built and connected components identified' },

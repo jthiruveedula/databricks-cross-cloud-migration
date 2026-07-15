@@ -38,14 +38,14 @@ For each workspace record the following attributes:
 
 Use the Databricks Accounts API to list workspaces at the account level. This works across all clouds.
 
-<CodeBlock language="bash" code={`curl -n -X GET https://accounts.cloud.databricks.com/api/2.0/accounts/\${ACCOUNT_ID}/workspaces \\
+<CodeBlock client:visible language="bash" code={`curl -n -X GET https://accounts.cloud.databricks.com/api/2.0/accounts/\${ACCOUNT_ID}/workspaces \\
   -H "Authorization: Bearer $DATABRICKS_TOKEN" | jq '.workspaces[] | {workspace_id, workspace_name, deployment_name, aws_region, pricing_tier}'`} />
 
 ### System tables
 
 If system tables are enabled, query the audit log and workspace inventory tables.
 
-<CodeBlock language="sql" code={`SELECT workspace_id, workspace_name, account_id, region
+<CodeBlock client:visible language="sql" code={`SELECT workspace_id, workspace_name, account_id, region
 FROM system.information_schema.workspaces;`} />
 
 <p className="text-xs text-[var(--ink-subtle)]">Table names vary by region and SKU; verify availability.</p>
@@ -76,7 +76,7 @@ No rollback is needed at inventory stage, but missing workspaces discovered late
 - Script the Accounts API export into a CSV or YAML manifest.
 - Tag workspaces in the source with `migration-wave` and `owner` to drive automation.
 
-<Checklist title="Workspace inventory" items={[
+<Checklist client:visible title="Workspace inventory" items={[
   { id: 'api', label: 'Export workspaces via Accounts API or console' },
   { id: 'enrich', label: 'Enrich with region, SKU, network, and metastore metadata' },
   { id: 'owners', label: 'Assign owner and migration decision per workspace' },

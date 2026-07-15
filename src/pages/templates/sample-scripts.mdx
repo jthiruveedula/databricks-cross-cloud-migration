@@ -13,7 +13,7 @@ These snippets are starting points. Replace placeholders with your actual accoun
 
 ## Export all job definitions
 
-<CodeBlock language="bash" code={`#!/bin/bash
+<CodeBlock client:visible language="bash" code={`#!/bin/bash
 set -e
 SOURCE_HOST="https://<source-workspace>.cloud.databricks.com"
 TOKEN="<PAT>"
@@ -33,7 +33,7 @@ echo "Exported $(ls exported/jobs | wc -l) jobs"}`} />
 
 ## Deep clone a catalog of Delta tables
 
-<CodeBlock language="python" filename="bulk_clone.py" code={`from databricks.sdk import WorkspaceClient
+<CodeBlock client:visible language="python" filename="bulk_clone.py" code={`from databricks.sdk import WorkspaceClient
 
 source = WorkspaceClient(host="<SOURCE_HOST>", token="<SOURCE_TOKEN>")
 target = WorkspaceClient(host="<TARGET_HOST>", token="<TARGET_TOKEN>")
@@ -53,7 +53,7 @@ for t in tables:
 
 ## Reconcile row counts
 
-<CodeBlock language="sql" code={`WITH src AS (
+<CodeBlock client:visible language="sql" code={`WITH src AS (
   SELECT 'source' AS env, COUNT(*) AS cnt FROM source_catalog.schema.table
 ),
 tgt AS (
@@ -64,7 +64,7 @@ FROM src CROSS JOIN tgt;}`} />
 
 ## Path rewrite helper
 
-<CodeBlock language="python" filename="rewrite_paths.py" code={`def rewrite_path(source_path: str, target_cloud: str, mappings: dict) -> str:
+<CodeBlock client:visible language="python" filename="rewrite_paths.py" code={`def rewrite_path(source_path: str, target_cloud: str, mappings: dict) -> str:
     """
     Rewrite cloud storage paths for target environment.
     Example mappings:

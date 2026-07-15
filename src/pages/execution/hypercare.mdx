@@ -69,7 +69,7 @@ Hypercare is precisely the window where rollback must remain live and tested —
 - Automate the hypercare exit-criteria check (job success rate, cost, SLA) as a single dashboard query instead of manually gathering it wave over wave.
 - Automate the source read-only → decommission sequence as a scripted, reviewable change rather than a set of manual console actions.
 
-<Checklist title="Hypercare readiness" items={[
+<Checklist client:visible title="Hypercare readiness" items={[
   { id: 'gate', label: 'Explicit hypercare exit criteria defined before cutover' },
   { id: 'staffing', label: 'Elevated on-call/support staffing in place' },
   { id: 'monitoring', label: 'Tightened alert thresholds active on target' },

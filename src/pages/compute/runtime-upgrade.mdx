@@ -53,7 +53,7 @@ If a workload fails on the new runtime, keep a fallback cluster policy with the 
 - Generate migration tickets for any workload below the target baseline.
 - Run regression tests automatically in a CI pipeline.
 
-<Checklist title="Runtime upgrade" items={[
+<Checklist client:visible title="Runtime upgrade" items={[
   { id: 'scan', label: 'Scan clusters and jobs for runtime versions' },
   { id: 'baseline', label: 'Define target runtime baseline (e.g., DBR 13.3 LTS)' },
   { id: 'regression', label: 'Run regression tests on target runtime' },

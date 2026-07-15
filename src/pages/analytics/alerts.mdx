@@ -27,7 +27,7 @@ SQL alerts are easy to under-prioritize during migration because they're invisib
 
 ## Migration steps
 
-<CodeBlock language="python" filename="migrate_alerts.py" code={`import requests
+<CodeBlock client:visible language="python" filename="migrate_alerts.py" code={`import requests
 
 alerts = requests.get(
     f"{SOURCE_HOST}/api/2.0/preview/sql/alerts",
@@ -65,7 +65,7 @@ Keep source alerts active through hypercare rather than disabling them the momen
 - Generate the alert migration script from the same query-ID mapping used for [SQL queries](/analytics/sql-queries), so alert `query_id` references stay consistent with the rest of the analytics migration.
 - Build a single "alert coverage" report comparing source and target alert inventories, run automatically until hypercare exit.
 
-<Checklist title="Alert migration" items={[
+<Checklist client:visible title="Alert migration" items={[
   { id: 'queries-first', label: 'Underlying queries migrated and validated before alert migration' },
   { id: 'inventory-diff', label: 'Full source-vs-target alert inventory diffed for gaps' },
   { id: 'channels', label: 'Notification channels (email/Slack/PagerDuty) re-created, not copied' },

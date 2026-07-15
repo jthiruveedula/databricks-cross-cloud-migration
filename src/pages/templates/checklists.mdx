@@ -13,7 +13,7 @@ Use these checklists to drive governance, execution, and sign-off.
 
 ## Pre-migration readiness
 
-<Checklist title="Readiness" items={[
+<Checklist client:visible title="Readiness" items={[
   { id: 'business-case', label: 'Business case and migration scope approved' },
   { id: 'team', label: 'Migration team and RACI defined' },
   { id: 'target-env', label: 'Target account, region, and landing zone ready' },
@@ -25,7 +25,7 @@ Use these checklists to drive governance, execution, and sign-off.
 
 ## Wave execution
 
-<Checklist title="Wave execution" items={[
+<Checklist client:visible title="Wave execution" items={[
   { id: 'wave-plan', label: 'Wave plan approved by owners' },
   { id: 'assets', label: 'Assets migrated and validated' },
   { id: 'data', label: 'Data reconciled within tolerance' },
@@ -36,7 +36,7 @@ Use these checklists to drive governance, execution, and sign-off.
 
 ## Cutover day
 
-<Checklist title="Cutover day" items={[
+<Checklist client:visible title="Cutover day" items={[
   { id: 'comm', label: 'User communication sent' },
   { id: 'freeze', label: 'Source writes frozen' },
   { id: 'sync', label: 'Final sync complete' },
@@ -48,7 +48,7 @@ Use these checklists to drive governance, execution, and sign-off.
 
 ## Post-migration
 
-<Checklist title="Post-migration" items={[
+<Checklist client:visible title="Post-migration" items={[
   { id: 'monitor', label: 'Monitoring and alerting operational' },
   { id: 'cost', label: 'Cost and performance baselines established' },
   { id: 'docs', label: 'Documentation and runbook updated' },

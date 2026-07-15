@@ -28,7 +28,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 ## Recreating policies as code
 
-<CodeBlock language="hcl" filename="cluster-policy.tf" code={`resource "databricks_cluster_policy" "etl_standard" {
+<CodeBlock client:visible language="hcl" filename="cluster-policy.tf" code={`resource "databricks_cluster_policy" "etl_standard" {
   name = "etl-standard"
   definition = jsonencode({
     "node_type_id" = {
@@ -72,7 +72,7 @@ Cluster policies are configuration, not data — if a target policy is wrong, fi
 - Manage every cluster policy as Terraform (`databricks_cluster_policy`) so changes are reviewed via pull request rather than edited ad hoc in the workspace UI.
 - Write a policy-linter script that flags any policy definition still referencing a source-cloud instance type or ARN pattern before it's applied to the target workspace.
 
-<Checklist title="Cluster policy migration" items={[
+<Checklist client:visible title="Cluster policy migration" items={[
   { id: 'inventory', label: 'Every source policy inventoried and mapped to a target-cloud equivalent' },
   { id: 'identity', label: 'Instance profile / managed identity / service account references updated to target' },
   { id: 'security', label: 'Security posture (no-public-IP, mandatory tags) enforced as fixed policy fields' },

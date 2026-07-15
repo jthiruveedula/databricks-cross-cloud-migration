@@ -26,7 +26,7 @@ Init scripts and libraries are the part of a cluster's bootstrap that most often
 | 4 | Store the rewritten script in a Unity Catalog volume, not DBFS |
 | 5 | Test the script on a throwaway cluster in target before wiring it into a policy |
 
-<CodeBlock language="bash" filename="init-script-audit.sh" code={`#!/bin/bash
+<CodeBlock client:visible language="bash" filename="init-script-audit.sh" code={`#!/bin/bash
 # Flag common cloud-specific patterns worth auditing before migrating an init script
 grep -nE 'abfss://|s3://|gs://|azcopy|aws s3|gsutil|169\\.254\\.169\\.254' "$1" \\
   && echo "Review: cloud-specific reference found in $1" \\
@@ -61,7 +61,7 @@ Init scripts and libraries are configuration, not data. If a migrated script fai
 - Run the init-script audit as a pre-migration CI check over every script in the [asset inventory](/discovery/asset-inventory), not just ad hoc during migration.
 - Mirror internal package repositories to a target-cloud-reachable location as part of the target foundation setup, before any cluster tries to install from them.
 
-<Checklist title="Init scripts and libraries" items={[
+<Checklist client:visible title="Init scripts and libraries" items={[
   { id: 'inventory', label: 'Every init script and library dependency inventoried' },
   { id: 'audit', label: 'Scripts audited for cloud-specific paths and CLI calls' },
   { id: 'volumes', label: 'Scripts migrated to Unity Catalog volumes, not DBFS' },

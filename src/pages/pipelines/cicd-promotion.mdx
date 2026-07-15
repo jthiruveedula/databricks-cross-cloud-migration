@@ -28,7 +28,7 @@ CI/CD pipelines that deploy notebooks, jobs, and Terraform-managed infrastructur
 
 ## Rebuilding the deployment pipeline
 
-<CodeBlock language="yaml" filename="deploy.yml" code={`# Example: GitHub Actions deploying Databricks Asset Bundles to the target workspace
+<CodeBlock client:visible language="yaml" filename="deploy.yml" code={`# Example: GitHub Actions deploying Databricks Asset Bundles to the target workspace
 name: Deploy to Databricks (target)
 on:
   push:
@@ -74,7 +74,7 @@ Keep the source CI/CD pipeline and its deployment target intact and functioning 
 - Adopt Databricks Asset Bundles if not already in use — it's the single highest-leverage change for making CI/CD cloud-portable going forward, not just for this migration.
 - Template the CI/CD pipeline definition itself (GitHub Actions/Azure Pipelines/GitLab CI YAML) so cloud-specific auth blocks are the only thing that changes between source and target pipeline definitions.
 
-<Checklist title="CI/CD promotion" items={[
+<Checklist client:visible title="CI/CD promotion" items={[
   { id: 'auth', label: 'CI/CD auth rebuilt for target cloud (not copied from source)' },
   { id: 'config', label: 'Environment/stage config updated to target workspace IDs' },
   { id: 'state', label: 'Terraform state migrated as new target state, not imported from source IDs' },

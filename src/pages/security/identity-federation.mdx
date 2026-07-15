@@ -53,7 +53,7 @@ If federation fails, keep a local account admin account enabled for break-glass 
 - Use the Databricks Account SCIM API to create groups and assign users.
 - Store group-to-permission mappings in a configuration file and apply them idempotently.
 
-<Checklist title="Identity federation" items={[
+<Checklist client:visible title="Identity federation" items={[
   { id: 'sso', label: 'Configure target account SSO' },
   { id: 'scim', label: 'Enable SCIM provisioning for target groups' },
   { id: 'groups', label: 'Convert workspace-local groups to account-level' },

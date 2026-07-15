@@ -30,7 +30,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 ## Scoring model
 
-<CodeBlock language="python" filename="risk_score.py" code={`WEIGHTS = {
+<CodeBlock client:visible language="python" filename="risk_score.py" code={`WEIGHTS = {
     "criticality": 3,
     "sensitivity": 3,
     "dependency_count": 2,
@@ -71,7 +71,7 @@ Risk assessment produces no environment changes; there's nothing to roll back. A
 - Compute dependency-count and volume/velocity ratings directly from the [dependency mapping](/discovery/dependency-mapping) graph and system tables instead of manual estimation.
 - Auto-populate the [risk register](/templates/risk-register) from the scoring output so medium/high-risk items don't rely on someone remembering to transcribe them.
 
-<Checklist title="Risk assessment" items={[
+<Checklist client:visible title="Risk assessment" items={[
   { id: 'dimensions', label: 'Every workload rated across all risk dimensions' },
   { id: 'owner-review', label: 'Ratings reviewed with the workload\'s actual owning team' },
   { id: 'tiers', label: 'Workloads bucketed into low/medium/high risk tiers' },

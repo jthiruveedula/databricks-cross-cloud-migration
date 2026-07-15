@@ -28,7 +28,7 @@ Metastore migration moves the metadata layer—catalogs, schemas, tables, views,
 
 Register source storage as a foreign catalog in the target metastore. No data copy is required for the initial cutover.
 
-<CodeBlock language="sql" code={`CREATE FOREIGN CATALOG <catalog_name>
+<CodeBlock client:visible language="sql" code={`CREATE FOREIGN CATALOG <catalog_name>
 USING CONNECTION <connection_name>
 OPTIONS (host '<source_metastore_host>', port 443);`} />
 
@@ -38,7 +38,7 @@ OPTIONS (host '<source_metastore_host>', port 443);`} />
 
 For foreign tables already registered, upgrade them to managed or external in the target metastore.
 
-<CodeBlock language="sql" code={`ALTER TABLE <catalog>.<schema>.<table> SET MANAGED;
+<CodeBlock client:visible language="sql" code={`ALTER TABLE <catalog>.<schema>.<table> SET MANAGED;
 -- or
 ALTER TABLE <catalog>.<schema>.<table> SET EXTERNAL;`} />
 
@@ -48,7 +48,7 @@ ALTER TABLE <catalog>.<schema>.<table> SET EXTERNAL;`} />
 
 Copy a Delta table with history to target storage. Preserves transaction log and time travel.
 
-<CodeBlock language="sql" code={`CREATE TABLE <target_catalog>.<schema>.<table>
+<CodeBlock client:visible language="sql" code={`CREATE TABLE <target_catalog>.<schema>.<table>
 DEEP CLONE <source_catalog>.<schema>.<table>
 LOCATION 's3://<target-bucket>/<path>';`} />
 
@@ -56,7 +56,7 @@ LOCATION 's3://<target-bucket>/<path>';`} />
 
 Create table as select or insert overwrite for non-Delta sources or when history is not required.
 
-<CodeBlock language="sql" code={`CREATE TABLE <target_catalog>.<schema>.<table>
+<CodeBlock client:visible language="sql" code={`CREATE TABLE <target_catalog>.<schema>.<table>
 AS SELECT * FROM <source_catalog>.<schema>.<table>;`} />
 
 
@@ -64,12 +64,12 @@ AS SELECT * FROM <source_catalog>.<schema>.<table>;`} />
 
 Grants are not portable across accounts because principals are account-scoped. Use a mapping table to replay grants:
 
-<CodeBlock language="sql" filename="grant-export.sql" code={`-- Export source grants
+<CodeBlock client:visible language="sql" filename="grant-export.sql" code={`-- Export source grants
 SELECT table_catalog, table_schema, table_name, grantee, privilege_type, is_grantable
 FROM system.information_schema.table_privileges
 WHERE table_schema NOT IN ('information_schema');}`} />
 
-<CodeBlock language="python" filename="replay-grants.py" code={`import pandas as pd
+<CodeBlock client:visible language="python" filename="replay-grants.py" code={`import pandas as pd
 from databricks.sdk import WorkspaceClient
 
 grants = pd.read_csv("grants.csv")
@@ -111,7 +111,7 @@ The source remains authoritative until the final cutover.
 - Generate DDL and GRANT replay scripts from the information schema.
 - Run grants reconciliation as part of a CI pipeline.
 
-<Checklist title="Metastore migration" items={[
+<Checklist client:visible title="Metastore migration" items={[
   { id: 'ddl', label: 'Export catalog/schema DDL from source' },
   { id: 'create', label: 'Create catalogs and schemas in target' },
   { id: 'tables', label: 'Migrate tables using chosen strategy' },

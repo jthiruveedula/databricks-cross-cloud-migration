@@ -29,7 +29,7 @@ Databricks Workflows is the native orchestrator for notebooks, Python, SQL, and 
 
 ## Export and import
 
-<CodeBlock language="bash" code={`# Export all jobs from source workspace
+<CodeBlock client:visible language="bash" code={`# Export all jobs from source workspace
 databricks jobs list --output json | jq '.jobs[] | {job_id, settings}' > jobs.json
 
 # Create a job in target workspace after editing JSON
@@ -43,7 +43,7 @@ databricks jobs create --json-file job-target.json}`} />
 
 Workspace paths and repos may differ. Use a consistent naming convention and update task notebook paths.
 
-<CodeBlock language="json" code={`"notebook_task": {
+<CodeBlock client:visible language="json" code={`"notebook_task": {
   "notebook_path": "/Shared/migration/<notebook>"
 }`} />
 
@@ -81,7 +81,7 @@ If a target job fails, re-enable the source job and investigate. Do not decommis
 - Use CI/CD to deploy jobs to target environments.
 - Script path and catalog rewrites across job JSON.
 
-<Checklist title="Workflows and jobs" items={[
+<Checklist client:visible title="Workflows and jobs" items={[
   { id: 'export', label: 'Export all job definitions' },
   { id: 'rewrite', label: 'Rewrite cluster, notebook, warehouse, and catalog references' },
   { id: 'create', label: 'Create jobs in target workspace' },

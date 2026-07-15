@@ -26,7 +26,7 @@ A migration is the ideal time to retire the legacy Hive metastore. Databricks gu
 
 Install UCX in a dedicated workspace and run the assessment:
 
-<CodeBlock language="bash" code={`# Install UCX (follow official Databricks documentation for latest version)
+<CodeBlock client:visible language="bash" code={`# Install UCX (follow official Databricks documentation for latest version)
 databricks labs install ucx
 
 # Run assessment workflow
@@ -64,7 +64,7 @@ Keep the original Hive tables until target tables are validated. Do not drop Hiv
 - Use UCX-generated notebooks for bulk upgrades.
 - Schedule upgrade jobs per schema and validate with reconciliation queries.
 
-<Checklist title="Legacy Hive transition" items={[
+<Checklist client:visible title="Legacy Hive transition" items={[
   { id: 'ucx', label: 'Run UCX assessment and review findings' },
   { id: 'critical', label: 'Resolve critical blockers (unsupported runtimes, DBFS paths)' },
   { id: 'upgrade', label: 'Upgrade tables to UC per wave' },

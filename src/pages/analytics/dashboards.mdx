@@ -28,7 +28,7 @@ Dashboards sit on top of the [SQL queries](/analytics/sql-queries) and [SQL ware
 
 ## Migration steps
 
-<CodeBlock language="bash" filename="export_dashboard.sh" code={`# Export a Lakeview dashboard definition
+<CodeBlock client:visible language="bash" filename="export_dashboard.sh" code={`# Export a Lakeview dashboard definition
 databricks lakeview export <dashboard-id> --output dashboard.json
 
 # After rewriting dataset/query references inside dashboard.json:
@@ -56,7 +56,7 @@ Dashboards are configuration; if a migrated dashboard shows wrong data, fix the 
 - Reuse the catalog/warehouse rewrite mapping from [SQL queries](/analytics/sql-queries) so dashboards, queries, and alerts stay consistent instead of drifting.
 - Script a visual-diff check (screenshot comparison) for high-visibility dashboards as part of the pilot validation, not just a manual eyeball check.
 
-<Checklist title="Dashboard migration" items={[
+<Checklist client:visible title="Dashboard migration" items={[
   { id: 'queries-first', label: 'Underlying queries migrated and validated before dashboard migration' },
   { id: 'rewrite', label: 'Dataset/query references rewritten in dashboard definitions' },
   { id: 'bi-tools', label: 'External BI tool connections re-pointed to target warehouse' },

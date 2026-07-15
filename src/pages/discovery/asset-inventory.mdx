@@ -43,7 +43,7 @@ A Databricks estate contains dozens of asset types, each with different portabil
 
 ## Discovery queries
 
-<CodeBlock language="sql" filename="catalog-discovery.sql" code={`-- Catalogs, schemas, tables, and volumes
+<CodeBlock client:visible language="sql" filename="catalog-discovery.sql" code={`-- Catalogs, schemas, tables, and volumes
 SELECT catalog_name, schema_name, table_name, table_type, data_source_format, storage_location
 FROM system.information_schema.tables
 WHERE table_schema NOT IN ('information_schema');
@@ -75,7 +75,7 @@ Asset inventory is read-only. If assets are missed, add them to the next wave or
 - Use UCX to scan legacy Hive and DBFS usage.
 - Use the Databricks CLI to export workspace objects and job definitions in bulk.
 
-<Checklist title="Asset inventory" items={[
+<Checklist client:visible title="Asset inventory" items={[
   { id: 'tables', label: 'Inventory all catalogs, schemas, tables, and views' },
   { id: 'grants', label: 'Export grants and ownership for all objects' },
   { id: 'compute', label: 'Inventory clusters, warehouses, pools, and policies' },

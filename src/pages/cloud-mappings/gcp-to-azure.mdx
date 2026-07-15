@@ -35,7 +35,7 @@ Google Cloud IAM, GCS paths, and Private Service Connect have no direct Azure eq
 
 ## Storage and path rewrite
 
-<Tabs tabs={[
+<Tabs client:visible tabs={[
   {
     label: 'Path pattern',
     content: 'GCS: gs://bucket/path  →  ADLS Gen2: abfss://container@account.dfs.core.windows.net/path. Decide the storage-account-to-container topology before copying — Azure typically groups several GCS buckets worth of data under containers in one shared storage account per environment.'
@@ -46,7 +46,7 @@ Google Cloud IAM, GCS paths, and Private Service Connect have no direct Azure eq
   },
 ]} />
 
-<CodeBlock language="python" filename="path_rewrite.py" code={`MAPPING = {
+<CodeBlock client:visible language="python" filename="path_rewrite.py" code={`MAPPING = {
     "gs://prod-raw-us-central1": "abfss://raw@prodadls.dfs.core.windows.net",
     "gs://prod-curated-us-central1": "abfss://curated@prodadls.dfs.core.windows.net",
 }
@@ -85,7 +85,7 @@ Keep the GCP workspace, GCS storage, and Google Cloud Identity federation live t
 - Drive ADLS container creation and Entra ID app registration from Terraform using the [Terraform patterns](/templates/terraform-patterns) as a base module.
 - Generate the path-rewrite mapping from the [asset inventory](/discovery/asset-inventory) output rather than hand-maintaining it.
 
-<Checklist title="GCP → Azure cutover readiness" items={[
+<Checklist client:visible title="GCP → Azure cutover readiness" items={[
   { id: 'account', label: 'Target Azure subscription, VNet, and Unity Catalog metastore provisioned' },
   { id: 'identity', label: 'Entra ID federation validated with a pilot group' },
   { id: 'storage', label: 'ADLS Gen2 containers provisioned and Deep Clone replication complete' },
