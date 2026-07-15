@@ -1,0 +1,95 @@
+---
+title: 'AWS to Azure'
+layout: ../../layouts/Layout.astro
+description: 'Step-by-step construct mapping and sequencing for migrating Databricks from AWS to Azure.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Tabs from '../../components/Tabs.tsx';
+
+# AWS → Azure
+
+AWS IAM roles, S3 paths, and VPC PrivateLink connections do not carry over to Azure — identity, storage, and networking are rebuilt against Entra ID, ADLS Gen2, and VNet Private Link. See the [cross-cloud equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix) for the full reference; this page sequences the AWS → Azure-specific work.
+
+## Sequencing
+
+1. **Foundation first.** Provision the Azure subscription(s), resource groups, Databricks account-level Unity Catalog metastore, VNet, and Entra ID app registrations before touching data.
+2. **Identity before data.** Federate Entra ID so users and groups resolve identically before any table is registered in the new metastore.
+3. **Storage and paths.** Provision ADLS Gen2 containers 1:1 with S3 buckets, replicate data, then rewrite paths.
+4. **Compute and jobs last.** Rebuild cluster policies, init scripts, and Workflows/DLT pipelines once storage and identity are validated.
+
+## Identity federation
+
+| AWS construct | Azure equivalent | Notes |
+|---|---|---|
+| IAM Identity Center / SSO | Entra ID (Azure AD) | Group names and IDs rarely match; rebuild the mapping explicitly |
+| Instance profile (cluster) | Managed identity | Attach at the cluster/workspace level, not per-notebook |
+| IAM role + external ID (automation) | Entra ID app registration / service principal | Used by CI/CD and Terraform |
+| IAM Identity Center SCIM | Entra ID provisioning | Audit for orphaned groups after cutover |
+
+<Callout variant="warning" title="Least-privilege redesign, not a copy">
+  An AWS IAM role's policy document does not translate line-for-line into an Entra ID role assignment. Redesign least-privilege access against Azure's RBAC model rather than attempting a mechanical translation.
+</Callout>
+
+## Storage and path rewrite
+
+<Tabs tabs={[
+  {
+    label: 'Path pattern',
+    content: 'S3: s3://bucket/path  →  ADLS Gen2: abfss://container@account.dfs.core.windows.net/path. One S3 bucket typically becomes one container under a shared storage account per environment — decide the storage-account-to-container topology before copying data.'
+  },
+  {
+    label: 'aws s3 sync → azcopy',
+    content: 'Prefer Delta Deep Clone for table data over generic object copy — it preserves Delta transaction history and supports incremental re-runs without re-copying unchanged files.'
+  },
+]} />
+
+<CodeBlock language="python" filename="path_rewrite.py" code={`MAPPING = {
+    "s3://prod-raw-us-east-1": "abfss://raw@prodadls.dfs.core.windows.net",
+    "s3://prod-curated-us-east-1": "abfss://curated@prodadls.dfs.core.windows.net",
+}
+
+def rewrite_path(path: str) -> str:
+    for s3_prefix, azure_prefix in MAPPING.items():
+        if path.startswith(s3_prefix):
+            return path.replace(s3_prefix, azure_prefix, 1)
+    raise ValueError(f"No mapping for path: {path}")
+`} />
+
+## Networking
+
+- Replace **VPC PrivateLink** with **VNet + Azure Private Link**; the Databricks control-plane connection is re-established per workspace.
+- AWS NAT Gateway egress allow-lists do not transfer — recreate them against the Azure NAT Gateway.
+- If the source ran clusters with no public IP, replicate that with **secure cluster connectivity** on Azure rather than defaulting to public subnets.
+
+## Compute and jobs
+
+- Rebuild cluster policies against Azure VM SKUs — EC2 instance types (e.g. `m5.xlarge`) have no direct Azure match; size by vCPU/memory, not by name.
+- Re-point managed identities (not instance profiles) on every cluster policy and job cluster spec.
+- Re-create Workflows/DLT pipelines against the new Unity Catalog catalogs — job IDs do not migrate; re-establish ownership and alerting.
+
+## Validation
+
+- Reconcile row counts and checksums between S3-backed source tables and their ADLS-backed Unity Catalog counterparts before cutover.
+- Pilot the full IAM mapping with a read-only workload first — see [IAM mapping](/security/iam-mapping).
+- Confirm CI/CD service principals authenticate against the new Entra ID app registration before promoting any pipeline.
+
+## Rollback
+
+Keep the AWS workspace, S3 storage, and IAM Identity Center federation live through hypercare. Rollback is DNS/endpoint redirection back to AWS — do not decommission source IAM roles or buckets until the Azure target passes business validation.
+
+## Automation opportunity
+
+- Drive ADLS container creation and Entra ID app registration from Terraform using the [Terraform patterns](/templates/terraform-patterns) as a base module.
+- Generate the path-rewrite mapping from the [asset inventory](/discovery/asset-inventory) output rather than hand-maintaining it.
+
+<Checklist title="AWS → Azure cutover readiness" items={[
+  { id: 'account', label: 'Target Azure subscription, VNet, and Unity Catalog metastore provisioned' },
+  { id: 'identity', label: 'Entra ID federation validated with a pilot group' },
+  { id: 'storage', label: 'ADLS Gen2 containers provisioned and Deep Clone replication complete' },
+  { id: 'paths', label: 'Path-rewrite mapping applied and validated against a sample workload' },
+  { id: 'network', label: 'Private Link and secure cluster connectivity confirmed' },
+  { id: 'rollback', label: 'AWS source left running with documented rollback path' },
+]} />

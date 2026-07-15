@@ -1,0 +1,95 @@
+---
+title: 'GCP to Azure'
+layout: ../../layouts/Layout.astro
+description: 'Step-by-step construct mapping and sequencing for migrating Databricks from GCP to Azure.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Tabs from '../../components/Tabs.tsx';
+
+# GCP → Azure
+
+Google Cloud IAM, GCS paths, and Private Service Connect have no direct Azure equivalent — identity, storage, and networking are rebuilt against Entra ID, ADLS Gen2, and VNet Private Link. See the [cross-cloud equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix) for the full reference; this page sequences the GCP → Azure-specific work.
+
+## Sequencing
+
+1. **Foundation first.** Provision the Azure subscription(s), Databricks account-level Unity Catalog metastore, VNet, and Entra ID app registrations before touching data.
+2. **Identity before data.** Federate Entra ID so users and groups resolve identically before any table is registered in the new metastore.
+3. **Storage and paths.** Provision ADLS Gen2 containers 1:1 with GCS buckets, replicate data, then rewrite paths.
+4. **Compute and jobs last.** Rebuild cluster policies, init scripts, and Workflows/DLT pipelines once storage and identity are validated.
+
+## Identity federation
+
+| GCP construct | Azure equivalent | Notes |
+|---|---|---|
+| Google Cloud Identity / Workspace SSO | Entra ID (Azure AD) | Group names and IDs rarely match; rebuild the mapping explicitly |
+| Service account attached to cluster | Managed identity | Attach at the cluster/workspace level, not per-notebook |
+| Service account with key / impersonation | Entra ID app registration / service principal | Replace long-lived JSON keys with Entra ID client credentials + Key Vault |
+| Google Workspace SCIM | Entra ID provisioning | Audit for orphaned groups after cutover |
+
+<Callout variant="warning" title="Project boundary vs. subscription boundary">
+  A GCP project is a much smaller isolation unit than an Azure subscription. Don't assume a 1:1 project-to-subscription mapping — consolidate or split boundaries deliberately based on your target governance model, not on how GCP happened to be organized.
+</Callout>
+
+## Storage and path rewrite
+
+<Tabs tabs={[
+  {
+    label: 'Path pattern',
+    content: 'GCS: gs://bucket/path  →  ADLS Gen2: abfss://container@account.dfs.core.windows.net/path. Decide the storage-account-to-container topology before copying — Azure typically groups several GCS buckets worth of data under containers in one shared storage account per environment.'
+  },
+  {
+    label: 'gsutil/gcloud storage → azcopy',
+    content: 'Prefer Delta Deep Clone for table data over generic object copy — it preserves Delta transaction history and supports incremental re-runs.'
+  },
+]} />
+
+<CodeBlock language="python" filename="path_rewrite.py" code={`MAPPING = {
+    "gs://prod-raw-us-central1": "abfss://raw@prodadls.dfs.core.windows.net",
+    "gs://prod-curated-us-central1": "abfss://curated@prodadls.dfs.core.windows.net",
+}
+
+def rewrite_path(path: str) -> str:
+    for gcs_prefix, azure_prefix in MAPPING.items():
+        if path.startswith(gcs_prefix):
+            return path.replace(gcs_prefix, azure_prefix, 1)
+    raise ValueError(f"No mapping for path: {path}")
+`} />
+
+## Networking
+
+- Replace **VPC + Private Service Connect** with **VNet + Azure Private Link**; the Databricks control-plane connection is re-established per workspace.
+- Cloud NAT egress rules do not transfer — recreate them against the Azure NAT Gateway.
+- If the source used Private Google Access (no public IPs), replicate that with **secure cluster connectivity** on Azure.
+
+## Compute and jobs
+
+- Rebuild cluster policies against Azure VM SKUs — GCP machine types have no direct Azure match; size by vCPU/memory, not by name.
+- Re-point managed identities (not service accounts) on every cluster policy and job cluster spec.
+- Re-create Workflows/DLT pipelines against the new Unity Catalog catalogs — job IDs do not migrate; re-establish ownership and alerting.
+
+## Validation
+
+- Reconcile row counts and checksums between GCS source tables and their ADLS-backed Unity Catalog counterparts before cutover.
+- Pilot the full IAM mapping with a read-only workload first — see [IAM mapping](/security/iam-mapping).
+- Confirm CI/CD identities authenticate against the new Entra ID app registration before promoting any pipeline.
+
+## Rollback
+
+Keep the GCP workspace, GCS storage, and Google Cloud Identity federation live through hypercare. Rollback is DNS/endpoint redirection back to GCP — do not decommission source service accounts or buckets until the Azure target passes business validation.
+
+## Automation opportunity
+
+- Drive ADLS container creation and Entra ID app registration from Terraform using the [Terraform patterns](/templates/terraform-patterns) as a base module.
+- Generate the path-rewrite mapping from the [asset inventory](/discovery/asset-inventory) output rather than hand-maintaining it.
+
+<Checklist title="GCP → Azure cutover readiness" items={[
+  { id: 'account', label: 'Target Azure subscription, VNet, and Unity Catalog metastore provisioned' },
+  { id: 'identity', label: 'Entra ID federation validated with a pilot group' },
+  { id: 'storage', label: 'ADLS Gen2 containers provisioned and Deep Clone replication complete' },
+  { id: 'paths', label: 'Path-rewrite mapping applied and validated against a sample workload' },
+  { id: 'network', label: 'Private Link and secure cluster connectivity confirmed' },
+  { id: 'rollback', label: 'GCP source left running with documented rollback path' },
+]} />
