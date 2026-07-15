@@ -12,7 +12,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 The pilot is not a demo — it is the first real execution of your migration runbook, at small enough scale that a mistake costs hours instead of weeks. Everything the pilot doesn't catch, bulk migration will catch at 10x the cost. See [wave planning](/execution/wave-planning) for how the pilot fits into the overall wave sequence.
 
-<Callout variant="prerequisite" title="What must exist before the pilot starts">
+<Callout client:visible variant="prerequisite" title="What must exist before the pilot starts">
   Target foundation (metastore, IAM/identity federation, networking, storage) must already be provisioned and validated per your [cloud mapping](/cloud-mappings/cross-cloud-equivalency-matrix) before you pick a pilot workload. The pilot proves the runbook, not the foundation.
 </Callout>
 
@@ -25,7 +25,7 @@ Pick a workload that is:
 - **Small enough** to fully reconcile by hand if automation fails.
 - **Owned by an engaged team** willing to validate results and report friction quickly.
 
-<Callout variant="warning" title="Don't pick the easiest workload">
+<Callout client:visible variant="warning" title="Don't pick the easiest workload">
   A pilot with no dependencies, no downstream consumers, and no governance grants proves nothing about the parts of the runbook that will actually be hard. Pick something with at least one dependency and one Unity Catalog grant to exercise.
 </Callout>
 

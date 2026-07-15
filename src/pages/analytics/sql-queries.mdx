@@ -21,7 +21,7 @@ Saved queries in Databricks SQL reference a warehouse, a catalog/schema, and oft
 | Query folders/permissions | Recreate folder structure; replay ACLs with mapped principals (see [grants and roles](/governance/grants-and-roles)) |
 | Scheduled queries (query-level schedules, not full jobs) | Recreate schedule against target warehouse; verify timezone handling |
 
-<Callout variant="warning" title="Catalog references are the most common breakage">
+<Callout client:visible variant="warning" title="Catalog references are the most common breakage">
   A saved query hardcoding `prod_catalog.sales.orders` breaks the moment the target catalog is named differently, or the moment `prod_catalog` in target actually refers to a different schema layout than source. Standardize catalog naming across clouds during [Unity Catalog strategy](/governance/unity-catalog-strategy) planning, before query migration, not after.
 </Callout>
 

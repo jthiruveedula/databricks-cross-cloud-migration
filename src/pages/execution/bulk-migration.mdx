@@ -12,7 +12,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 Bulk migration is the pilot's runbook, repeated across every remaining wave from [wave planning](/execution/wave-planning) — at scale, on a schedule, with the same reconciliation rigor. The goal at this stage is throughput and consistency, not discovery; anything still being discovered here should have surfaced during the [pilot](/execution/pilot).
 
-<Callout variant="prerequisite" title="Don't start bulk migration on an unvalidated runbook">
+<Callout client:visible variant="prerequisite" title="Don't start bulk migration on an unvalidated runbook">
   If the pilot retro found gaps in tooling, IAM mapping, or reconciliation, close them before wave 1 — bulk migration multiplies whatever is broken in the runbook across every remaining workload.
 </Callout>
 
@@ -39,7 +39,7 @@ if failed:
     raise RuntimeError(f"Reconciliation failed for: {failed}")
 `} />
 
-<Callout variant="warning" title="Parallelism has a ceiling">
+<Callout client:visible variant="warning" title="Parallelism has a ceiling">
   Cloud storage APIs and Unity Catalog metastore operations both rate-limit. Tune `max_workers` against your source and target cloud's actual throttling limits — a naive "migrate everything at once" run degrades into throttling errors, not faster migration.
 </Callout>
 

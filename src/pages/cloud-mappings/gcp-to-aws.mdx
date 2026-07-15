@@ -29,7 +29,7 @@ Google Cloud IAM, GCS paths, and Private Service Connect have no direct AWS equi
 | Service account with key / impersonation | IAM role + external ID | Replace long-lived JSON keys with short-lived STS tokens |
 | Google Workspace SCIM | SCIM via IAM Identity Center | Audit for orphaned groups after cutover |
 
-<Callout variant="warning" title="Project boundary vs. account boundary">
+<Callout client:visible variant="warning" title="Project boundary vs. account boundary">
   A GCP project is a much smaller isolation unit than an AWS account. Don't assume a 1:1 project-to-account mapping — consolidate or split boundaries deliberately based on your target governance model (AWS Organizations OUs), not on how GCP happened to be organized.
 </Callout>
 

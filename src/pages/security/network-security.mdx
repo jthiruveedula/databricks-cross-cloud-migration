@@ -13,7 +13,7 @@ import Tabs from '../../components/Tabs.tsx';
 
 Network security cannot be exported and imported — every construct (private connectivity, egress control, DNS) is rebuilt natively against the target cloud's networking primitives. See the [cross-cloud equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix#networking) for the construct-level mapping; this page covers the security posture to preserve while rebuilding it.
 
-<Callout variant="prerequisite" title="Match posture, not just topology">
+<Callout client:visible variant="prerequisite" title="Match posture, not just topology">
   The goal isn't "a VPC exists in the target cloud" — it's that the target network enforces the *same security posture* as source: no public IPs on compute, private control-plane connectivity, and explicit (not default-allow) egress.
 </Callout>
 

@@ -12,7 +12,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 A cross-cloud migration creates a discontinuity in your audit trail: source-cloud logs stop being the system of record, and target-cloud logs start — at different times, in different formats, in different tools. Compliance and audit teams need this discontinuity documented and bridged, not discovered during the next audit cycle.
 
-<Callout variant="prerequisite" title="Loop in compliance before cutover, not after">
+<Callout client:visible variant="prerequisite" title="Loop in compliance before cutover, not after">
   If any migrated workload is in scope for SOC 2, HIPAA, PCI, or similar, involve compliance/audit stakeholders during planning — not as a post-cutover notification. Evidence-collection gaps during the transition window are hard to backfill after the fact.
 </Callout>
 
@@ -47,7 +47,7 @@ Before hypercare exit, confirm with compliance/security stakeholders:
 - Access review processes have been updated to reference the target identity system.
 - Any compliance certifications scoped to the source environment have a documented transition plan to the target.
 
-<Callout variant="decision" title="Don't decommission source logs on the same timeline as source compute">
+<Callout client:visible variant="decision" title="Don't decommission source logs on the same timeline as source compute">
   Compute and storage decommission (see [hypercare](/execution/hypercare)) typically happens faster than audit-log retention requirements allow. Export and archive logs independently of infrastructure decommission — the log retention clock rarely matches the infrastructure teardown clock.
 </Callout>
 

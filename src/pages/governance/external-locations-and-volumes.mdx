@@ -50,7 +50,7 @@ COMMENT 'Managed non-tabular data';}`} />
 
 ## Migrating data from mounts
 
-<Callout variant="warning" title="Clean up mounts after verification">
+<Callout client:visible variant="warning" title="Clean up mounts after verification">
   After migrating data to external locations and volumes, update all notebooks and jobs to reference the new paths, then unmount and remove legacy DBFS mounts to avoid drift.
 </Callout>
 

@@ -29,7 +29,7 @@ Google Cloud IAM, GCS paths, and Private Service Connect have no direct Azure eq
 | Service account with key / impersonation | Entra ID app registration / service principal | Replace long-lived JSON keys with Entra ID client credentials + Key Vault |
 | Google Workspace SCIM | Entra ID provisioning | Audit for orphaned groups after cutover |
 
-<Callout variant="warning" title="Project boundary vs. subscription boundary">
+<Callout client:visible variant="warning" title="Project boundary vs. subscription boundary">
   A GCP project is a much smaller isolation unit than an Azure subscription. Don't assume a 1:1 project-to-subscription mapping — consolidate or split boundaries deliberately based on your target governance model, not on how GCP happened to be organized.
 </Callout>
 

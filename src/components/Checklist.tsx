@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import RevealOnView from './motion/RevealOnView';
 
 interface Item {
   id: string;
@@ -23,7 +24,7 @@ export default function Checklist({ title, items }: Props) {
   const progress = Math.round((Object.values(state).filter(Boolean).length / items.length) * 100);
 
   return (
-    <div className="my-6 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-1">
+    <RevealOnView className="my-6 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-1">
       {title && (
         <div className="flex items-center justify-between px-4 pt-3">
           <h4 className="text-sm font-semibold text-[var(--ink)]">{title}</h4>
@@ -54,6 +55,6 @@ export default function Checklist({ title, items }: Props) {
           </label>
         ))}
       </div>
-    </div>
+    </RevealOnView>
   );
 }

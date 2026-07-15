@@ -29,7 +29,7 @@ Moving Databricks from Azure to AWS is a platform reset, not a lift-and-shift. E
 | Service principal (automation) | IAM role + external ID | Used by CI/CD and Terraform, not interactive users |
 | Entra ID SCIM provisioning | SCIM via IAM Identity Center | Re-map group claims; audit for orphaned groups post-migration |
 
-<Callout variant="warning" title="Group membership drift">
+<Callout client:visible variant="warning" title="Group membership drift">
   Entra ID security groups synced to Databricks do not carry over their AWS IAM Identity Center group IDs. Rebuild the group-to-grant mapping in Unity Catalog explicitly — do not assume SCIM re-provisioning preserves grants.
 </Callout>
 

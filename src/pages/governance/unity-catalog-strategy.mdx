@@ -22,7 +22,7 @@ Unity Catalog (UC) is the shared governance layer across Databricks clouds. Desi
 
 ## Regional constraints
 
-<Callout variant="warning" title="Metastores are regional">
+<Callout client:visible variant="warning" title="Metastores are regional">
   You cannot move a metastore from one region to another. Cross-cloud migration always requires creating a new metastore in the target account and region, then replicating catalogs, schemas, tables, and grants.
 </Callout>
 
@@ -56,7 +56,7 @@ If active-active or DR is required, replicate Delta tables and use a second meta
 
 ## Account-level identity
 
-<Callout variant="prerequisite" title="Convert groups before migration">
+<Callout client:visible variant="prerequisite" title="Convert groups before migration">
   Unity Catalog centralizes identity at the account level. Convert workspace-local groups to account-level groups before attaching workspaces to the target metastore. This avoids broken grants and duplicated group names.
 </Callout>
 

@@ -12,7 +12,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 Dashboards sit on top of the [SQL queries](/analytics/sql-queries) and [SQL warehouses](/compute/sql-warehouses) covered elsewhere — migrating a dashboard means migrating the queries it depends on first, then the dashboard definition itself, then confirming visual output actually matches.
 
-<Callout variant="warning" title="A dashboard that loads is not the same as a dashboard that's correct">
+<Callout client:visible variant="warning" title="A dashboard that loads is not the same as a dashboard that's correct">
   A Lakeview dashboard can render successfully against target while quietly showing stale, partial, or wrongly-scoped data if any underlying query has an unrewritten catalog reference. Visual parity checks (below) are not optional polish — they're the actual validation for this asset type.
 </Callout>
 

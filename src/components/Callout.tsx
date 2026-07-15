@@ -1,5 +1,6 @@
 import React from 'react';
 import { Info, AlertTriangle, CheckCircle, Lightbulb, ShieldAlert } from 'lucide-react';
+import RevealOnView from './motion/RevealOnView';
 
 type Variant = 'note' | 'warning' | 'tip' | 'prerequisite' | 'decision';
 
@@ -29,12 +30,12 @@ export default function Callout({ variant = 'note', title, children }: Props) {
   const Icon = icons[variant];
   const label = title ?? variant.charAt(0).toUpperCase() + variant.slice(1);
   return (
-    <div className={`my-6 rounded-r-lg border-l-4 p-4 ${styles[variant]}`}>
+    <RevealOnView x={-12} y={0} className={`my-6 rounded-r-lg border-l-4 p-4 ${styles[variant]}`}>
       <div className="mb-2 flex items-center gap-2 font-semibold">
         <Icon className="h-4 w-4" />
         <span>{label}</span>
       </div>
       <div className="text-sm leading-relaxed opacity-90">{children}</div>
-    </div>
+    </RevealOnView>
   );
 }

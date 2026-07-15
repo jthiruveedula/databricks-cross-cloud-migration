@@ -47,7 +47,7 @@ For pipelines with streaming sources:
 - Starting fresh may reprocess historical data; ensure idempotency.
 - If copying checkpoints, update paths to target storage.
 
-<Callout variant="warning" title="Checkpoints are not portable">
+<Callout client:visible variant="warning" title="Checkpoints are not portable">
   DLT checkpoints contain absolute paths and offsets. Recreating them in the target without validation can cause data duplication or loss.
 </Callout>
 

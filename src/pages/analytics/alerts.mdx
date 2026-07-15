@@ -12,7 +12,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 SQL alerts are easy to under-prioritize during migration because they're invisible until they fail to fire — unlike a dashboard or query, no one looks at an alert on a normal day. That makes a silently broken alert during migration especially dangerous: the first sign of trouble is often the incident the alert was supposed to catch.
 
-<Callout variant="warning" title="A missing alert is a silent failure, not a visible one">
+<Callout client:visible variant="warning" title="A missing alert is a silent failure, not a visible one">
   Track every migrated alert with the same rigor as a migrated job. An alert that didn't get re-created, or that references a now-broken query, produces no error message anywhere — it just doesn't fire when it should.
 </Callout>
 

@@ -12,7 +12,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 The [asset inventory](/discovery/asset-inventory) tells you *what* exists. Dependency mapping tells you *what breaks* if you migrate one piece without the others — and it's the input [wave planning](/execution/wave-planning) actually needs, since waves are built around dependency clusters, not asset types.
 
-<Callout variant="warning" title="The most common wave-planning mistake">
+<Callout client:visible variant="warning" title="The most common wave-planning mistake">
   Grouping workloads by asset type ("migrate all the tables first, then all the jobs") ignores dependencies and guarantees a wave that can't run end to end. Group by dependency cluster instead — a job and every table, secret, and cluster policy it touches move together.
 </Callout>
 

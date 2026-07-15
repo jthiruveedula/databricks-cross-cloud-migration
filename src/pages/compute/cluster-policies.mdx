@@ -12,7 +12,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 [Cluster migration](/compute/cluster-migration) covers recreating clusters themselves; this page is about the policies that constrain them — the actual enforcement point for cost control, security posture, and compliance in a Databricks workspace. A cluster policy migrated as a literal copy of the source JSON will reference the wrong node types, the wrong instance profile/service account, and often the wrong security defaults for the target cloud.
 
-<Callout variant="prerequisite" title="Policies are a governance decision, not a technical translation">
+<Callout client:visible variant="prerequisite" title="Policies are a governance decision, not a technical translation">
   Use the migration as an opportunity to tighten policies you've been meaning to fix, not just to reproduce whatever existed on source — a policy that was "temporarily" permissive on day one of the source environment shouldn't be carried forward as permanent policy on the target.
 </Callout>
 

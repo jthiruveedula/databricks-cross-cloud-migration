@@ -12,7 +12,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 Creating the target metastore, catalogs, and schemas from [Unity Catalog strategy](/governance/unity-catalog-strategy) only reproduces structure. Grants are what make data usable — and they are the part most teams under-budget time for, because there is no bulk "copy grants" operation across metastores.
 
-<Callout variant="warning" title="Grants do not travel with data">
+<Callout client:visible variant="warning" title="Grants do not travel with data">
   Cloning a table with Delta Deep Clone copies data and history, not Unity Catalog grants. Every `GRANT` statement on the source metastore must be re-issued explicitly against the target — plan for this as its own migration step, not an assumed side effect of data replication.
 </Callout>
 
@@ -60,7 +60,7 @@ statements = [translate_grant(r) for r in source_grants]
 - Use Unity Catalog groups, not individual users, as grantees everywhere possible — it's the difference between updating one group membership and rewriting grants when someone changes teams.
 - Keep a `data-engineering-admin`-style ownership group per domain, separate from the broader read-access group, so ownership transfer doesn't require re-granting every privilege.
 
-<Callout variant="tip" title="Grant catalogs and schemas before tables">
+<Callout client:visible variant="tip" title="Grant catalogs and schemas before tables">
   If you grant table-level access before the schema exists, or in the wrong order, some Unity Catalog operations fail with confusing permission errors. Apply grants top-down: catalog → schema → table/view/volume.
 </Callout>
 
