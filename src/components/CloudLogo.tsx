@@ -6,22 +6,27 @@ import { BRAND_ICONS } from './logos/brandIcons';
 
 type Cloud = 'aws' | 'azure' | 'gcp';
 
+const CLOUD_TO_KEY: Record<Cloud, string> = {
+  aws: 'aws',
+  azure: 'azure',
+  gcp: 'googlecloud',
+};
+
 interface CloudStyle {
   label: string;
   bg: string;
   ring: string;
 }
 
-// AWS and Microsoft Azure marks are trademark-restricted and not redistributed by icon
-// libraries, so those two render as clean brand-color wordmark badges. GCP's mark is
-// published under Google's open terms (via simple-icons), so it renders as the real glyph.
+// All three cloud logos render as actual brand icons via BrandGlyph, sourced
+// from official images (GCP), Wikimedia SVG logos (AWS, Azure).
 const STYLES: Record<Cloud, CloudStyle> = {
   aws: { label: 'AWS', bg: '#FF9900', ring: 'rgba(255,153,0,0.35)' },
   azure: { label: 'Azure', bg: '#0078D4', ring: 'rgba(0,120,212,0.35)' },
   gcp: { label: 'GCP', bg: '#4285F4', ring: 'rgba(66,133,244,0.35)' },
 };
 
-// Theme-aware color overrides for better dark mode contrast
+// Theme-aware badge background/ring for better dark mode contrast
 const THEME_STYLES: Record<Cloud, { light: CloudStyle; dark: CloudStyle }> = {
   aws: {
     light: { label: 'AWS', bg: '#FF9900', ring: 'rgba(255,153,0,0.35)' },
@@ -52,7 +57,6 @@ export default function CloudLogo({
   const isDark = theme === 'dark';
   const style = isDark ? THEME_STYLES[cloud].dark : THEME_STYLES[cloud].light;
   const dims = size === 'sm' ? 'h-8 w-8' : size === 'lg' ? 'h-14 w-14' : 'h-12 w-12';
-  const textSize = size === 'sm' ? 'text-[9px]' : size === 'lg' ? 'text-sm' : 'text-xs';
 
   return (
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
@@ -64,11 +68,7 @@ export default function CloudLogo({
         aria-label={`${style.label} logo`}
         role="img"
       >
-        {cloud === 'gcp' ? (
-          <BrandGlyph icon={BRAND_ICONS.googlecloud} className="h-6 w-6 text-white" />
-        ) : (
-          <span className={`font-bold uppercase tracking-tight text-white ${textSize}`}>{style.label}</span>
-        )}
+        <BrandGlyph icon={BRAND_ICONS[CLOUD_TO_KEY[cloud]]} className="h-6 w-6 text-white" />
       </motion.span>
       {showLabel && <span className="text-sm font-semibold text-[var(--ink)]">{style.label}</span>}
     </span>

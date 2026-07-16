@@ -37,7 +37,7 @@ export const BRAND_ICONS: Record<string, BrandIcon> = {
   },
   azure: {
     type: 'image',
-    url: 'https://upload.wikimedia.org/wikipedia/commons/9/93/Microsoft_Azure_Logo.svg',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/f/fa/Microsoft_Azure.svg',
     width: 24,
     height: 24,
   },
