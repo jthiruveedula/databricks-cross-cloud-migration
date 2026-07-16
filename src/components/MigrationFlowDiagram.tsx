@@ -189,6 +189,15 @@ export default function MigrationFlowDiagram() {
         }
       `}</style>
 
+      {/* Hover tooltips - adding title attributes for native tooltips */}
+      {PHASES.map((p, i) => {
+        const c = phaseCenters[i];
+        if (!c) return null;
+        return (
+          <g key={`tooltip-${i}`} transform={`translate(${c.cx - CARD_W/2 + 10}, ${c.cy - CARD_H/2 - 8})`}></g>
+        );
+      })}
+
       {/* Top bar */}
       <div className="mb-4 flex items-center justify-between">
         <div className="text-sm font-medium text-[var(--ink-muted)]">
