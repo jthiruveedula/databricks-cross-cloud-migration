@@ -1,7 +1,11 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Route } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+import BrandGlyph from './BrandGlyph';
+import { BRAND_ICONS } from './logos/brandIcons';
 import { withBase } from '../lib/paths';
+
+const CLOUD_LOGOS = ['aws', 'azure', 'googlecloud'] as const;
 
 export default function Hero() {
   return (
@@ -22,6 +26,19 @@ export default function Hero() {
             <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--accent)]" />
           </span>
           Enterprise runbook v1.0
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.05, ease: 'easeOut' }}
+          className="mb-6 flex items-center justify-center gap-5"
+        >
+          {CLOUD_LOGOS.map((key, i) => (
+            <React.Fragment key={key}>
+              {i > 0 && <span className="text-[var(--ink-subtle)] text-lg">+</span>}
+              <BrandGlyph icon={BRAND_ICONS[key]} className="h-8 w-8 opacity-70 grayscale hover:opacity-100 hover:grayscale-0 transition-all duration-300" />
+            </React.Fragment>
+          ))}
         </motion.div>
         <motion.h1
           initial={{ opacity: 0, y: 16 }}

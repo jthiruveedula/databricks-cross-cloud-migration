@@ -1,5 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import BrandGlyph from './BrandGlyph';
+import { BRAND_ICONS } from './logos/brandIcons';
 import { withBase } from '../lib/paths';
 
 export default function Footer() {
@@ -12,9 +14,12 @@ export default function Footer() {
       className="border-t border-[var(--border)] bg-[var(--surface-elevated)] px-6 py-10 text-sm text-[var(--ink-muted)]"
     >
       <div className="mx-auto flex max-w-6xl flex-col justify-between gap-6 md:flex-row">
-        <div>
-          <p className="font-semibold text-[var(--ink)]">Databricks Cross-Cloud Migration Runbook</p>
-          <p className="mt-1">Enterprise-grade guidance for Azure, AWS, and GCP migrations.</p>
+        <div className="flex items-center gap-3">
+          <BrandGlyph icon={BRAND_ICONS.databricks} className="h-6 w-6" brandColor />
+          <div>
+            <p className="font-semibold text-[var(--ink)]">Databricks Cross-Cloud Migration Runbook</p>
+            <p className="mt-1">Enterprise-grade guidance for Azure, AWS, and GCP migrations.</p>
+          </div>
         </div>
         <div className="flex gap-6">
           {[
