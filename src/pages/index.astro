@@ -2,8 +2,9 @@
 import Layout from '../layouts/Layout.astro';
 import Card from '../components/Card.tsx';
 import MigrationPlanner from '../components/MigrationPlanner.tsx';
+import MigrationFlowDiagram from '../components/MigrationFlowDiagram.tsx';
 import { withBase } from '../lib/paths';
-import { ArrowRight, BookOpen, Cloud, Shield, Cpu, Workflow, ClipboardList, Activity, Wrench } from 'lucide-react';
+import { ArrowRight, BookOpen, Cloud, Shield, Cpu, Workflow, ClipboardList, Activity, Wrench, Route } from 'lucide-react';
 
 const sections = [
   { title: 'Overview', description: 'Migration drivers, archetypes, and decision framework.', href: '/overview/what-is-cross-cloud-migration', icon: BookOpen },
@@ -46,6 +47,14 @@ const sections = [
         </a>
       </div>
     </div>
+  </div>
+
+  <div class="my-12">
+    <div class="mb-4 flex items-center gap-2">
+      <Route className="h-5 w-5 text-[var(--accent)]" />
+      <h2 class="text-lg font-semibold text-[var(--ink)]">End-to-end migration flow</h2>
+    </div>
+    <MigrationFlowDiagram client:load />
   </div>
 
   <div class="my-12">
