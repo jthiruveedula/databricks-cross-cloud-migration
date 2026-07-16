@@ -17,6 +17,7 @@ export default function Card({ href, title, description, icon, className = '' }:
       className={`
         group relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-6
         shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover hover:border-[var(--accent)]/30
+        active:scale-[0.98] active:shadow-none
         ${href ? 'cursor-pointer' : ''} ${className}
       `}
     >
@@ -29,7 +30,7 @@ export default function Card({ href, title, description, icon, className = '' }:
         )}
         <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold text-[var(--ink)]">
           {title}
-          {href && <ArrowRight className="h-4 w-4 opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100" />}
+          {href && <ArrowRight className="h-4 w-4 opacity-0 transition-all group-hover:translate-x-1 group-hover:scale-110 group-hover:opacity-100" />}
         </h3>
         <p className="text-sm text-[var(--ink-muted)]">{description}</p>
       </div>

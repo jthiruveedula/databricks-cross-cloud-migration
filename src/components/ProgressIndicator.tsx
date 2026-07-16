@@ -15,10 +15,19 @@ export default function ProgressIndicator() {
   }, []);
 
   return (
-    <div className="fixed left-0 top-[var(--header-height)] z-50 h-0.5 w-full bg-[var(--border)]">
+    <div
+      className="fixed left-0 top-[var(--header-height)] z-50 h-0.5 w-full bg-[var(--border)]"
+      role="progressbar"
+      aria-valuenow={Math.round(progress)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
       <div
-        className="h-full bg-gradient-to-r from-[var(--accent)] to-orange-400 transition-all"
-        style={{ width: `${progress}%` }}
+        className="h-full rounded-r-full bg-gradient-to-r from-[var(--accent)] to-orange-400 transition-all duration-150 ease-out"
+        style={{
+          width: `${progress}%`,
+          boxShadow: progress > 0 ? '0 0 8px var(--glow-color)' : 'none',
+        }}
       />
     </div>
   );

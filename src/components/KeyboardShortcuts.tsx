@@ -17,6 +17,15 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['1', '2', '3', '4', '5', '6', '7', '8', '9'], label: 'Jump to section (by order)', icon: <Hash className="h-4 w-4" /> },
 ];
 
+const rowVariants = {
+  hidden: { opacity: 0, x: -8 },
+  visible: (i: number) => ({
+    opacity: 1,
+    x: 0,
+    transition: { delay: 0.1 + i * 0.04, duration: 0.2, ease: 'easeOut' },
+  }),
+};
+
 export default function KeyboardShortcuts() {
   const [open, setOpen] = useState(false);
 
@@ -65,8 +74,12 @@ export default function KeyboardShortcuts() {
             </div>
             <div className="px-3 py-2">
               {SHORTCUTS.map((s, i) => (
-                <div
+                <motion.div
                   key={i}
+                  custom={i}
+                  initial="hidden"
+                  animate="visible"
+                  variants={rowVariants}
                   className="flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors hover:bg-[var(--surface-hover)]"
                 >
                   <div className="flex items-center gap-3">
@@ -83,7 +96,7 @@ export default function KeyboardShortcuts() {
                       </span>
                     ))}
                   </kbd>
-                </div>
+                </motion.div>
               ))}
             </div>
             <div className="border-t border-[var(--border)] px-5 py-2.5 text-xs text-[var(--ink-subtle)]">

@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import { Database, Network } from 'lucide-react';
 import BrandGlyph from './logos/BrandGlyph';
 import { BRAND_ICONS } from './logos/brandIcons';
@@ -9,8 +10,6 @@ interface ToolDef {
   bg: string;
 }
 
-// Tools with a published brand mark render the real logo; internal/labs tools
-// (UCX, generic cloud CLIs) that have no brand asset fall back to a neutral icon.
 const TOOLS: Record<string, ToolDef> = {
   'Databricks CLI': { kind: 'brand', icon: 'databricks', bg: '#FF3621' },
   UCX: { kind: 'lucide', icon: Database, bg: '#0D9488' },
@@ -27,8 +26,10 @@ const TOOLS: Record<string, ToolDef> = {
 export default function ToolLogo({ name, className = '' }: { name: string; className?: string }) {
   const tool = TOOLS[name] ?? { kind: 'lucide' as const, icon: Database, bg: '#64748B' };
   return (
-    <span
-      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm ring-1 ring-inset ring-white/15 ${className}`}
+    <motion.span
+      whileHover={{ scale: 1.1, boxShadow: `0 4px 16px ${tool.bg}44` }}
+      transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+      className={`inline-flex h-10 w-10 shrink-0 cursor-default items-center justify-center rounded-xl shadow-sm ring-1 ring-inset ring-white/15 ${className}`}
       style={{ backgroundColor: tool.bg }}
       aria-label={name}
       role="img"
@@ -38,6 +39,6 @@ export default function ToolLogo({ name, className = '' }: { name: string; class
       ) : (
         React.createElement(tool.icon as React.ElementType, { className: 'h-5 w-5 text-white' })
       )}
-    </span>
+    </motion.span>
   );
 }

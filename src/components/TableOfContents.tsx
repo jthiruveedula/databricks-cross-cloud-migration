@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 
 interface Heading {
   id: string;
@@ -9,6 +10,7 @@ interface Heading {
 export default function TableOfContents() {
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [active, setActive] = useState('');
+  const listRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     const main = document.querySelector('main');
@@ -40,18 +42,29 @@ export default function TableOfContents() {
     <nav className="hidden xl:block w-[var(--toc-width)] pl-8">
       <div className="fixed top-[calc(var(--header-height)+2rem)] w-[var(--toc-width)]">
         <h5 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--ink-subtle)]">On this page</h5>
-        <ul className="space-y-1 border-l border-[var(--border)]">
+        <ul ref={listRef} className="relative space-y-1">
           {headings.map((h) => (
             <li key={h.id}>
               <a
                 href={`#${h.id}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  document.getElementById(h.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
                 className={`
-                  block border-l-2 py-1 pl-3 text-sm transition-colors
-                  ${active === h.id ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]'}
+                  relative block rounded-r-md py-1 pl-3 text-sm transition-colors duration-150
+                  ${active === h.id ? 'text-[var(--accent)] font-medium' : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'}
                   ${h.level === 3 ? 'ml-3 text-xs' : ''}
                 `}
               >
-                {h.text}
+                {active === h.id && (
+                  <motion.span
+                    layoutId="toc-active-pill"
+                    className="absolute inset-0 rounded-r-md border-l-2 border-[var(--accent)] bg-[var(--accent-soft)]"
+                    transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+                  />
+                )}
+                <span className="relative z-10">{h.text}</span>
               </a>
             </li>
           ))}
