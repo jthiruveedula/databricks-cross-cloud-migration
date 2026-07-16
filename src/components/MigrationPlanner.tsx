@@ -187,11 +187,6 @@ export default function MigrationPlanner() {
       <motion.form
         onSubmit={(e) => {
           e.preventDefault();
-          const data = new FormData(e.currentTarget);
-          const s = data.get('source') as Cloud;
-          const t = data.get('target') as Cloud;
-          setSource(s);
-          setTarget(t);
           setSubmitted(true);
         }}
         whileHover={{ scale: 1.005 }}
@@ -202,11 +197,16 @@ export default function MigrationPlanner() {
           <select
             name="source"
             required
-            defaultValue=""
+            value={source}
+            onChange={(e) => {
+              setSource(e.target.value as Cloud);
+              if (e.target.value === target) setTarget('');
+              setSubmitted(false);
+            }}
             className="rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-[var(--ink)] outline-none ring-[var(--accent)] focus:ring-2"
           >
             <option value="" disabled>Choose source</option>
-            {(['aws', 'azure', 'gcp'] as Cloud[]).map((c) => (
+            {(['aws', 'azure', 'gcp'] as Cloud[]).filter((c) => c !== target).map((c) => (
               <option key={c} value={c}>
                 {CLOUDS[c].label}
               </option>
@@ -229,11 +229,16 @@ export default function MigrationPlanner() {
           <select
             name="target"
             required
-            defaultValue=""
+            value={target}
+            onChange={(e) => {
+              setTarget(e.target.value as Cloud);
+              if (e.target.value === source) setSource('');
+              setSubmitted(false);
+            }}
             className="rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-[var(--ink)] outline-none ring-[var(--accent)] focus:ring-2"
           >
             <option value="" disabled>Choose target</option>
-            {(['aws', 'azure', 'gcp'] as Cloud[]).map((c) => (
+            {(['aws', 'azure', 'gcp'] as Cloud[]).filter((c) => c !== source).map((c) => (
               <option key={c} value={c}>
                 {CLOUDS[c].label}
               </option>
