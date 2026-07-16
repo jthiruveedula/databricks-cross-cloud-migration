@@ -3,6 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import Card from '../components/Card.tsx';
 import MigrationPlanner from '../components/MigrationPlanner.tsx';
 import MigrationFlowDiagram from '../components/MigrationFlowDiagram.tsx';
+import Hero from '../components/Hero.tsx';
 import { withBase } from '../lib/paths';
 import { ArrowRight, BookOpen, Cloud, Shield, Cpu, Workflow, ClipboardList, Activity, Wrench, Route } from 'lucide-react';
 
@@ -19,35 +20,7 @@ const sections = [
 ---
 
 <Layout title="Databricks Cross-Cloud Migration Runbook" description="Enterprise runbook for migrating Databricks across Azure, AWS, and GCP." hideToc bare>
-  <div class="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-6 py-16 text-center md:py-24">
-    <div class="hero-glow" />
-    <div class="hero-orb hero-orb-1" />
-    <div class="hero-orb hero-orb-2" />
-    <div class="hero-orb hero-orb-3" />
-    <div class="relative z-10 mx-auto max-w-3xl">
-      <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-4 py-1.5 text-sm font-medium text-[var(--accent)]">
-        <span class="relative flex h-2 w-2">
-          <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-75"></span>
-          <span class="relative inline-flex h-2 w-2 rounded-full bg-[var(--accent)]"></span>
-        </span>
-        Enterprise runbook v1.0
-      </div>
-      <h1 class="mb-6 text-4xl font-bold tracking-tight md:text-6xl">
-        Migrate Databricks <span class="gradient-text">across any cloud</span>
-      </h1>
-      <p class="mx-auto mb-8 max-w-2xl text-lg text-[var(--ink-muted)]">
-        A deeply detailed, practical runbook for platform teams, cloud architects, and security engineers moving Databricks between Azure, AWS, and GCP.
-      </p>
-      <div class="flex flex-wrap items-center justify-center gap-4">
-        <a href={withBase('/overview/what-is-cross-cloud-migration')} class="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-6 py-3 font-medium text-white shadow-glow transition-transform hover:-translate-y-0.5">
-          Start reading <ArrowRight className="h-4 w-4" />
-        </a>
-        <a href={withBase('/execution/wave-planning')} class="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-6 py-3 font-medium text-[var(--ink)] transition-colors hover:bg-[var(--surface-hover)]">
-          Jump to execution
-        </a>
-      </div>
-    </div>
-  </div>
+  <Hero client:load />
 
   <div class="my-12">
     <div class="mb-4 flex items-center gap-2">

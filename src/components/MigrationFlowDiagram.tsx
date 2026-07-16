@@ -157,39 +157,7 @@ export default function MigrationFlowDiagram() {
 
   return (
     <div className="migration-flow-diagram" ref={containerRef}>
-      <style>{`
-        .migration-flow-diagram {
-          --flow-accent: var(--accent, #6366f1);
-        }
-        .flow-controls button {
-          cursor: pointer;
-        }
-        .flow-phase-card {
-          cursor: pointer;
-          transition: all 0.3s ease;
-        }
-        .flow-phase-card:hover {
-          filter: brightness(1.15);
-        }
-        .flow-phase-card.active {
-          filter: brightness(1.25);
-          stroke-width: 2.5;
-        }
-        .flow-phase-card.pulse-highlight {
-          filter: brightness(1.35);
-          stroke-width: 3;
-        }
-        .flow-arrowhead {
-          fill: none;
-          stroke: var(--border);
-          stroke-width: 1.5;
-        }
-        .flow-arrowhead-marker {
-          fill: var(--border);
-        }
-      `}</style>
-
-      {/* Hover tooltips - adding title attributes for native tooltips */}
+      {/* Hover tooltips - native tooltips on phase cards */}
       {PHASES.map((p, i) => {
         const c = phaseCenters[i];
         if (!c) return null;
@@ -209,7 +177,7 @@ export default function MigrationFlowDiagram() {
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-0.5">
-            {[1, 2].map((s) => (
+            {[0.5, 1, 2].map((s) => (
               <button
                 key={s}
                 onClick={() => setSpeed(s)}
@@ -340,8 +308,13 @@ export default function MigrationFlowDiagram() {
               <g
                 key={p.id}
                 onClick={() => handleCardClick(i)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCardClick(i); }}}
+                role="button"
+                tabIndex={0}
                 className="flow-phase-card"
+                aria-label={`Phase ${p.id}: ${p.title}, ${p.subtitle}`}
               >
+                <title>Phase {p.id}: {p.title} - {p.subtitle}</title>
                 <rect
                   x={c.cx - CARD_W / 2}
                   y={c.cy - CARD_H / 2}
@@ -448,12 +421,26 @@ export default function MigrationFlowDiagram() {
         </AnimatePresence>
 
         {/* Phase progress dots */}
-        <div className="flex items-center justify-center gap-1.5 border-t border-[var(--border)] px-4 py-2">
+        <div role="tablist" aria-label="Migration phases" className="flex items-center justify-center gap-1.5 border-t border-[var(--border)] px-4 py-2">
           {PHASES.map((p, i) => (
             <button
               key={p.id}
+              role="tab"
+              aria-selected={i === currentPhase && animState !== 'idle'}
+              aria-label={`Phase ${p.id}: ${p.title}`}
               onClick={() => { setSelectedPhase(i); setCurrentPhase(i); }}
-              className={`h-2 rounded-full transition-all duration-300 ${
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowRight' && i < PHASES.length - 1) {
+                  e.preventDefault();
+                  setCurrentPhase(i + 1);
+                  setSelectedPhase(i + 1);
+                } else if (e.key === 'ArrowLeft' && i > 0) {
+                  e.preventDefault();
+                  setCurrentPhase(i - 1);
+                  setSelectedPhase(i - 1);
+                }
+              }}
+              className={`h-2 rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 ${
                 i === currentPhase && animState !== 'idle'
                   ? 'w-6 bg-[var(--accent)]'
                   : i === currentPhase

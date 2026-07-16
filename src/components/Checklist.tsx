@@ -49,6 +49,28 @@ export default function Checklist({ title, items, storageKey }: Props) {
   const progress = Math.round((checkedCount / items.length) * 100);
   const isComplete = progress === 100;
 
+  const [displayProgress, setDisplayProgress] = useState(progress);
+
+  useEffect(() => {
+    const duration = 800;
+    const start = displayProgress;
+    const startTime = Date.now();
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progressRatio = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progressRatio, 3);
+      const current = Math.round(start + (progress - start) * eased);
+      setDisplayProgress(current);
+      
+      if (progressRatio < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    requestAnimationFrame(animate);
+  }, [progress, displayProgress]);
+
   return (
     <RevealOnView className="my-6 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-1">
       {title && (
@@ -62,7 +84,7 @@ export default function Checklist({ title, items, storageKey }: Props) {
               exit={{ opacity: 0, y: 4 }}
               className={`text-xs ${isComplete ? 'font-medium text-emerald-500' : 'text-[var(--ink-subtle)]'}`}
             >
-              {isComplete ? 'All done!' : `${progress}% complete`}
+              {isComplete ? 'All done!' : `${displayProgress}% complete`}
             </motion.span>
           </AnimatePresence>
         </div>
@@ -73,7 +95,7 @@ export default function Checklist({ title, items, storageKey }: Props) {
             isComplete ? 'bg-emerald-500' : 'bg-[var(--accent)]'
           }`}
           initial={false}
-          animate={{ width: `${progress}%` }}
+          animate={{ width: `${displayProgress}%` }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
         />
         {isComplete && (
