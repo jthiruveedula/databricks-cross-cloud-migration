@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Moon, Sun } from 'lucide-react';
 
 export default function ThemeToggle() {
@@ -30,10 +31,21 @@ export default function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      className="rounded-lg p-2 text-[var(--ink-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--ink)]"
+      className="relative rounded-lg p-2 text-[var(--ink-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--ink)]"
       aria-label="Toggle theme"
     >
-      {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={dark ? 'sun' : 'moon'}
+          initial={{ rotate: -90, scale: 0, opacity: 0 }}
+          animate={{ rotate: 0, scale: 1, opacity: 1 }}
+          exit={{ rotate: 90, scale: 0, opacity: 0 }}
+          transition={{ duration: 0.2, ease: 'easeInOut' }}
+          className="flex items-center justify-center"
+        >
+          {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+        </motion.span>
+      </AnimatePresence>
     </button>
   );
 }
