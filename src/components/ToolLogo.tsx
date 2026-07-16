@@ -1,8 +1,9 @@
-import React from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Database, Network } from 'lucide-react';
-import BrandGlyph from './logos/BrandGlyph';
-import { BRAND_ICONS } from './logos/brandIcons';
+import BrandGlyph from '../logos/BrandGlyph';
+import { BRAND_ICONS } from '../logos/brandIcons';
+import { iconRegistry } from '../logos';
 
 interface ToolDef {
   kind: 'brand' | 'lucide';
@@ -25,20 +26,68 @@ const TOOLS: Record<string, ToolDef> = {
 
 export default function ToolLogo({ name, className = '' }: { name: string; className?: string }) {
   const tool = TOOLS[name] ?? { kind: 'lucide' as const, icon: Database, bg: '#64748B' };
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [loadedIcon, setLoadedIcon] = useState<BrandIcon | null>(null);
+
+  useEffect(() => {
+    if (tool.kind === 'brand' && !loadedIcon) {
+      const loadIcon = async () => {
+        setLoading(true);
+        setError(false);
+        try {
+          const icon = await iconRegistry.loadIcon(tool.icon as string);
+          setLoadedIcon(icon as BrandIcon);
+        } catch (err) {
+          setError(true);
+          console.warn(`Failed to load icon ${tool.icon} for ${name}:`, err);
+        } finally {
+          setLoading(false);
+        }
+      };
+      loadIcon();
+    }
+  }, [tool.kind, tool.icon, name, loadedIcon]);
+
+  const renderIcon = () => {
+    if (tool.kind === 'brand' && loadedIcon && !error) {
+      return <BrandGlyph icon={loadedIcon} className="h-5 w-5 text-white" />;
+    }
+    return React.createElement(tool.icon as React.ElementType, { className: 'h-5 w-5 text-white' });
+  };
+
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="h-5 w-5 rounded bg-white/20 animate-pulse"
+        />
+      );
+    }
+    if (error) {
+      return (
+        <span className="text-xs text-white/80">?</span>
+      );
+    }
+    return renderIcon();
+  };
+
   return (
     <motion.span
-      whileHover={{ scale: 1.1, boxShadow: `0 4px 16px ${tool.bg}44` }}
+      whileHover={{ scale: 1.1, boxShadow: `0 6px 20px ${tool.bg}44` }}
+      whileTap={{ scale: 0.95 }}
       transition={{ type: 'spring', stiffness: 300, damping: 15 }}
-      className={`inline-flex h-10 w-10 shrink-0 cursor-default items-center justify-center rounded-xl shadow-sm ring-1 ring-inset ring-white/15 ${className}`}
+      className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm ring-1 ring-inset ring-white/15 ${className}`}
       style={{ backgroundColor: tool.bg }}
       aria-label={name}
       role="img"
     >
-      {tool.kind === 'brand' ? (
-        <BrandGlyph icon={BRAND_ICONS[tool.icon as keyof typeof BRAND_ICONS]} className="h-5 w-5 text-white" />
-      ) : (
-        React.createElement(tool.icon as React.ElementType, { className: 'h-5 w-5 text-white' })
-      )}
+      <AnimatePresence mode="wait">
+        {renderContent()}
+      </AnimatePresence>
     </motion.span>
   );
 }
