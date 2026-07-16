@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import BrandGlyph from './logos/BrandGlyph';
 import { BRAND_ICONS } from './logos/brandIcons';
 
@@ -36,8 +37,10 @@ export default function CloudLogo({
 
   return (
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
-      <span
-        className={`inline-flex shrink-0 items-center justify-center rounded-xl shadow-md ring-1 ring-inset ring-white/15 ${dims}`}
+      <motion.span
+        whileHover={{ scale: 1.1, boxShadow: `0 6px 24px ${style.ring}` }}
+        transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+        className={`inline-flex shrink-0 cursor-default items-center justify-center rounded-xl shadow-md ring-1 ring-inset ring-white/15 ${dims}`}
         style={{ backgroundColor: style.bg, boxShadow: `0 4px 14px ${style.ring}` }}
         aria-label={`${style.label} logo`}
         role="img"
@@ -47,7 +50,7 @@ export default function CloudLogo({
         ) : (
           <span className={`font-bold uppercase tracking-tight text-white ${textSize}`}>{style.label}</span>
         )}
-      </span>
+      </motion.span>
       {showLabel && <span className="text-sm font-semibold text-[var(--ink)]">{style.label}</span>}
     </span>
   );
