@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ThemeToggle from './ThemeToggle';
 import SearchOverlay from './SearchOverlay';
-import BrandGlyph from './logos/BrandGlyph';
+import BrandGlyph from './BrandGlyph';
 import { BRAND_ICONS } from './logos/brandIcons';
 import { withBase } from '../lib/paths';
 import { Menu, X } from 'lucide-react';

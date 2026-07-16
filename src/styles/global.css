@@ -138,6 +138,52 @@ button {
   }
 }
 
+/* Smooth theme transition class - applied to <html> during theme toggle */
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease !important;
+}
+
+/* Astro ViewTransitions page transition styles */
+@view-transition {
+  navigation: auto;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+::view-transition-old(root) {
+  animation: fade-out 0.2s ease-out;
+}
+
+::view-transition-new(root) {
+  animation: fade-in 0.2s ease-out;
+}
+
+/* Shared utilities */
+.transition-theme {
+  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.glass {
+  backdrop-filter: blur(12px);
+  background: var(--surface-elevated);
+}
+
+@keyframes gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
 .gradient-text {
   background: linear-gradient(135deg, var(--accent), #ff8a3d, #ffb199);
   background-size: 200% 200%;
@@ -378,20 +424,47 @@ button {
   background: radial-gradient(circle, rgba(255, 177, 153, 0.2), transparent 70%);
 }
 
+/* MigrationFlowDiagram styles (moved from inline) */
+.migration-flow-diagram {
+  --flow-accent: var(--accent, #ff3621);
+}
+.flow-controls button {
+  cursor: pointer;
+}
+.flow-phase-card {
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.flow-phase-card:hover {
+  filter: brightness(1.15);
+}
+.flow-phase-card.active {
+  filter: brightness(1.25);
+  stroke-width: 2.5;
+}
+.flow-phase-card.pulse-highlight {
+  filter: brightness(1.35);
+  stroke-width: 3;
+}
+.flow-arrowhead {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+.flow-arrowhead-marker {
+  fill: var(--border);
+}
+
+/* Scroll-aware card-grid stagger (replaces CSS-only stagger) */
 .card-grid > * {
   opacity: 0;
   transform: translateY(1rem);
-  animation: fadeIn 0.6s ease-out forwards;
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
 }
-
-.card-grid > *:nth-child(1) { animation-delay: 0.05s; }
-.card-grid > *:nth-child(2) { animation-delay: 0.1s; }
-.card-grid > *:nth-child(3) { animation-delay: 0.15s; }
-.card-grid > *:nth-child(4) { animation-delay: 0.2s; }
-.card-grid > *:nth-child(5) { animation-delay: 0.25s; }
-.card-grid > *:nth-child(6) { animation-delay: 0.3s; }
-.card-grid > *:nth-child(7) { animation-delay: 0.35s; }
-.card-grid > *:nth-child(8) { animation-delay: 0.4s; }
+.card-grid > *.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
 
 @media print {
   :root {

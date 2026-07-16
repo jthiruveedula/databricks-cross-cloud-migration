@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import BrandGlyph from './BrandGlyph';
-import { BRAND_ICONS } from './brandIcons';
+import { BRAND_ICONS } from './logos/brandIcons';
 
 type Cloud = 'aws' | 'azure' | 'gcp';
 
