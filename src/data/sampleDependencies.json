@@ -1,0 +1,52 @@
+{
+  "nodes": [
+    { "id": "ws-prod-01", "type": "workspace", "label": "Prod Workspace", "group": "production" },
+    { "id": "ws-staging-01", "type": "workspace", "label": "Staging Workspace", "group": "staging" },
+    { "id": "ds-adls", "type": "datasource", "label": "ADLS Gen2", "group": "storage" },
+    { "id": "ds-s3", "type": "datasource", "label": "S3 Data Lake", "group": "storage" },
+    { "id": "ds-gcs", "type": "datasource", "label": "GCS Bucket", "group": "storage" },
+    { "id": "pipeline-ingest", "type": "pipeline", "label": "Ingestion Pipeline", "group": "pipeline" },
+    { "id": "pipeline-transform", "type": "pipeline", "label": "Transform Pipeline", "group": "pipeline" },
+    { "id": "pipeline-ml", "type": "pipeline", "label": "ML Training Pipeline", "group": "pipeline" },
+    { "id": "pipeline-dash", "type": "pipeline", "label": "Dashboard Refresh", "group": "pipeline" },
+    { "id": "nb-etl", "type": "notebook", "label": "ETL Notebook", "group": "notebook" },
+    { "id": "nb-features", "type": "notebook", "label": "Feature Engineering", "group": "notebook" },
+    { "id": "nb-model", "type": "notebook", "label": "Model Training", "group": "notebook" },
+    { "id": "nb-viz", "type": "notebook", "label": "Visualization", "group": "notebook" },
+    { "id": "dash-revenue", "type": "dashboard", "label": "Revenue Dashboard", "group": "dashboard" },
+    { "id": "dash-ops", "type": "dashboard", "label": "Ops Dashboard", "group": "dashboard" },
+    { "id": "uc-metastore", "type": "datasource", "label": "Unity Catalog", "group": "storage" }
+  ],
+  "edges": [
+    { "source": "pipeline-ingest", "target": "ds-adls" },
+    { "source": "pipeline-ingest", "target": "ds-s3" },
+    { "source": "pipeline-ingest", "target": "ws-prod-01" },
+    { "source": "pipeline-transform", "target": "pipeline-ingest" },
+    { "source": "pipeline-transform", "target": "ws-staging-01" },
+    { "source": "nb-etl", "target": "ds-adls" },
+    { "source": "nb-etl", "target": "ws-prod-01" },
+    { "source": "nb-features", "target": "ds-gcs" },
+    { "source": "nb-features", "target": "pipeline-transform" },
+    { "source": "pipeline-ml", "target": "nb-features" },
+    { "source": "pipeline-ml", "target": "ws-prod-01" },
+    { "source": "nb-model", "target": "pipeline-ml" },
+    { "source": "nb-model", "target": "uc-metastore" },
+    { "source": "nb-viz", "target": "pipeline-transform" },
+    { "source": "dash-revenue", "target": "nb-viz" },
+    { "source": "dash-revenue", "target": "ws-prod-01" },
+    { "source": "dash-ops", "target": "pipeline-dash" },
+    { "source": "pipeline-dash", "target": "ds-adls" },
+    { "source": "pipeline-dash", "target": "ws-staging-01" },
+    { "source": "ds-gcs", "target": "ws-staging-01" },
+    { "source": "uc-metastore", "target": "ws-prod-01" },
+    { "source": "uc-metastore", "target": "ws-staging-01" }
+  ],
+  "nodeTypes": ["workspace", "datasource", "pipeline", "notebook", "dashboard"],
+  "nodeColors": {
+    "workspace": "#8B5CF6",
+    "datasource": "#3B82F6",
+    "pipeline": "#10B981",
+    "notebook": "#F59E0B",
+    "dashboard": "#EF4444"
+  }
+}

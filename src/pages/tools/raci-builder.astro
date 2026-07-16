@@ -1,0 +1,10 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import RaciBuilder from '../../components/RaciBuilder.tsx';
+---
+
+<Layout title="RACI Matrix Builder" description="Create a custom RACI matrix for your Databricks migration team." hideToc bare>
+  <div class="mx-auto max-w-5xl">
+    <RaciBuilder client:load />
+  </div>
+</Layout>

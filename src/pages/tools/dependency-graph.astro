@@ -1,0 +1,10 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import DependencyGraph from '../../components/DependencyGraph.tsx';
+---
+
+<Layout title="Dependency Graph Viewer" description="Explore relationships between workspaces, data sources, pipelines, and assets." hideToc bare>
+  <div class="mx-auto max-w-6xl">
+    <DependencyGraph client:load />
+  </div>
+</Layout>

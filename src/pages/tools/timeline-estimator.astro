@@ -1,0 +1,10 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import TimelineEstimator from '../../components/TimelineEstimator.tsx';
+---
+
+<Layout title="Migration Timeline Estimator" description="Estimate phase-by-phase migration timeline based on workspace profile." hideToc bare>
+  <div class="mx-auto max-w-4xl">
+    <TimelineEstimator client:load />
+  </div>
+</Layout>

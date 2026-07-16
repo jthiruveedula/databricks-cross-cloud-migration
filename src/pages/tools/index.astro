@@ -1,0 +1,62 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Card from '../../components/Card.tsx';
+import { withBase } from '../../lib/paths';
+import { Grid3x3, Table, Calendar, DollarSign, Share2, ArrowRight } from 'lucide-react';
+
+const tools = [
+  {
+    title: 'Cloud Instance Type Mapper',
+    description: 'Search, filter, and compare Databricks instance types across AWS, Azure, and GCP side by side.',
+    href: '/tools/instance-mapper',
+    icon: Grid3x3,
+  },
+  {
+    title: 'RACI Matrix Builder',
+    description: 'Define migration phases and team roles to generate a customizable RACI matrix with CSV export.',
+    href: '/tools/raci-builder',
+    icon: Table,
+  },
+  {
+    title: 'Migration Timeline Estimator',
+    description: 'Input workspace profile parameters to generate a phase-by-phase Gantt-style timeline estimate.',
+    href: '/tools/timeline-estimator',
+    icon: Calendar,
+  },
+  {
+    title: 'Cloud Cost Comparison Calculator',
+    description: 'Estimate monthly Databricks infrastructure costs across AWS, Azure, and GCP with visual comparison.',
+    href: '/tools/cost-calculator',
+    icon: DollarSign,
+  },
+  {
+    title: 'Dependency Graph Viewer',
+    description: 'Visualize dependencies between workspaces, data sources, pipelines, notebooks, and dashboards.',
+    href: '/tools/dependency-graph',
+    icon: Share2,
+  },
+];
+---
+
+<Layout title="Migration Tools" description="Interactive tools to plan and execute your Databricks cross-cloud migration." hideToc bare>
+  <div class="mx-auto max-w-4xl">
+    <div class="mb-10">
+      <h1 class="mb-4 text-3xl font-bold text-[var(--ink)]">Migration tools</h1>
+      <p class="max-w-2xl text-[var(--ink-muted)]">
+        Interactive planning and analysis tools to help you scope, estimate, and execute your Databricks cross-cloud migration.
+      </p>
+    </div>
+    <div class="grid gap-6 sm:grid-cols-2">
+      {tools.map((t) => (
+        <Card href={withBase(t.href)} title={t.title} description={t.description} icon={t.icon} />
+      ))}
+    </div>
+    <div class="mt-12 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-6">
+      <h2 class="mb-2 text-lg font-semibold text-[var(--ink)]">Need something else?</h2>
+      <p class="text-sm text-[var(--ink-muted)]">
+        These tools are designed to complement the runbook content. Head to the{' '}
+        <a href={withBase('/')} class="text-[var(--accent)] hover:underline">homepage</a> to start with the Migration Pathfinder, or explore each section for detailed guidance.
+      </p>
+    </div>
+  </div>
+</Layout>

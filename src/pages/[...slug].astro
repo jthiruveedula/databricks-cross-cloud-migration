@@ -14,9 +14,17 @@ export function getStaticPaths() {
     Object.keys(mdxPages).map((path) => path.replace(/^\.\//, '').replace(/\.mdx$/, ''))
   );
 
+  const astroPages = import.meta.glob('./**/*.astro', { eager: true });
+  const existingAstroSlugs = new Set(
+    Object.keys(astroPages).map((path) => {
+      const slug = path.replace(/^\.\//, '').replace(/\.astro$/, '');
+      return slug.endsWith('/index') ? slug.replace(/\/index$/, '') : slug;
+    })
+  );
+
   return nav.sections.flatMap((section) =>
     section.items
-      .filter((item) => !existingSlugs.has(item.slug))
+      .filter((item) => !existingSlugs.has(item.slug) && !existingAstroSlugs.has(item.slug))
       .map((item) => ({
         params: { slug: item.slug },
         props: { section, item },

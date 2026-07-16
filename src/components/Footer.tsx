@@ -11,8 +11,8 @@ export default function Footer() {
         </div>
         <div className="flex gap-6">
           <a href={withBase('/overview/what-is-cross-cloud-migration')} className="hover:text-[var(--accent)]">Overview</a>
+          <a href={withBase('/tools')} className="hover:text-[var(--accent)]">Tools</a>
           <a href={withBase('/execution/wave-planning')} className="hover:text-[var(--accent)]">Execution</a>
-          <a href={withBase('/templates/checklists')} className="hover:text-[var(--accent)]">Templates</a>
           <a href={withBase('/troubleshooting/faq')} className="hover:text-[var(--accent)]">FAQ</a>
         </div>
       </div>

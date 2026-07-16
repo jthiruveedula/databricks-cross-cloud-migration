@@ -138,6 +138,18 @@
         { "title": "Anti-patterns", "slug": "troubleshooting/anti-patterns" },
         { "title": "FAQ", "slug": "troubleshooting/faq" }
       ]
+    },
+    {
+      "title": "Tools",
+      "slug": "tools",
+      "items": [
+        { "title": "All tools", "slug": "tools" },
+        { "title": "Instance type mapper", "slug": "tools/instance-mapper" },
+        { "title": "RACI matrix builder", "slug": "tools/raci-builder" },
+        { "title": "Timeline estimator", "slug": "tools/timeline-estimator" },
+        { "title": "Cost calculator", "slug": "tools/cost-calculator" },
+        { "title": "Dependency graph", "slug": "tools/dependency-graph" }
+      ]
     }
   ]
 }

@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import Card from '../components/Card.tsx';
 import MigrationPlanner from '../components/MigrationPlanner.tsx';
 import { withBase } from '../lib/paths';
-import { ArrowRight, BookOpen, Cloud, Shield, Cpu, Workflow, ClipboardList, Activity } from 'lucide-react';
+import { ArrowRight, BookOpen, Cloud, Shield, Cpu, Workflow, ClipboardList, Activity, Wrench } from 'lucide-react';
 
 const sections = [
   { title: 'Overview', description: 'Migration drivers, archetypes, and decision framework.', href: '/overview/what-is-cross-cloud-migration', icon: BookOpen },
@@ -54,6 +54,10 @@ const sections = [
 
   <div class="card-grid my-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
     {sections.map((s) => <Card href={withBase(s.href)} title={s.title} description={s.description} icon={s.icon} />)}
+  </div>
+
+  <div class="card-grid my-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    <Card href={withBase('/tools')} title="Migration Tools" description="Interactive planners, calculators, and builders to support migration execution." icon={Wrench} />
   </div>
 
   <div class="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-6 md:p-8">

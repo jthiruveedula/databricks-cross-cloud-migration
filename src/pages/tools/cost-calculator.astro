@@ -1,0 +1,10 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import CostCalculator from '../../components/CostCalculator.tsx';
+---
+
+<Layout title="Cloud Cost Comparison Calculator" description="Estimate Databricks infrastructure costs across AWS, Azure, and GCP." hideToc bare>
+  <div class="mx-auto max-w-5xl">
+    <CostCalculator client:load />
+  </div>
+</Layout>

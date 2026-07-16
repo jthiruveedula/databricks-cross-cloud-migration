@@ -1,0 +1,10 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import InstanceTypeMapper from '../../components/InstanceTypeMapper.tsx';
+---
+
+<Layout title="Cloud Instance Type Mapper" description="Compare Databricks instance types across AWS, Azure, and GCP side by side." hideToc bare>
+  <div class="mx-auto max-w-5xl">
+    <InstanceTypeMapper client:load />
+  </div>
+</Layout>
