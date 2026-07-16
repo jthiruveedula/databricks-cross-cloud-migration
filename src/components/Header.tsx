@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ThemeToggle from './ThemeToggle';
 import SearchOverlay from './SearchOverlay';
 import BrandGlyph from './BrandGlyph';
-import { BRAND_ICONS } from './logos/brandIcons';
+import { BRAND_ICONS, type BrandIconSvg } from './logos/brandIcons';
 import { withBase } from '../lib/paths';
 import { Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -53,7 +53,7 @@ export default function Header({ onMenuToggle, menuOpen = false }: Props) {
             whileHover={{ rotate: -8, scale: 1.05 }}
             transition={{ type: 'spring', stiffness: 300, damping: 15 }}
             className="flex h-8 w-8 items-center justify-center rounded-lg shadow-sm"
-            style={{ backgroundColor: `#${BRAND_ICONS.databricks.hex}` }}
+            style={{ backgroundColor: `#${(BRAND_ICONS.databricks as BrandIconSvg).hex}` }}
           >
             <BrandGlyph icon={BRAND_ICONS.databricks} className="h-4 w-4 text-white" />
           </motion.span>
