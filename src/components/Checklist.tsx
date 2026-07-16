@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import RevealOnView from './motion/RevealOnView';
 
 interface Item {
@@ -10,16 +10,38 @@ interface Item {
 interface Props {
   title?: string;
   items: Item[];
+  storageKey?: string;
 }
 
-export default function Checklist({ title, items }: Props) {
-  const [state, setState] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(items.map((i) => [i.id, i.checked ?? false]))
-  );
+function getStorageKey(title?: string): string | null {
+  return title ? `checklist:${title.replace(/\s+/g, '-').toLowerCase()}` : null;
+}
 
-  const toggle = (id: string) => {
+function loadState(items: Item[], key: string | null): Record<string, boolean> {
+  if (typeof localStorage !== 'undefined' && key) {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        return { ...Object.fromEntries(items.map((i) => [i.id, i.checked ?? false])), ...JSON.parse(saved) };
+      }
+    } catch {}
+  }
+  return Object.fromEntries(items.map((i) => [i.id, i.checked ?? false]));
+}
+
+export default function Checklist({ title, items, storageKey }: Props) {
+  const key = storageKey ?? getStorageKey(title);
+  const [state, setState] = useState<Record<string, boolean>>(() => loadState(items, key));
+
+  useEffect(() => {
+    if (key && typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, JSON.stringify(state));
+    }
+  }, [state, key]);
+
+  const toggle = useCallback((id: string) => {
     setState((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
+  }, []);
 
   const progress = Math.round((Object.values(state).filter(Boolean).length / items.length) * 100);
 

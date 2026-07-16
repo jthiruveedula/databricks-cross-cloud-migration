@@ -1,7 +1,10 @@
 ---
 import '../styles/global.css';
+import { ViewTransitions } from 'astro:transitions';
 import AppShell from '../components/AppShell.tsx';
 import TableOfContents from '../components/TableOfContents.tsx';
+import Breadcrumb from '../components/Breadcrumb.tsx';
+import KeyboardShortcuts from '../components/KeyboardShortcuts.tsx';
 import ProgressIndicator from '../components/ProgressIndicator.tsx';
 import BackToTop from '../components/BackToTop.tsx';
 import Footer from '../components/Footer.tsx';
@@ -38,6 +41,7 @@ const pageTitle = title === siteName ? title : `${title} | ${siteName}`;
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
     <meta name="generator" content={Astro.generator} />
+    <ViewTransitions />
     <title>{pageTitle}</title>
 
     <link rel="icon" type="image/svg+xml" href={withBase('/favicon.svg')} />
@@ -66,12 +70,14 @@ const pageTitle = title === siteName ? title : `${title} | ${siteName}`;
   <body class="min-h-screen bg-[var(--surface)] text-[var(--ink)]">
     <AppShell client:load currentSlug={currentSlug} hideSidebar={hideSidebar} />
     <ProgressIndicator client:load />
+    <KeyboardShortcuts client:load />
     <BackToTop client:load />
     <div class="flex pt-[var(--header-height)]">
       <div class="flex-1">
         <main class="mx-auto min-h-[calc(100vh-var(--header-height))] max-w-6xl px-6 py-10 lg:px-10">
           <div class={`flex gap-8 ${!hideToc ? '' : ''}`}>
             <article class={bare ? 'w-full max-w-none' : 'prose w-full max-w-none'}>
+              {!bare && <Breadcrumb currentSlug={currentSlug} />}
               <slot />
             </article>
             {!hideToc && <TableOfContents client:idle />}
