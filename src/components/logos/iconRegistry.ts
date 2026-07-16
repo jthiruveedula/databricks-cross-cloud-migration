@@ -55,8 +55,20 @@ export class IconRegistry {
       return;
     }
 
+    // Handle image-based icons (like AWS, Azure)
+    if (source.type === 'image') {
+      const metadata: IconMetadata = {
+        ...source,
+        loaded: true,
+        error: undefined,
+      };
+      this.icons.set(key, metadata);
+      return;
+    }
+
+    // Handle SVG-based icons (like GCP)
     try {
-      // Preload the image to check if icon loads successfully
+      // Preload the SVG to check if icon loads successfully
       const img = new Image();
       const svgData = `data:image/svg+xml;base64,${btoa(source.path)}`;
       
@@ -76,7 +88,7 @@ export class IconRegistry {
       const metadata: IconMetadata = {
         ...source,
         loaded: false,
-        error: error instanceof Error ? error.message : 'Failed to load icon',
+        error: error instanceof Error ? error.message : 'Failed to load SVG icon',
         fallbackUrl: 'https://cdn.simpleicons.org/' + key, // For third-party icons
       };
       this.icons.set(key, metadata);

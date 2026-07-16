@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { useTheme } from 'next-themes';
 import BrandGlyph from './BrandGlyph';
 import { BRAND_ICONS } from './logos/brandIcons';
 
@@ -20,6 +21,22 @@ const STYLES: Record<Cloud, CloudStyle> = {
   gcp: { label: 'GCP', bg: '#4285F4', ring: 'rgba(66,133,244,0.35)' },
 };
 
+// Theme-aware color overrides for better dark mode contrast
+const THEME_STYLES: Record<Cloud, { light: CloudStyle; dark: CloudStyle }> = {
+  aws: {
+    light: { label: 'AWS', bg: '#FF9900', ring: 'rgba(255,153,0,0.35)' },
+    dark: { label: 'AWS', bg: '#FF9900', ring: 'rgba(255,153,0,0.45)' },
+  },
+  azure: {
+    light: { label: 'Azure', bg: '#0078D4', ring: 'rgba(0,120,212,0.35)' },
+    dark: { label: 'Azure', bg: '#60A5FA', ring: 'rgba(96,165,250,0.45)' },
+  },
+  gcp: {
+    light: { label: 'GCP', bg: '#4285F4', ring: 'rgba(66,133,244,0.35)' },
+    dark: { label: 'GCP', bg: '#60A5FA', ring: 'rgba(96,165,250,0.45)' },
+  },
+};
+
 export default function CloudLogo({
   cloud,
   className = '',
@@ -31,7 +48,9 @@ export default function CloudLogo({
   showLabel?: boolean;
   size?: 'sm' | 'md' | 'lg';
 }) {
-  const style = STYLES[cloud];
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+  const style = isDark ? THEME_STYLES[cloud].dark : THEME_STYLES[cloud].light;
   const dims = size === 'sm' ? 'h-8 w-8' : size === 'lg' ? 'h-14 w-14' : 'h-12 w-12';
   const textSize = size === 'sm' ? 'text-[9px]' : size === 'lg' ? 'text-sm' : 'text-xs';
 
