@@ -10,6 +10,7 @@ pnpm-debug.log*
 .env.local
 .env.production
 *.log
+docs/superpowers/
 .codegraph
 databricks-cross-cloud-migration-docs
 .claude/
