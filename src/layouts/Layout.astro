@@ -109,6 +109,41 @@ const pageTitle = title === siteName ? title : `${title} | ${siteName}`;
         cards.forEach((card) => observer.observe(card));
       });
     </script>
+    <!-- Scroll-reveal for article content -->
+    <script is:inline>
+      (function () {
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        function setupReveal() {
+          const articles = document.querySelectorAll('article.prose');
+          articles.forEach((article) => {
+            const blocks = article.querySelectorAll(':scope > *');
+            if (reduceMotion) {
+              blocks.forEach((b) => b.classList.add('is-revealed'));
+              return;
+            }
+            const observer = new IntersectionObserver(
+              (entries) => {
+                entries.forEach((entry) => {
+                  if (entry.isIntersecting) {
+                    entry.target.classList.add('is-revealed');
+                    observer.unobserve(entry.target);
+                  }
+                });
+              },
+              { rootMargin: '0px 0px -10% 0px', threshold: 0.05 }
+            );
+            blocks.forEach((b) => {
+              if (!b.classList.contains('is-revealed') && !b.classList.contains('reveal-block')) {
+                b.classList.add('reveal-block');
+                observer.observe(b);
+              }
+            });
+          });
+        }
+        document.addEventListener('DOMContentLoaded', setupReveal);
+        document.addEventListener('astro:after-swap', setupReveal);
+      })();
+    </script>
     <!-- Smooth theme transition helper -->
     <script is:inline>
       (function() {
