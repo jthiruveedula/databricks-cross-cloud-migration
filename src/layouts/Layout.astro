@@ -8,6 +8,7 @@ import KeyboardShortcuts from '../components/KeyboardShortcuts.tsx';
 import ProgressIndicator from '../components/ProgressIndicator.tsx';
 import BackToTop from '../components/BackToTop.tsx';
 import Footer from '../components/Footer.tsx';
+import PrevNext from '../components/PrevNext.tsx';
 import { withBase } from '../lib/paths';
 
 export interface Props {
@@ -79,6 +80,7 @@ const pageTitle = title === siteName ? title : `${title} | ${siteName}`;
             <article class={bare ? 'w-full max-w-none' : 'prose w-full max-w-none'}>
               {!bare && <Breadcrumb currentSlug={currentSlug} />}
               <slot />
+              {!bare && <PrevNext currentSlug={currentSlug} />}
             </article>
             {!hideToc && <TableOfContents client:idle />}
           </div>
