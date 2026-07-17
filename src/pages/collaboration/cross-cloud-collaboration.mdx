@@ -1,0 +1,108 @@
+---
+title: 'Cross-cloud data collaboration'
+layout: ../../layouts/Layout.astro
+description: 'Collaborate and collate across clouds without a physical move: Delta Sharing, Clean Rooms, Lakehouse Federation, CDC, private networking, and egress cost control.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+
+# Cross-cloud data collaboration
+
+Not every cross-cloud requirement is a migration. Often the goal is **collation** — bringing data together so teams can compute on it — without copying it. Databricks gives you three primitives that avoid a physical lift: **Delta Sharing** (share live, no copy), **Lakehouse Federation** (query in place), and **Clean Rooms** (compute jointly on sensitive data). Each pairs with the migration patterns when you do need to move.
+
+## Share vs replicate vs federate — the decision
+
+| Need | Use | Why |
+| --- | --- | --- |
+| Consumers run own workloads; data can stay live at source | **Delta Sharing** (D2D or open) | Zero copy, lowest ongoing cost |
+| Heavy / frequent querying, low-latency local reads | **Replicate** (Deep Clone + CDF, or Lakeflow Connect CDC) | Local copy beats repeated cross-cloud reads |
+| Explore / ad-hoc / PoC; avoid building ETL | **Lakehouse Federation** | Bridge, not destination |
+| Two+ parties compute on sensitive data, no raw exposure | **Clean Rooms** | Built on Delta Sharing + serverless |
+| Keep legacy source live during dual-run cutover | **CDC** (Lakeflow Connect / Auto Loader / Debezium) | Source stays authoritative until cutover |
+| Minimize egress across clouds | Share in place, or **Cloudflare R2 zero-egress bridge** | Eliminates recurring transfer cost |
+
+## Delta Sharing — zero-copy collaboration
+
+Delta Sharing is an open protocol (Databricks + Linux Foundation) adopted by 4,000+ enterprises. Recipients read live data directly from provider storage via short-lived tokens — **no copy, no pipeline to maintain**. It is the cleanest way to "test in place" a target workload against source data before you commit to moving it.
+
+It now spans three modes: Databricks-to-Databricks (Unity Catalog governed, best performance), open protocol (any platform via bearer token or OIDC federation), and customer-managed OSS server. As of 2026 it is evolving into **OpenSharing**, covering AI assets (models, agent skills, unstructured) as well as data.
+
+<Callout variant="tip" title="Use Delta Sharing to de-risk cutover">
+Share the source table into the target workspace and run the target workload against live data. When results reconcile, promote to a local Deep Clone. You validate before you lift.
+</Callout>
+
+<CodeBlock
+  language="sql"
+  code={`-- Create a share in the source metastore
+CREATE SHARE IF NOT EXISTS migration_poc;
+ALTER SHARE migration_poc ADD TABLE prod.sales.orders;
+
+-- Recipient in the target workspace reads live, no copy
+SELECT COUNT(*) FROM shares.migration_poc.orders;`}
+/>
+
+## Lakehouse Federation — query in place
+
+Unity Catalog **connections** + **foreign catalogs** let you run federated queries against PostgreSQL, MySQL, SQL Server, Oracle, Snowflake, Databricks-to-Databricks, and HMS / AWS Glue (GA Mar 2025). It is **read-only** by design with query pushdown, and UC grants, lineage, and auditing apply to the external data.
+
+Best for exploration, migration bridging, and PoCs. Avoid large unfiltered remote joins across the cloud network — project columns early and monitor via query history.
+
+## Clean Rooms — joint compute on sensitive data
+
+A Clean Room shares **compute, not data copies**. Each party Delta Shares their data in; compute is ephemeral (spun up per job, files deleted after). GA on AWS + Azure (Feb 2025) and GCP (Summer 2025), with HIPAA support on all clouds and multi-party collaboration (up to 9 participants).
+
+This solves the cases a migration cannot: privacy-safe joining of legacy and new-platform data, FSI fraud, healthcare, and marketing attribution where raw PII cannot leave either party.
+
+## Keep source and target in sync (dual-run)
+
+During a physical migration you often run source and target side-by-side. Keep the target warm with incremental change:
+
+- **Lakeflow Connect CDC** — log-based CDC from MySQL / Postgres / SQL Server.
+- **Auto Loader + DLT** (`AUTO CDC` / `AUTO CDC FROM SNAPSHOT`) — Debezium feeds CDC to object storage; Auto Loader ingests with schema evolution.
+- **Delta Change Data Feed (CDF)** — share tables `WITH HISTORY`; the recipient merges incremental changes into a local replica, limiting egress to refresh.
+
+## Private networking across clouds
+
+All three clouds support private connectivity to Databricks: **AWS PrivateLink**, **Azure Private Link**, **GCP Private Service Connect**. For private cross-cloud Delta Sharing, the recipient must reach both the sharing server and provider storage — via IP allowlist, a Cloudflare R2 bridge, cross-cloud VPN, or on-prem edge. Databricks traffic between platform components stays on the cloud provider's global backbone, reducing public-internet exposure.
+
+## Egress cost — the hidden driver
+
+Ingress is free; egress is the cost that surprises programs. Tiers run roughly intra-zone free → inter-AZ ~$0.01/GB → inter-region $0.02–0.09/GB → internet $0.09/GB. Cross-region dual-run is a top-three cloud cost.
+
+Delta Sharing cuts egress by querying in place. For heavy local query, combine with periodic **incremental Deep Clone**. The reference result: **Mercedes-Benz** built an AWS↔Azure data mesh with Delta Sharing + intelligent replication and cut costs **66%** with tiered freshness (live share vs local replica).
+
+<Callout variant="warning" title="Never dual-register a shared table as an external table">
+Registering the same shared table as an external table in more than one metastore causes schema/commit desync under multi-writer load. Share it (Delta Sharing) or replicate it (Deep Clone) — do not register it twice.
+</Callout>
+
+## Collaboration readiness checklist
+
+<Checklist
+  items={[
+    { text: 'Decided share vs replicate vs federate per dataset', checked: false },
+    { text: 'Delta Shares created for "test in place" validation', checked: false },
+    { text: 'Federation connections defined for read-only bridging', checked: false },
+    { text: 'Dual-run CDC cadence chosen (Lakeflow / Auto Loader / Debezium)', checked: false },
+    { text: 'Private connectivity (PrivateLink / PSC) designed for sharing', checked: false },
+    { text: 'Egress cost modeled; R2 / incremental clone used where heavy', checked: false },
+    { text: 'No shared table registered as external in >1 metastore', checked: false },
+  ]}
+/>
+
+## Where to go next
+
+- Automate the move itself: [Databricks migration tooling](/accelerators/databricks-tooling)
+- Use AI to compress translation and validation: [AI-assisted migration](/accelerators/ai-assisted-migration)
+- The governance backbone for all of it: [Unity Catalog strategy](/governance/unity-catalog-strategy)
+
+## Sources
+
+- Delta Sharing — [product page](https://www.databricks.com/product/delta-sharing) · [OSS](https://github.com/delta-io/delta-sharing)
+- Databricks — [Architecting global data collaboration with Delta Sharing](https://www.databricks.com/blog/architecting-global-data-collaboration-delta-sharing)
+- Clean Rooms — [What's new in Databricks Clean Rooms](https://www.databricks.com/blog/whats-new-databricks-clean-rooms)
+- Lakehouse Federation — [HMS + Glue federation GA](https://www.databricks.com/blog/announcing-general-availability-hive-metastore-and-aws-glue-federation-unity-catalog)
+- Egress management — [Databricks docs](https://docs.databricks.com/en/data-sharing/manage-egress.html)
+- Mercedes-Benz cross-cloud data mesh — [Databricks blog](https://www.databricks.com/blog/mercedes-benz-builds-cross-cloud-data-mesh-delta-sharing-and-intelligent-replication-cutting)
+- Private networking — [Databricks trust](https://www.databricks.com/trust/secure-your-data-with-private-networking)
