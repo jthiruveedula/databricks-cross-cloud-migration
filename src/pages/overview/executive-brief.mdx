@@ -1,0 +1,81 @@
+---
+title: 'Executive brief'
+layout: ../../layouts/Layout.astro
+description: 'A one-page brief for sponsors and program leads: the case for moving, the phase model, the decision gate, and the readiness checklist.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+
+# Executive brief
+
+This runbook is built for the team doing a Databricks migration **from one cloud to another** — AWS ↔ Azure ↔ GCP. If your goal is an in-place Unity Catalog upgrade or a same-cloud region move, most of this still applies, but start at [remote governance vs. migration](/overview/remote-governance-and-when-not-to-migrate) before committing to a physical move.
+
+## The one-paragraph case
+
+A cross-cloud migration is rarely about the data. It is about **identity, storage layout, networking, and governance** landing in a target account that your security and platform teams actually own. The data itself moves through Delta and object storage with well-trodden patterns; the schedule slips on everything around the data. Treat the move as a platform-modernization program with a data-migration workstream attached, not the reverse.
+
+## The phase model
+
+Every cross-cloud migration in this runbook flows through the same seven phases. Duration and cost scale with workspace count, user count, and how much legacy Hive metastore you are still carrying.
+
+| Phase | What it produces | Typical share of timeline |
+| --- | --- | --- |
+| 1. Discovery | Asset + dependency inventory, risk register | 10–15% |
+| 2. Foundation | Landing zone, identity federation, network | 15–20% |
+| 3. Data & compute migration | Catalog, storage, clusters moved | 30–40% |
+| 4. Pipeline migration | Jobs, DLT/Lakeflow, CI/CD | 10–15% |
+| 5. Validation | Technical, data, security, business sign-off | 10–15% |
+| 6. Cutover | Wave execution, rollback plan | 5–10% |
+| 7. Hypercare | Monitoring, handover, decommission | 5–10% |
+
+<Callout type="info" title="Estimate before you commit">
+Use the [timeline estimator](/tools/timeline-estimator) and [cost calculator](/tools/cost-calculator) to turn these percentages into numbers for your estate. They run entirely in the browser — no data leaves the page.
+</Callout>
+
+## The decision gate (do this first)
+
+Before any wave plan, answer one question: **does the business driver require moving data at all?** Unity Catalog federation lets you govern and query data in place, across clouds, without a physical migration. A governance-only path is often measured in weeks; a physical migration in quarters.
+
+- If the driver is a **single pane of governance**, compliance boundary, or read access for a new team → favor remote governance.
+- If the driver is **egress cost, latency to a new region, a cloud mandate, or a hard sovereignty boundary** → physical migration is required.
+
+## Top three risks that blow timelines
+
+1. **Uninventoried dependencies.** A notebook that nobody owns calls a table in another workspace that depends on a DBFS mount. Discovery is cheap insurance.
+2. **Identity done late.** Mapping principals, groups, and service principals across clouds is the longest pole — start it in Foundation, not Cutover.
+3. **Legacy Hive metastore debt.** The more workspace-local tables and mounts you have, the more UCX-assisted upgrade work sits inside the migration.
+
+## Readiness checklist
+
+Run this before you approve the program baseline.
+
+<Checklist
+  items={[
+    { text: 'Business driver confirmed as physical move (not federation-only)', checked: false },
+    { text: 'Target landing zone, regions, and accounts approved by cloud platform team', checked: false },
+    { text: 'Workspace + asset inventory complete across all source workspaces', checked: false },
+    { text: 'Identity mapping (users, groups, service principals) drafted', checked: false },
+    { text: 'Networking (private connectivity, egress path) designed', checked: false },
+    { text: 'Wave plan + rollback criteria agreed with app owners', checked: false },
+    { text: 'Validation gates (technical, data, security, business) defined', checked: false },
+  ]}
+/>
+
+## Where to start
+
+- New to the program? Read [what is cross-cloud migration](/overview/what-is-cross-cloud-migration), then the [decision framework](/overview/decision-framework).
+- Picking an approach? See [migration archetypes](/overview/migration-archetypes).
+- Planning the work? Open the [timeline estimator](/tools/timeline-estimator) and the [RACI builder](/tools/raci-builder).
+
+<CodeBlock
+  language="text"
+  code={`# Mental model for the whole program
+discovery  -> know what you have
+foundation -> own the target
+migrate    -> move data, compute, pipelines
+validate   -> prove it
+cutover    -> switch + rollback ready
+hypercare  -> hand over + decommission`}
+/>
