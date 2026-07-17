@@ -321,6 +321,36 @@ html.theme-transitioning *::after {
   font-size: 0.85rem;
 }
 
+.prose pre .copy-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0.375rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s, color 0.2s;
+}
+.prose pre:hover .copy-btn {
+  opacity: 1;
+}
+.prose pre .copy-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.prose pre .copy-btn.copied {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.5);
+}
+
 .prose blockquote {
   border-left: 3px solid var(--accent);
   padding-left: 1rem;

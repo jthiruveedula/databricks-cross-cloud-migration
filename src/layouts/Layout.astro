@@ -168,5 +168,38 @@ const pageTitle = title === siteName ? title : `${title} | ${siteName}`;
         });
       });
     </script>
+    <!-- Copy buttons on code blocks -->
+    <script is:inline>
+      (function () {
+        function setupCopyButtons() {
+          const pres = document.querySelectorAll('pre:not(:has(.copy-btn))');
+          pres.forEach((pre) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'copy-btn';
+            btn.textContent = 'Copy';
+            btn.setAttribute('aria-label', 'Copy code');
+            btn.addEventListener('click', async () => {
+              const code = pre.querySelector('code')?.textContent ?? pre.textContent ?? '';
+              try {
+                await navigator.clipboard.writeText(code);
+                btn.textContent = 'Copied';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                  btn.textContent = 'Copy';
+                  btn.classList.remove('copied');
+                }, 1500);
+              } catch {
+                btn.textContent = 'Failed';
+                setTimeout(() => (btn.textContent = 'Copy'), 1500);
+              }
+            });
+            pre.appendChild(btn);
+          });
+        }
+        document.addEventListener('DOMContentLoaded', setupCopyButtons);
+        document.addEventListener('astro:after-swap', setupCopyButtons);
+      })();
+    </script>
   </body>
 </html>
