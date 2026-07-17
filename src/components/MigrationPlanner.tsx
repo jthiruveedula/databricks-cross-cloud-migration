@@ -303,7 +303,10 @@ export default function MigrationPlanner() {
                   <LayoutList className="h-5 w-5 text-[var(--accent)]" />
                   Recommended runbook path
                 </h4>
-                <div className="space-y-4">
+                <div className="relative space-y-4">
+                  <div className="pointer-events-none absolute bottom-3 left-8 top-3 w-0.5 overflow-hidden rounded-full bg-[var(--border)]">
+                    <div className="flow-line absolute inset-0" />
+                  </div>
                   {plan.mappingSlug && (
                     <motion.a
                       href={withBase(`/${plan.mappingSlug}`)}

@@ -446,6 +446,19 @@ html.theme-transitioning *::after {
     radial-gradient(circle at 85% 80%, rgba(255, 138, 61, 0.10) 0%, transparent 45%);
 }
 
+/* Flowing connector line behind the MigrationPlanner phase timeline */
+.flow-line {
+  background: linear-gradient(180deg, transparent, var(--accent), transparent);
+  background-size: 100% 200%;
+  animation: flow-line 2.5s linear infinite;
+  opacity: 0.6;
+}
+
+@keyframes flow-line {
+  0% { background-position: 0 -100%; }
+  100% { background-position: 0 100%; }
+}
+
 /* MigrationFlowDiagram styles (moved from inline) */
 .migration-flow-diagram {
   --flow-accent: var(--accent, #ff3621);
