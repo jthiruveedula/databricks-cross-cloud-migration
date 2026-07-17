@@ -201,5 +201,40 @@ const pageTitle = title === siteName ? title : `${title} | ${siteName}`;
         document.addEventListener('astro:after-swap', setupCopyButtons);
       })();
     </script>
+    <!-- Click-to-copy anchor links on headings -->
+    <script is:inline>
+      (function () {
+        function setupAnchors() {
+          const headings = document.querySelectorAll('article.prose :is(h2, h3, h4)[id]');
+          headings.forEach((h) => {
+            if (h.querySelector('.heading-anchor')) return;
+            const a = document.createElement('a');
+            a.className = 'heading-anchor';
+            a.href = '#' + h.id;
+            a.setAttribute('aria-label', 'Copy link to this section');
+            a.textContent = '#';
+            a.addEventListener('click', async (e) => {
+              e.preventDefault();
+              const url = location.origin + location.pathname + '#' + h.id;
+              try {
+                await navigator.clipboard.writeText(url);
+                a.textContent = '✓';
+                a.classList.add('copied');
+                setTimeout(() => {
+                  a.textContent = '#';
+                  a.classList.remove('copied');
+                }, 1500);
+              } catch {
+                /* clipboard unavailable — still update the hash */
+              }
+              history.replaceState(null, '', '#' + h.id);
+            });
+            h.appendChild(a);
+          });
+        }
+        document.addEventListener('DOMContentLoaded', setupAnchors);
+        document.addEventListener('astro:after-swap', setupAnchors);
+      })();
+    </script>
   </body>
 </html>
