@@ -4,6 +4,8 @@ import Card from '../components/Card.tsx';
 import MigrationPlanner from '../components/MigrationPlanner.tsx';
 import MigrationFlowDiagram from '../components/MigrationFlowDiagram.tsx';
 import Hero from '../components/Hero.tsx';
+import MetricsBand from '../components/MetricsBand.tsx';
+import MigrationJourney from '../components/MigrationJourney.tsx';
 import { withBase } from '../lib/paths';
 import { ArrowRight, BookOpen, Cloud, Shield, Cpu, Workflow, ClipboardList, Activity, Wrench, Route } from 'lucide-react';
 
@@ -22,6 +24,8 @@ const sections = [
 <Layout title="Databricks Cross-Cloud Migration Runbook" description="Enterprise runbook for migrating Databricks across Azure, AWS, and GCP." hideToc bare>
   <Hero client:load />
 
+  <MetricsBand client:load />
+
   <div class="my-12">
     <div class="mb-4 flex items-center gap-2">
       <Route className="h-5 w-5 text-[var(--accent)]" />
@@ -29,6 +33,8 @@ const sections = [
     </div>
     <MigrationFlowDiagram client:load />
   </div>
+
+  <MigrationJourney client:load />
 
   <div class="my-12">
     <MigrationPlanner client:load />
