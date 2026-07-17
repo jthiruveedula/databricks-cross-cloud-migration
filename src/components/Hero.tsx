@@ -1,5 +1,5 @@
-import React from 'react';
-import { motion } from 'framer-motion';
+import React, { useRef, useState, useEffect } from 'react';
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import BrandGlyph from './BrandGlyph';
 import { BRAND_ICONS } from './logos/brandIcons';
@@ -7,12 +7,44 @@ import { withBase } from '../lib/paths';
 
 const CLOUD_LOGOS = ['aws', 'azure', 'googlecloud'] as const;
 
+const ROTATING = ['across any cloud', 'to AWS', 'to Azure', 'to GCP'];
+
 export default function Hero() {
+  const ref = useRef<HTMLDivElement>(null);
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+  const sx = useSpring(mouseX, { stiffness: 60, damping: 18 });
+  const sy = useSpring(mouseY, { stiffness: 60, damping: 18 });
+
+  const orb1X = useTransform(sx, [-0.5, 0.5], [18, -18]);
+  const orb1Y = useTransform(sy, [-0.5, 0.5], [14, -14]);
+  const orb2X = useTransform(sx, [-0.5, 0.5], [-22, 22]);
+  const orb2Y = useTransform(sy, [-0.5, 0.5], [-16, 16]);
+  const glowX = useTransform(sx, [-0.5, 0.5], [-12, 12]);
+  const glowY = useTransform(sy, [-0.5, 0.5], [-10, 10]);
+
+  const [word, setWord] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setWord((w) => (w + 1) % ROTATING.length), 2600);
+    return () => clearInterval(id);
+  }, []);
+
+  function onMove(e: React.MouseEvent<HTMLDivElement>) {
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    mouseX.set((e.clientX - rect.left) / rect.width - 0.5);
+    mouseY.set((e.clientY - rect.top) / rect.height - 0.5);
+  }
+
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-6 py-16 text-center md:py-24">
-      <div className="hero-glow" />
-      <div className="hero-orb hero-orb-1" />
-      <div className="hero-orb hero-orb-2" />
+    <div
+      ref={ref}
+      onMouseMove={onMove}
+      className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-6 py-16 text-center md:py-24"
+    >
+      <motion.div className="hero-glow" style={{ x: glowX, y: glowY }} />
+      <motion.div className="hero-orb hero-orb-1" style={{ x: orb1X, y: orb1Y }} />
+      <motion.div className="hero-orb hero-orb-2" style={{ x: orb2X, y: orb2Y }} />
       <div className="hero-orb hero-orb-3" />
       <div className="relative z-10 mx-auto max-w-3xl">
         <motion.div
@@ -46,7 +78,21 @@ export default function Hero() {
           transition={{ duration: 0.6, delay: 0.1, ease: 'easeOut' }}
           className="mb-6 text-4xl font-bold tracking-tight md:text-6xl"
         >
-          Migrate Databricks <span className="gradient-text">across any cloud</span>
+          Migrate Databricks{' '}
+          <span className="gradient-text inline-block min-w-[3ch]">
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={word}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.35, ease: 'easeOut' }}
+                className="inline-block"
+              >
+                {ROTATING[word]}
+              </motion.span>
+            </AnimatePresence>
+          </span>
         </motion.h1>
         <motion.p
           initial={{ opacity: 0, y: 12 }}
