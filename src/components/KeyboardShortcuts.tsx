@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Search, Sun, Moon, Sidebar, HelpCircle, Hash } from 'lucide-react';
+import { X, Search, Sun, Moon, Sidebar, HelpCircle, Hash, ArrowLeft, ArrowRight } from 'lucide-react';
+import nav from '../data/navigation.json';
+import { withBase } from '../lib/paths';
 
 interface Shortcut {
   keys: string[];
@@ -8,10 +10,38 @@ interface Shortcut {
   icon: React.ReactNode;
 }
 
+interface NavItem {
+  title: string;
+  slug: string;
+}
+
+const FLAT: NavItem[] = (nav as { sections: { items: NavItem[] }[] }).sections.flatMap(
+  (section) => section.items
+);
+
+function currentSlug(): string {
+  const base = import.meta.env.BASE_URL || '/';
+  return window.location.pathname
+    .replace(base, '/')
+    .replace(/^\//, '')
+    .replace(/\/$/, '')
+    .replace(/\.html$/, '');
+}
+
+function gotoSibling(direction: 1 | -1) {
+  const slug = currentSlug();
+  const index = FLAT.findIndex((item) => item.slug === slug);
+  if (index === -1) return;
+  const target = FLAT[index + direction];
+  if (target) window.location.href = withBase(`/${target.slug}/`);
+}
+
 const SHORTCUTS: Shortcut[] = [
   { keys: ['⌘K'], label: 'Search runbook', icon: <Search className="h-4 w-4" /> },
   { keys: ['t'], label: 'Toggle theme', icon: <Sun className="h-4 w-4" /> },
   { keys: ['b'], label: 'Toggle sidebar', icon: <Sidebar className="h-4 w-4" /> },
+  { keys: ['j'], label: 'Next page', icon: <ArrowRight className="h-4 w-4" /> },
+  { keys: ['k'], label: 'Previous page', icon: <ArrowLeft className="h-4 w-4" /> },
   { keys: ['?'], label: 'Keyboard shortcuts', icon: <HelpCircle className="h-4 w-4" /> },
   { keys: ['Esc'], label: 'Close modal / sidebar', icon: <X className="h-4 w-4" /> },
   { keys: ['1', '2', '3', '4', '5', '6', '7', '8', '9'], label: 'Jump to section (by order)', icon: <Hash className="h-4 w-4" /> },
@@ -37,6 +67,13 @@ export default function KeyboardShortcuts() {
       setOpen((v) => !v);
     }
     if (e.key === 'Escape') setOpen(false);
+
+    if ((e.key === 'j' || e.key === 'k') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      e.preventDefault();
+      gotoSibling(e.key === 'j' ? 1 : -1);
+    }
   }, []);
 
   useEffect(() => {
