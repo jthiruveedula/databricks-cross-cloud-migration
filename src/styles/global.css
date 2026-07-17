@@ -515,6 +515,65 @@ html.theme-transitioning *::after {
   transform: none;
 }
 
+/* Prev/Next article pagination (PrevNext.tsx) */
+.prev-next {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+.prose .prev-next__link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 48%;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-elevated);
+  text-decoration: none;
+  color: var(--ink);
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+.prose .prev-next__link:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+.prev-next__link--next {
+  text-align: right;
+  align-items: flex-end;
+}
+.prev-next__link--empty {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+.prev-next__label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+}
+.prev-next__title {
+  font-weight: 600;
+  color: var(--ink);
+}
+@media (max-width: 640px) {
+  .prev-next {
+    flex-direction: column;
+  }
+  .prose .prev-next__link,
+  .prev-next__link--next {
+    width: 100%;
+    align-items: flex-start;
+    text-align: left;
+  }
+}
+
 @media print {
   :root {
     --header-height: 0;
