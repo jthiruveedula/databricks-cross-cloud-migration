@@ -53,7 +53,7 @@ interface Params {
   gpuWorkload: boolean;
 }
 
-function estimateCost(cloud: Cloud, params: Params): CostBreakdown {
+export function estimateCost(cloud: Cloud, params: Params): CostBreakdown {
   const rates = CLOUD_RATES[cloud];
   const gpuMultiplier = params.gpuWorkload ? 2.5 : 1;
   const totalComputeUnits = params.clusterCount * params.nodesPerCluster;
@@ -65,7 +65,7 @@ function estimateCost(cloud: Cloud, params: Params): CostBreakdown {
   return { compute, storage, transfer, total };
 }
 
-function formatCurrency(n: number): string {
+export function formatCurrency(n: number): string {
   return '$' + n.toLocaleString('en-US');
 }
 
