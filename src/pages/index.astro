@@ -6,6 +6,7 @@ import MigrationFlowDiagram from '../components/MigrationFlowDiagram.tsx';
 import Hero from '../components/Hero.tsx';
 import MetricsBand from '../components/MetricsBand.tsx';
 import MigrationJourney from '../components/MigrationJourney.tsx';
+import CtaBand from '../components/CtaBand.tsx';
 import { withBase } from '../lib/paths';
 import { ArrowRight, BookOpen, Cloud, Shield, Cpu, Workflow, ClipboardList, Activity, Wrench, Route } from 'lucide-react';
 
@@ -64,8 +65,9 @@ const sections = [
       </div>
       <div>
         <h3 class="mb-2 font-semibold text-[var(--ink)]">Validate & cutover</h3>
-        <p class="text-sm text-[var(--ink-muted)]">Reconcile data, verify IAM and networking, run business UAT, and execute blue-green cutover with rollback guardrails.</p>
+      <p class="text-sm text-[var(--ink-muted)]">Reconcile data, verify IAM and networking, run business UAT, and execute blue-green cutover with rollback guardrails.</p>
       </div>
     </div>
-  </div>
-</Layout>
+
+    <CtaBand client:load />
+  </Layout>

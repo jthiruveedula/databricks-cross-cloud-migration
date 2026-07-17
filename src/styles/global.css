@@ -424,6 +424,28 @@ html.theme-transitioning *::after {
   background: radial-gradient(circle, rgba(255, 177, 153, 0.2), transparent 70%);
 }
 
+.cta-band {
+  position: relative;
+  background:
+    linear-gradient(135deg, var(--surface-elevated), var(--surface));
+}
+
+.cta-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(255, 54, 33, 0.14) 0%, transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(255, 138, 61, 0.12) 0%, transparent 45%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dark .cta-glow {
+  background:
+    radial-gradient(circle at 15% 20%, rgba(255, 106, 82, 0.14) 0%, transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(255, 138, 61, 0.10) 0%, transparent 45%);
+}
+
 /* MigrationFlowDiagram styles (moved from inline) */
 .migration-flow-diagram {
   --flow-accent: var(--accent, #ff3621);
