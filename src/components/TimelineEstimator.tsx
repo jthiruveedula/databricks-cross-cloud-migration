@@ -87,7 +87,7 @@ function ceil(val: number): number {
   return Math.ceil(val);
 }
 
-function computeTimeline(
+export function computeTimeline(
   workspaceCount: number,
   userCount: number,
   notebookCount: number,
