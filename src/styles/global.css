@@ -697,6 +697,22 @@ html.theme-transitioning *::after {
   .hero-orb-3 {
     display: none !important;
   }
+  .breadcrumb,
+  .prev-next,
+  .copy-btn,
+  .heading-anchor,
+  .footer-cta,
+  .cta-band {
+    display: none !important;
+  }
+  /* Scroll-reveal hides content until scrolled; force it visible for print */
+  .reveal-block {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .prose {
+    max-width: none !important;
+  }
   @page {
     margin: 1.5cm;
   }
