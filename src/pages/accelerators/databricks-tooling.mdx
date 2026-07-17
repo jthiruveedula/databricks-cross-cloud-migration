@@ -1,0 +1,130 @@
+---
+title: 'Databricks migration tooling'
+layout: ../../layouts/Layout.astro
+description: 'The accelerator stack for cross-cloud moves: UCX, Lakebridge, Databricks Replicator, the migrate tool, and Asset Bundles — what each automates and where it stops.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+
+# Databricks migration tooling
+
+A cross-cloud migration is a platform-modernization program with a data workstream attached. The tooling below is the accelerator layer that keeps the data workstream from dominating the timeline. Use it to automate the mechanical parts — assessment, catalog upgrade, replication, and infrastructure-as-code — and spend human effort on governance and business-logic equivalence.
+
+## The accelerator map
+
+| Tool | Owner | Automates | Stops at |
+| --- | --- | --- | --- |
+| **UCX** | Databricks Labs (OSS) | Assessment, group + table upgrade to Unity Catalog | Cross-cloud data move; notebook rewrite partial |
+| **Lakebridge** | Databricks (free, GA) | DW/ETL conversion + reconciliation | Legacy orchestration mapping |
+| **Databricks Replicator** | Databricks Solutions | Multi-cloud UC metadata + data replication | Application rewrite |
+| **databrickslabs/migrate** | Databricks Labs (OSS) | Workspace-to-workspace asset export/import | Compute re-map across clouds |
+| **Asset Bundles / Terraform** | Databricks | IaC replicas of jobs, pipelines, notebooks | Runtime differences across clouds |
+
+## UCX — assessment and Unity Catalog upgrade
+
+UCX (Unity Catalog Migration Assistant) is an open-source Databricks Labs project. Install it via the Databricks CLI. It is **not SLA-supported** — treat it as a power tool, not a managed service.
+
+Two workflows matter most:
+
+1. **Assessment** crawls tables, UDFs, grants, mounts, jobs, clusters, DLT, and init scripts, then produces a Migration Assessment Report + dashboards that flag every incompatibility *before* you change anything.
+2. **Group + table migration** upgrades workspace-local groups to account-level groups, replicates permissions, and moves Hive Metastore tables/views to Unity Catalog — migrating storage credentials and external locations automatically.
+
+<Callout variant="warning" title="UCX is a UC upgrade tool, not a cross-cloud mover">
+UCX enables each side for Unity Catalog. The actual cross-cloud data move is done by standing up a separate target workspace + metastore and moving data via Delta Sharing, Deep Clone, or D2D replication. UCX also explicitly flags that **cross-cloud external locations are not supported** — use Delta Sharing for cross-cloud mounts.
+</Callout>
+
+<CodeBlock
+  language="bash"
+  code={`# Install and run the UCX assessment
+databricks labs install ucx
+databricks labs ucx assessment --workspace <source-workspace-url>
+
+# Review the produced report, then upgrade groups + tables
+databricks labs ucx migrate-groups --workspace <source-workspace-url>
+databricks labs ucx migrate-tables  --workspace <source-workspace-url>`}
+/>
+
+Known limits: notebook/function auto-rewrite is still under development (not GA as of 2026-06); legacy TABLE ACL (DENY semantics) cannot auto-map to UC's model and needs grant redesign; DBFS-root managed tables cannot be governed by UC and must be Deep Cloned to cloud storage first.
+
+## Lakebridge — data warehouse and ETL conversion
+
+Lakebridge is Databricks' free, open migration engine (GA). It automates **up to 80% of a warehouse migration** and is growing ~20% month-over-month across 1,000+ customers/partners.
+
+Three components:
+- **Analyzer** — profiles and assesses source schemas (Teradata, Synapse, and more).
+- **Converter** — rule-based + AI-powered conversion of SQL/ETL to Databricks SQL / Spark SQL.
+- **Validator** — schema-, row-, and column-level reconciliation against the source.
+
+<Callout variant="tip" title="Pair Lakebridge with AI-assisted translation">
+Lakebridge's deterministic converter is the "core" in the hybrid pattern. Where it cannot express a transform, the AI-powered converter and the [AI-assisted migration](/accelerators/ai-assisted-migration) playbook take the edge cases — always gated by the Validator.
+</Callout>
+
+## Databricks Replicator — multi-cloud replication
+
+`databricks-solutions/databricks-replicator` performs incremental metadata + data replication across metastores and clouds via D2D Delta Sharing, Deep Clone, and Auto Loader. It handles streaming tables, grants, and tags — the mechanism for keeping a target warm during dual-run without a full re-lift each cycle.
+
+## migrate — workspace asset export/import
+
+`databrickslabs/migrate` does workspace-to-workspace cross-cloud export/import with checkpointing and validation. Good for moving notebooks, jobs, and configuration. Caveat: classic compute differs across clouds, so clusters and jobs usually need a manual re-map even after import.
+
+## Asset Bundles and Terraform — repeatable provisioning
+
+Databricks Asset Bundles (declarative automation, YAML) let you express jobs, pipelines, dashboards, and models as versioned infrastructure. The Terraform Exporter recreates a workspace as code for repeatable target provisioning and compliance review.
+
+<CodeBlock
+  language="yaml"
+  code={`# databricks.yml — a bundle that provisions migration target resources
+bundle:
+  name: cross-cloud-migration-target
+
+resources:
+  jobs:
+    ingest_raw:
+      name: "Ingest (Auto Loader)"
+      tasks:
+        - task_key: load
+          notebook_task:
+            notebook_path: ../notebooks/load_raw
+  pipelines:
+    dlt_medallion:
+      name: "Medallion (DLT)"
+      catalog: target_catalog
+      target: prod`}
+/>
+
+## How the tools compose in a real program
+
+<CodeBlock
+  language="text"
+  code={`discovery      -> UCX assessment (score readiness, flag incompatibilities)
+foundation    -> Asset Bundles / Terraform (provision target workspace + UC)
+data move     -> Lakebridge converter + Replicator (Deep Clone / Delta Share)
+pipelines     -> migrate (import jobs) + manual compute re-map
+validate      -> Lakebridge Validator + reconciliation gates
+cutover       -> Replicator keeps target warm; UCX shadow tables for rollback`}
+/>
+
+## Tooling readiness checklist
+
+<Checklist
+  items={[
+    { text: 'UCX assessment run on every source workspace; report reviewed', checked: false },
+    { text: 'Incompatible clusters/jobs/init scripts remediated before migration', checked: false },
+    { text: 'DBFS-root managed tables Deep Cloned to cloud storage + registered in UC', checked: false },
+    { text: 'Lakebridge Converter + Validator chosen for warehouse/ETL conversion', checked: false },
+    { text: 'Replication cadence defined (Deep Clone / CDF / Auto Loader) for dual-run', checked: false },
+    { text: 'Target workspace expressed as Asset Bundles / Terraform for repeatability', checked: false },
+    { text: 'Cross-cloud mounts planned via Delta Sharing, not external locations', checked: false },
+  ]}
+/>
+
+## Sources
+
+- UCX — [github.com/databrickslabs/ucx](https://github.com/databrickslabs/ucx) · [UCX docs](https://docs.databricks.com/aws/en/data-governance/unity-catalog/ucx)
+- Lakebridge — [Introducing Lakebridge](https://www.databricks.com/blog/introducing-lakebridge-free-open-data-migration-databricks-sql)
+- Databricks Replicator — [github.com/databricks-solutions/databricks-replicator](https://github.com/databricks-solutions/databricks-replicator)
+- migrate — [github.com/databrickslabs/migrate](https://github.com/databrickslabs/migrate)
+- Asset Bundles — [Databricks docs](https://docs.databricks.com/aws/en/dev-tools/bundles/)
+- Migration strategy lessons — [Databricks blog](https://www.databricks.com/blog/databricks-migration-strategy-lessons-learned)

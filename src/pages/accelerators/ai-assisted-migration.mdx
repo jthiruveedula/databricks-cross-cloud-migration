@@ -1,0 +1,128 @@
+---
+title: 'AI-assisted migration'
+layout: ../../layouts/Layout.astro
+description: 'How LLMs and agentic tooling accelerate Databricks cross-cloud migrations — SQL/ETL translation, metadata discovery, reconciliation — plus the real risks and mitigations.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+
+# AI-assisted migration
+
+AI does not remove the migration plan — it compresses the tedious middle of it. The highest-leverage uses are **translation** (SQL dialects, legacy ETL), **discovery** (schema and lineage mapping), and **validation** (reconciliation). The lowest-leverage, highest-risk use is asking a general-purpose model to rewrite your production logic unattended.
+
+This page separates what is production-ready from what is still experimental, and gives you a mitigation pattern that holds up under audit.
+
+## The core pattern: deterministic core, LLM edge cases
+
+Pure-LLM translation is unreliable at scale. Broken queries often **execute successfully but return the wrong answer** — hallucinated columns, dropped filters, faulty joins. That is the worst failure class because validation that only checks "does it run" misses it entirely.
+
+The leading approach is hybrid: a **rule-based engine handles the bulk deterministically**, and the LLM is invoked only for transforms the rules cannot express. CrackSQL (SIGMOD 2026) is the research reference for this — it segments complex SQL, applies cross-dialect syntax rules, and uses an LLM only where needed.
+
+<Callout variant="decision" title="Adopt a hybrid translation strategy">
+Rule-based conversion for the 80% that is mechanical (dialect mapping, function substitution). Reserve LLM assistance for the long tail of complex transforms, and gate every output through reconciliation before cutover.
+</Callout>
+
+## Where AI helps today
+
+| Task | What it does | Maturity (2026) |
+| --- | --- | --- |
+| SQL dialect translation | T-SQL / Hive / Redshift / BigQuery → Spark SQL | Production-ready via hybrid tooling; LLM-only still experimental |
+| Legacy ETL conversion | SSIS, Informatica, Talend, SAS → PySpark / DLT | 24+ Databricks partner accelerators in market |
+| Metadata discovery | Auto-classify schemas, detect FK relationships, map entities | Production-ready (Unity Catalog lineage GA) |
+| Data reconciliation | Row/column-level compare of source vs target | Production-ready; agentic anomaly detection in Public Preview |
+| Semantic schema mapping | Vector Search to match source→target columns by meaning | Early; useful for large, undocumented estates |
+
+## SQL dialect translation
+
+Databricks **Lakebridge** (free, open, GA) is the reference converter: rule-based core for Teradata BTEQ, T-SQL, and Oracle PL/SQL → Databricks SQL / Spark SQL, with an AI-powered layer for complex transforms. AWS DMS Schema Conversion added a GenAI capability (Bedrock) in Dec 2024 for procedures the rule engine cannot handle; Google BigQuery ships batch + interactive translators for 15+ sources.
+
+<CodeBlock
+  language="sql"
+  code={`-- Legacy T-SQL (SQL Server)
+SELECT TOP 10 u.name, COUNT(o.id) AS orders
+FROM users u LEFT JOIN orders o ON u.id = o.user_id
+WHERE o.created_at >= DATEADD(day, -7, GETDATE())
+GROUP BY u.name
+ORDER BY orders DESC;
+
+-- Spark SQL (Databricks) equivalent
+SELECT u.name, COUNT(o.id) AS orders
+FROM users u LEFT JOIN orders o ON u.id = o.user_id
+WHERE o.created_at >= current_date() - INTERVAL 7 DAYS
+GROUP BY u.name
+ORDER BY orders DESC
+LIMIT 10;`}
+/>
+
+A rule engine performs this mapping deterministically. An LLM is worth invoking only when the source uses vendor-specific procedural logic with no direct equivalent.
+
+## Legacy ETL conversion
+
+The target pattern is **Delta Live Tables (now Lakeflow declarative pipelines) + Auto Loader**. Auto Loader ingests millions of files per hour with exactly-once semantics and schema evolution; DLT adds expectations (data-quality checks) and auto-optimization.
+
+Partner accelerators report strong results:
+- **Hexaware AMAZE** (SAS → PySpark): up to 80% faster, 5x speed, 70% out-of-box accuracy.
+- **Entrada SASquatch**: up to 80% faster, 100% Unity Catalog compliance.
+- **Infosys DE.AI Auto Migrator**: Informatica XML → Databricks via prompts, integrated with Asset Bundles, UC, and DLT.
+- **LTIMindtree** multi-agent (LangGraph) SSIS → PySpark preserving business intent.
+
+<Callout variant="warning" title="Complex ETL still needs human review">
+Accelerators are strong on parsing and column-level lineage, but business logic embedded in multi-step orchestration frequently needs a subject-matter expert to confirm semantic equivalence. Treat generated pipelines as a first draft, not a signed-off deliverable.
+</Callout>
+
+## Metadata discovery and cataloging
+
+Unity Catalog captures **column-level lineage in real time** across every workspace attached to a metastore — impact analysis, root-cause, and sensitive-data flow tracking come for free once you are UC-native. Partner LLM tooling (Persistent iAURA, Tiger Analytics IDX, EY Data Fusion) compresses the manual discovery-and-mapping phase by 40–50% and auto-detects PII/PCI.
+
+For a cross-cloud move this is the pre-cutover backbone: map every upstream and downstream dependency in `system.access.table_lineage` before you switch readers or writers.
+
+## Validation and reconciliation
+
+Reconciliation is where AI earns its budget. **Lakebridge Validator** does schema-, row-, and column-level reconciliation — proving the target returns the same results as the source. Databricks **Data Quality Monitoring** (agentic, Public Preview Apr 2026) adds anomaly detection, health indicators, and planned quarantine of bad data.
+
+<Callout variant="tip" title="Validate semantics, not just syntax">
+Execution-success is necessary but not sufficient. Require row counts, column sets, and a reconciled result comparison for every migrated dataset. A query that runs but answers the wrong question is worse than one that fails.
+</Callout>
+
+## The risks are real — and governable
+
+| Risk | Why it bites | Mitigation |
+| --- | --- | --- |
+| Hallucinated transforms | LLMs invent columns/functions/APIs | Deterministic core + reconciliation gate |
+| Non-determinism | Same prompt → different SQL | Pin models, version prompts, keep a test harness |
+| "Silent" wrong answers | Runs fine, wrong data | Semantic reconciliation, not syntax-only checks |
+| PII / code leakage to LLMs | Sending stored procs to public endpoints | Private endpoints, code/schema redaction, Unity AI Gateway |
+| Compliance (GDPR/HIPAA) | Data residency + auditability | Databricks-hosted models, workspace-local inference |
+
+The de-facto requirement for regulated migrations: **keep code and data inside the boundary**. Use Databricks-hosted Foundation Model endpoints or Mosaic AI Model Serving (data stays in the workspace), strip PII and proprietary literals before any external call, and route external models through Unity AI Gateway for usage tracking.
+
+## Pre-flight checklist for AI-assisted migration
+
+<Checklist
+  items={[
+    { text: 'Rule-based converter chosen for the bulk (Lakebridge / vendor tool)', checked: false },
+    { text: 'LLM used only for edge-case transforms, never unattended on prod logic', checked: false },
+    { text: 'All generated SQL/ETL passes reconciliation (rows, columns, results)', checked: false },
+    { text: 'Private / workspace-local model endpoint for any code sent to an LLM', checked: false },
+    { text: 'PII and proprietary literals redacted before external model calls', checked: false },
+    { text: 'Prompts and model versions pinned for reproducibility + audit', checked: false },
+    { text: 'Subject-matter expert sign-off on complex business logic', checked: false },
+  ]}
+/>
+
+## Where to go next
+
+- Tooling that wraps this: [Databricks migration tooling](/accelerators/databricks-tooling)
+- Keep source and target in sync during dual-run: [Cross-cloud collaboration](/collaboration/cross-cloud-collaboration)
+- The governance backbone everything lands on: [Unity Catalog strategy](/governance/unity-catalog-strategy)
+
+## Sources
+
+- Databricks — [Introducing Lakebridge](https://www.databricks.com/blog/introducing-lakebridge-free-open-data-migration-databricks-sql)
+- Databricks — [GenAI partner accelerators for data engineering migration](https://www.databricks.com/blog/introducing-databricks-genai-partner-accelerators-data-engineering-migration)
+- CrackSQL (SIGMOD 2026) — [arxiv.org/abs/2504.00882](https://arxiv.org/abs/2504.00882)
+- AWS DMS Schema Conversion GenAI — [InfoWorld](https://www.infoworld.com/article/3616156/aws-database-migration-service-gets-gen-ai-powered-schema-conversion.html)
+- Databricks — [Data Quality Monitoring at scale with agentic AI](https://www.databricks.com/blog/data-quality-monitoring-scale-agentic-ai)
+- Databricks — [AI Functions (ai_query)](https://docs.databricks.com/aws/en/large-language-models/ai-query)

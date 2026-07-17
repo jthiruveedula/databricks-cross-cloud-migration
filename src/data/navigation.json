@@ -141,6 +141,21 @@
       ]
     },
     {
+      "title": "Accelerators",
+      "slug": "accelerators",
+      "items": [
+        { "title": "AI-assisted migration", "slug": "accelerators/ai-assisted-migration" },
+        { "title": "Databricks migration tooling", "slug": "accelerators/databricks-tooling" }
+      ]
+    },
+    {
+      "title": "Collaboration",
+      "slug": "collaboration",
+      "items": [
+        { "title": "Cross-cloud data collaboration", "slug": "collaboration/cross-cloud-collaboration" }
+      ]
+    },
+    {
       "title": "Tools",
       "slug": "tools",
       "items": [
