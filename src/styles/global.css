@@ -488,6 +488,20 @@ html.theme-transitioning *::after {
   transform: translateY(0);
 }
 
+/* Scroll-reveal for article content — subtle fade-up as blocks enter view.
+   .reveal-block starts hidden; .is-revealed (added by the IntersectionObserver
+   in Layout.astro) animates it in. Reduced-motion users get everything shown
+   immediately (the observer skips and marks all revealed). */
+.reveal-block {
+  opacity: 0;
+  transform: translateY(0.75rem);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+.reveal-block.is-revealed {
+  opacity: 1;
+  transform: none;
+}
+
 @media print {
   :root {
     --header-height: 0;
