@@ -1,0 +1,99 @@
+---
+title: 'Known limitations'
+layout: ../../layouts/Layout.astro
+description: 'Databricks artifacts that do not carry over during a workspace migration, why, and how to capture them before cutover.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Known limitations
+
+Migration tooling — Databricks' own [migration playbook](https://docs.databricks.com/_extras/documents/aws-st-workspace-migration-guide.pdf) and third-party tools alike — recreates **current state**: job definitions, notebook contents, cluster configs, grants. It does not replay **history**: what ran, when, who queried what, what changed. History that lives only in the source workspace's operational metadata is gone the moment that workspace is decommissioned, whether or not anyone decided that was acceptable.
+
+Treat every row below as a decision, not a surprise: archive it, accept the loss in writing, or engineer around it — before cutover, not during the post-migration incident review.
+
+<Callout client:visible variant="warning" title="Migration tooling moves state, not history">
+  Databricks' own E2 migration playbook documents this as a support matrix, not an oversight: Access Tokens are Unsupported for both export and import, DBFS mount points are Unsupported on import, and workspace/cluster-scoped libraries must be reinstalled manually. Object IDs — job IDs, cluster IDs — always change on import. Anything that hardcodes a job ID (an external scheduler, a dashboard link, a webhook payload) breaks silently at cutover unless you've built the ID-mapping step into your runbook.
+</Callout>
+
+## What doesn't migrate
+
+| Artifact | Why it doesn't carry over | Source retention window | Before cutover |
+|---|---|---|---|
+| Job run history | The Jobs UI/API only ever expose a rolling window of past runs, and a job re-created in the target gets a **new** job ID with zero run history against it | 60 days via UI/API ([Databricks: Monitor Lakeflow Jobs](https://docs.databricks.com/aws/en/jobs/monitor)) | Export via `2.1/jobs/runs/list` or the `system.lakeflow.job_run_timeline` table on source; land it in a Delta table tagged with the old job ID |
+| Notebook revision history | The Databricks API does not support importing a notebook together with its full revision history, and an imported MLflow run cannot be re-linked to the notebook revision that produced it — the source revision ID simply doesn't exist in target | Until manually cleared (per-notebook, no bulk export) | Decide per notebook whether revision history is a compliance requirement; if so, export revisions individually via the API before migrating |
+| Query history (SQL warehouses) | Workspace/metastore-scoped; nothing carries into a new metastore in a new cloud/account | 30 days ([Databricks: Query history](https://docs.databricks.com/aws/en/sql/user/queries/query-history)) | Archive `system.query.history` to a Delta table if query audit trail matters for compliance |
+| Cluster event logs | No bulk export path — only the per-cluster Events API, and events fall out of that window entirely | 60 days | Pull via the [Clusters API](https://docs.databricks.com/aws/en/compute/clusters-manage) into a Delta table for any cluster tied to an incident or audit finding |
+| Audit logs | Delivered to your own cloud storage, but scoped to the account/region pairing of the *source* deployment — a cross-cloud cutover starts a second, disconnected audit trail under the new account, it doesn't extend the old one | ~1 year (account-level log delivery) | Keep source audit log delivery running through your compliance retention window, or export/consolidate both trails into one queryable location |
+| Personal access tokens | Access Tokens are Unsupported for both export and import in Databricks' own migration tooling — PATs are tied to a specific workspace/user pairing by design | N/A | Re-issue as OAuth service principals / managed identities in target — see [anti-patterns](/troubleshooting/anti-patterns) |
+| DBFS root copied via raw storage sync | `aws s3 sync` / `gsutil rsync` of the whole DBFS root moves bytes but breaks the Delta transaction log that sits alongside them | N/A | Use `CREATE TABLE ... DEEP CLONE` for every managed Delta table so the transaction log — and therefore time travel — survives; reserve raw sync for genuinely non-tabular files |
+| MLflow run/experiment lineage to source notebook | Covered in depth on the [MLflow](/ml/mlflow) page — re-logged runs lose their pointer to the exact source notebook revision that produced them | N/A | Preserve `mlflow.parentRunId` and treat notebook-revision lineage as unrecoverable unless captured before migration |
+
+## Why "60 days" and "365 days" are both misleading
+
+<Callout client:visible variant="warning" title="System table retention doesn't survive a metastore change">
+  Databricks' system tables (`system.lakeflow.*`, `system.query.history`, `system.access.audit`) retain much longer than the UI — up to 365 days for some tables. But system tables are provisioned per metastore, and a metastore is pinned to one cloud account and region. A cross-cloud migration always stands up a **new** metastore in the target — the source metastore's system tables, and everything in them, stay behind with it. The longer retention window only helps if you read from it before the source metastore is deleted, not after.
+</Callout>
+
+## Archiving history before decommission
+
+<CodeBlock client:visible language="python" filename="archive_job_run_history.py" code={`from databricks.sdk import WorkspaceClient
+
+w = WorkspaceClient(profile="SRC_PROFILE")  # source workspace
+
+rows = []
+for job in w.jobs.list():
+    for run in w.jobs.list_runs(job_id=job.job_id):
+        rows.append({
+            "source_job_id": job.job_id,
+            "job_name": job.settings.name,
+            "run_id": run.run_id,
+            "start_time": run.start_time,
+            "end_time": run.end_time,
+            "state": run.state.result_state.value if run.state.result_state else None,
+            "run_page_url": run.run_page_url,
+        })
+
+# Write \`rows\` to a Delta table in the TARGET workspace (or an archive location
+# outside either workspace's lifecycle) before the source job/workspace is retired.
+# Tag every row with the source workspace ID and migration cutover date.
+`} />
+
+Run the equivalent pull for cluster events (`w.clusters.events(cluster_id=...)`) and query history (`system.query.history` on source) with the same pattern: read from source, land in a table that outlives the source workspace, tag with provenance.
+
+## Validation
+
+- Confirm the archived-history table is populated back to the start of the source retention window, not just from "today."
+- Confirm the archive is queryable from the target account without depending on source credentials or the soon-to-be-decommissioned workspace.
+- Get explicit sign-off from compliance/audit owners on anything in the table above that will **not** be archived — a documented risk acceptance, not a silent gap discovered later.
+- Re-run the [technical validation](/validation/technical-validation) sign-off gate with this checklist included, not as a follow-up afterthought.
+
+## Rollback
+
+None of this blocks rollback — archiving history is additive and read-only against source. If an archive job fails, re-run it; it does not put source or target state at risk.
+
+## Automation opportunity
+
+- Schedule the archival scripts as a job that runs daily throughout the migration window, not a single manual pull the week before cutover — jobs keep producing new runs until the source is actually retired.
+- Store archived history in Unity Catalog tables with the same retention/governance controls as production data, since it may be the only remaining copy of that history.
+
+<Checklist client:visible title="Known limitations" items={[
+  { id: 'inventory', label: 'Every artifact in the table above explicitly archived, engineered around, or risk-accepted' },
+  { id: 'job-history', label: 'Job run history archived from Jobs API / system tables before source retirement' },
+  { id: 'query-history', label: 'Query history archived if required for audit' },
+  { id: 'cluster-events', label: 'Cluster event logs archived for any cluster tied to an incident or audit finding' },
+  { id: 'audit-logs', label: 'Audit log continuity plan agreed with compliance across the cutover boundary' },
+  { id: 'delta-history', label: 'Delta table history preserved via DEEP CLONE, not raw storage sync' },
+  { id: 'signoff', label: 'Compliance/audit sign-off obtained for anything not archived' },
+]} />
+
+## Sources
+
+- Databricks — [E2 Migration Playbook](https://docs.databricks.com/_extras/documents/aws-st-workspace-migration-guide.pdf) (migration tool export/import support matrix, MLflow notebook-revision-linking limitations)
+- Databricks — [Monitor Lakeflow Jobs](https://docs.databricks.com/aws/en/jobs/monitor)
+- Databricks — [Query history](https://docs.databricks.com/aws/en/sql/user/queries/query-history)
+- Databricks — [Manage classic compute (cluster event log)](https://docs.databricks.com/aws/en/compute/clusters-manage)
+- Microsoft Learn — [Diagnostic log reference / audit logs](https://learn.microsoft.com/en-us/azure/databricks/admin/account-settings/audit-logs)
+- Databricks — [System tables reference](https://docs.databricks.com/gcp/en/admin/system-tables/)

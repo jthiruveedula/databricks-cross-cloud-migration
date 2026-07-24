@@ -23,6 +23,7 @@ Data reconciliation proves that target data matches source data within agreed to
 | Schema | Compare column names, types, nullability | Exact match |
 | Partitions | Compare partition values and counts | 0% |
 | Primary/unique keys | Verify uniqueness constraints | 0% |
+| Delta table history | `DESCRIBE HISTORY` on target vs. source | Non-zero — see below |
 
 ## Row-count and checksum query
 
@@ -45,6 +46,15 @@ aws s3 sync s3://source-bucket/path s3://target-bucket/path --dryrun
 
 # GCP example
 gsutil -m rsync -r gs://source-bucket/path gs://target-bucket/path -d -n`} />
+
+## Delta table history reconciliation
+
+<CodeBlock client:visible language="sql" filename="describe_history.sql" code={`DESCRIBE HISTORY source_catalog.schema.table;
+DESCRIBE HISTORY target_catalog.schema.table;`} />
+
+<Callout client:visible variant="warning" title="Zero history on target is a migration-method bug, not a data bug">
+  If the target table's history is empty or starts only at the migration date, the table was very likely copied with `CREATE TABLE AS SELECT`, `INSERT OVERWRITE`, or a raw cloud-storage sync (`aws s3 sync`, `gsutil rsync`) instead of `CREATE TABLE ... DEEP CLONE`. Row counts and checksums will still match — this check exists specifically because those checks alone won't catch it. Time travel and audit queries against pre-migration versions will silently fail once source is decommissioned. Confirm which tables genuinely don't need history (see [FAQ](/troubleshooting/faq)) versus which lost it by accident.
+</Callout>
 
 ## Handling mismatches
 
@@ -78,4 +88,5 @@ If reconciliation fails beyond tolerance, halt cutover and re-sync. Do not proce
   { id: 'files', label: 'File counts and checksums match for volumes' },
   { id: 'schema', label: 'Schemas match exactly' },
   { id: 'partitions', label: 'Partitions match' },
+  { id: 'history', label: 'Delta table history present on target where required (DEEP CLONE used, not CTAS/raw sync)' },
 ]} />

@@ -52,7 +52,7 @@ LOCATION 's3://<target-bucket>/<path>';`} />
 
 ### CTAS / INSERT OVERWRITE
 
-Create table as select or insert overwrite for non-Delta sources or when history is not required.
+Create table as select or insert overwrite for non-Delta sources or when history is not required. Choosing this over deep clone is a one-way door — validate the choice per table in [data reconciliation](/validation/data-reconciliation#delta-table-history-reconciliation), since a missing transaction log is invisible to row-count and checksum checks.
 
 <CodeBlock client:visible language="sql" code={`CREATE TABLE <target_catalog>.<schema>.<table>
 AS SELECT * FROM <source_catalog>.<schema>.<table>;`} />
