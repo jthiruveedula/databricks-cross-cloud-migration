@@ -86,7 +86,7 @@ function SvgGlyph({ icon, className, brandColor }: Props & { icon: BrandIconSvg 
       whileHover={{ scale: 1.08, rotate: brandColor ? 6 : 0 }}
       whileTap={{ scale: 0.95 }}
       transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-      className="inline-flex items-center justify-center"
+      className={`relative inline-flex items-center justify-center ${className}`}
     >
       <AnimatePresence>
         {!loaded && (
@@ -95,14 +95,14 @@ function SvgGlyph({ icon, className, brandColor }: Props & { icon: BrandIconSvg 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute h-5 w-5 rounded bg-[var(--border)] animate-pulse"
+            className="absolute h-full w-full rounded bg-[var(--border)] animate-pulse"
           />
         )}
       </AnimatePresence>
       <svg
         role="img"
         viewBox="0 0 24 24"
-        className={`h-full w-full ${className} ${!loaded ? 'hidden' : 'block'}`}
+        className={`h-full w-full ${!loaded ? 'hidden' : 'block'}`}
         fill={brandColor ? `#${icon.hex}` : 'currentColor'}
         aria-hidden="true"
         style={{ display: loaded ? 'block' : 'none' }}
