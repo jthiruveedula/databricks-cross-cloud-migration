@@ -1,5 +1,5 @@
 // Enhanced icon registry with error handling and lazy loading
-import { BrandIcon } from './brandIcons';
+import { BrandIcon, BRAND_ICONS } from './brandIcons';
 
 export interface IconMetadata extends BrandIcon {
   loaded: boolean;
@@ -70,7 +70,8 @@ export class IconRegistry {
     try {
       // Preload the SVG to check if icon loads successfully
       const img = new Image();
-      const svgData = `data:image/svg+xml;base64,${btoa(source.path)}`;
+      const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="${source.path}"/></svg>`;
+      const svgData = `data:image/svg+xml;base64,${btoa(svgMarkup)}`;
       
       await new Promise<void>((resolve, reject) => {
         img.onload = () => resolve();

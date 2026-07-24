@@ -65,7 +65,8 @@ function SvgGlyph({ icon, className, brandColor }: Props & { icon: BrandIconSvg 
     const img = new Image();
     img.onload = () => setLoaded(true);
     img.onerror = () => setError(true);
-    img.src = `data:image/svg+xml;base64,${btoa(icon.path)}`;
+    const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="${icon.path}"/></svg>`;
+    img.src = `data:image/svg+xml;base64,${btoa(svgMarkup)}`;
   }, [icon.path]);
 
   if (error) {
