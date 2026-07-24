@@ -20,10 +20,11 @@ Technical validation confirms that the target platform is functional, secure, an
 | IAM | Users and principals can access | Log in, run privilege checks | Audit log, test results |
 | Metastore | Metadata is complete and consistent | Compare catalog/schema/table counts | Reconciliation report |
 | Compute | Clusters start and run | Start each cluster type, run smoke test | Cluster event logs |
-| Pipelines | Jobs complete successfully | Run jobs and compare outputs | Job run history |
+| Pipelines | Jobs complete successfully | Run jobs and compare outputs | Target run logs (source run history does not carry over — see below) |
 | SQL/Dashboards | Queries return expected results | Run dashboard queries | Query output diff |
 | Security | Controls are enforced | Test denied access, verify encryption | Security scan report |
 | Cost/Perf | Performance within SLA | Measure query latency and cost | Benchmark report |
+| Historical artifacts | Job run history, query history, cluster event logs, notebook revisions archived if required | Pull from source APIs/system tables before source retirement | Archive table in target, tagged with source workspace ID |
 
 ## Infra validation script
 
@@ -48,6 +49,10 @@ SHOW GRANT ON CATALOG <catalog_name>;`} />
   Require platform, security, and application owners to sign off on technical validation before cutover. Keep evidence in an immutable location.
 </Callout>
 
+<Callout client:visible variant="warning" title="Include a compliance sign-off for what won't be archived">
+  Job run history, query history, cluster event logs, and notebook revision history don't migrate — see [known limitations](/troubleshooting/known-limitations). Add an explicit line item to the sign-off gate: either the archive job for each artifact ran successfully, or the artifact's owner has formally accepted the loss. Don't let this surface for the first time during an audit months after the source workspace is gone.
+</Callout>
+
 ## Rollback
 
 If validation fails, fix the issue and re-run the affected test category. Do not proceed to cutover with open severity-1 or severity-2 findings.
@@ -64,4 +69,5 @@ If validation fails, fix the issue and re-run the affected test category. Do not
   { id: 'compute', label: 'Clusters and warehouses smoke-tested' },
   { id: 'jobs', label: 'Jobs and pipelines run successfully' },
   { id: 'security', label: 'Security controls verified' },
+  { id: 'history', label: 'Historical artifacts archived or loss formally accepted' },
 ]} />

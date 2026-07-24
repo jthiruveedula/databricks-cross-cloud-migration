@@ -1,16 +1,19 @@
 ---
 title: 'Common errors'
 layout: ../../layouts/Layout.astro
-description: 'Diagnose and resolve common cross-cloud migration errors.'
+description: 'Diagnose and resolve common cross-cloud migration errors, by asset type, with real error strings and fix code.'
 ---
 
 import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
 
 # Common errors
 
-This section catalogs errors that appear frequently during cross-cloud migrations and provides practical resolution steps.
+This section catalogs errors that appear frequently during cross-cloud migrations, grouped by the asset type that produces them, with the exact error text, root causes, and working resolution code — not just "check your permissions."
 
-## Metastore attachment failed
+## Metastore and storage
+
+### Metastore attachment failed
 
 **Symptom:** `Workspace is already attached to a metastore` or `Metastore not found`.
 
@@ -22,57 +25,256 @@ This section catalogs errors that appear frequently during cross-cloud migration
 
 **Resolution:**
 
-1. Check current metastore attachment in the account console.
-2. Detach from old metastore if appropriate.
-3. Ensure workspace and metastore are in the same region.
+<CodeBlock client:visible language="bash" code={`# Check current attachment
+databricks account metastores list --output json | jq '.[] | {metastore_id, name, region}'
+databricks account workspaces get <WORKSPACE_ID> --output json | jq '.metastore_id'
 
-## External location access denied
+# Detach if attached to the wrong metastore (account admin required)
+databricks account metastore-assignments delete --workspace-id <WORKSPACE_ID>
 
-**Symptom:** `Unable to access location` or `403 Forbidden` when reading external tables.
+# Re-assign to the correct (same-region) metastore
+databricks account metastore-assignments create --workspace-id <WORKSPACE_ID> --metastore-id <TARGET_METASTORE_ID>`} />
 
-**Causes:**
+### External location access denied
 
-- Storage credential IAM role does not trust Databricks account.
-- Bucket policy denies access.
-- External location path is misconfigured.
-
-**Resolution:**
-
-1. Verify the IAM trust policy and external ID.
-2. Test access with the cloud CLI using the target identity.
-3. Check that the external location URL matches the credential scope.
-
-## Cluster fails to start
-
-**Symptom:** Cluster stays in `PENDING` or `TERMINATED` state.
+**Symptom:** `Unable to access location` or `403 Forbidden` / `AccessDenied` when reading external tables.
 
 **Causes:**
 
-- Node type not available in target region.
-- Instance profile or managed identity missing.
-- Init script path invalid.
+- Storage credential IAM role does not trust the Databricks account (missing or wrong external ID).
+- Bucket/container policy denies access from the new cross-account role.
+- External location URL doesn't match the storage credential's scope (e.g. credential scoped to `s3://bucket/prod/` but external location points at `s3://bucket/`).
 
 **Resolution:**
 
-1. Check cluster event logs for the termination reason.
-2. Validate node type availability.
-3. Verify init script and library paths point to target volumes.
+<CodeBlock client:visible language="sql" code={`-- Validate the storage credential and external location from inside Databricks
+DESCRIBE STORAGE CREDENTIAL <credential_name>;
+DESCRIBE EXTERNAL LOCATION <location_name>;
 
-## Job fails after migration
+-- Confirm the credential actually grants access to this exact path
+SELECT * FROM read_files('s3://target-bucket/path/', format => 'parquet') LIMIT 1;`} />
 
-**Symptom:** Job task fails with path, catalog, or secret errors.
+If that fails, test the underlying cloud identity directly (bypassing Databricks) to isolate whether the problem is the IAM trust policy or the Databricks-side grant:
+
+<CodeBlock client:visible language="bash" code={`# AWS: assume the storage credential's role directly and list the bucket
+aws sts assume-role --role-arn arn:aws:iam::<ACCOUNT_ID>:role/<databricks-storage-role> \\
+  --role-session-name test-access --external-id <DATABRICKS_EXTERNAL_ID>
+aws s3 ls s3://target-bucket/path/ --profile assumed-role`} />
+
+## Compute and clusters
+
+### Cluster fails to start
+
+**Symptom:** Cluster stays in `PENDING` or `TERMINATED` state; event log shows `INSTANCE_UNREACHABLE`, `SPOT_INSTANCE_TERMINATION`, or `INIT_SCRIPT_FAILURE`.
 
 **Causes:**
 
-- Hardcoded source paths or catalog names.
-- Secret scope/key missing in target.
-- Warehouse endpoint ID not updated.
+- Node type from source doesn't exist in the target region (an AWS `i3.xlarge` has no literal GCP/Azure equivalent — see [instance type mapper](/tools/instance-mapper)).
+- Instance profile / managed identity referenced in the cluster config doesn't exist in target.
+- Init script path points at a source-only DBFS/volume location.
 
 **Resolution:**
 
-1. Search task code for source-specific strings.
-2. Verify all referenced secrets exist in target scope.
-3. Confirm SQL warehouse ID matches target.
+<CodeBlock client:visible language="bash" code={`# Pull the exact termination reason instead of guessing from cluster state alone
+databricks clusters events --cluster-id <CLUSTER_ID> --output json \\
+  | jq '.events[] | select(.type=="TERMINATED") | .details.reason'`} />
+
+1. Cross-check the failing node type against target-region availability before reusing the source cluster JSON verbatim.
+2. Recreate the instance profile / managed identity in target and re-attach by name — profiles are never migrated automatically (see [known limitations](/troubleshooting/known-limitations)).
+3. Point init scripts at a target volume/workspace path; a script path copied verbatim from a source DBFS mount fails silently at cluster boot, not at config-save time.
+
+### Job cluster references a deleted cluster policy
+
+**Symptom:** `INVALID_PARAMETER_VALUE: Cluster policy <policy-id> does not exist` when creating a job or running a bundle deploy.
+
+**Cause:** Job JSON exported from source embeds the source workspace's cluster policy ID verbatim; policy IDs are workspace-specific and never match in target.
+
+**Resolution:** Rewrite `job_clusters[].new_cluster.policy_id` to the equivalent policy ID created in target — see [cluster policies](/compute/cluster-policies) for the policy-recreation step this depends on.
+
+## Jobs and Workflows
+
+### Job fails after migration
+
+**Symptom:** Job task fails with path, catalog, or secret errors, e.g. `java.io.FileNotFoundException: dbfs:/mnt/source-mount/...` or `Secret does not exist with scope: <scope> and key: <key>`.
+
+**Causes:**
+
+- Hardcoded source paths or catalog names inside notebook/task code.
+- Secret scope/key missing in target (secret **values** never migrate — only scope names/ACLs do, and only if you replay them explicitly).
+- Warehouse endpoint ID (SQL tasks) not updated to the target warehouse.
+
+**Resolution:**
+
+<CodeBlock client:visible language="bash" code={`# Search exported job/notebook source for anything still pointing at source
+grep -rn "dbfs:/mnt/\\|source_catalog\\|<source-workspace-url>" ./exported_notebooks/
+
+# Confirm every secret scope/key referenced by the job actually exists in target
+databricks secrets list-scopes
+databricks secrets list --scope <scope-name>`} />
+
+### Job import creates a duplicate instead of updating the existing job
+
+**Symptom:** Re-running an import after a partial migration produces a second job with the same name and a new job ID, rather than updating the one already created — dashboards, external schedulers, and on-call runbooks now point at the stale job ID.
+
+**Cause:** `databricks jobs create` always creates a new job; there is no "create or update by name" semantics in the Jobs API. Re-running an export/import cycle blindly duplicates rather than reconciles.
+
+**Resolution:** Track the source-job-ID → target-job-ID mapping from the first import, and use `databricks jobs reset` / `databricks jobs update` against the recorded target job ID for every subsequent re-sync, never `jobs create` again for that job.
+
+## DLT / Lakeflow pipelines
+
+### `UNITY_CATALOG_INITIALIZATION_FAILED`
+
+**Symptom:** Pipeline update fails at cluster startup with `UNITY_CATALOG_INITIALIZATION_FAILED`, a catch-all error that looks like a Unity Catalog problem but almost always isn't.
+
+**Causes (in order of likelihood):**
+
+- Networking: the pipeline's cluster can't reach the Databricks control plane (common right after a fresh target VPC/VNet is stood up and NAT/firewall rules haven't been fully validated — see [network security](/security/network-security)).
+- Permissions: the cluster's identity can't read/write the cloud storage backing the target Unity Catalog metastore.
+- Genuinely wrong catalog/schema reference (least common cause, despite being the first thing people check).
+
+**Resolution:** Rule out networking and storage permissions first — confirm the cluster can reach the control plane and that `SHOW GRANTS ON CATALOG <target_catalog>` includes the pipeline's run-as identity — before re-checking the pipeline's catalog/schema config.
+
+### Pipeline stuck at "Waiting for resources"
+
+**Symptom:** A recreated Unity Catalog pipeline never progresses past `Waiting for resources` in the target workspace.
+
+**Cause:** The target schema has an explicit storage location set, but the pipeline also expects to manage table storage under the catalog's default location — the two conflict. This is specifically a migration-time trap because source (often still on Hive metastore or an older UC layout) may not have hit this constraint.
+
+**Resolution:**
+
+<CodeBlock client:visible language="sql" code={`-- Don't set an explicit storage location on the schema the pipeline writes to;
+-- let materialized views / streaming tables inherit the catalog's storage location.
+CREATE SCHEMA IF NOT EXISTS target_catalog.pipeline_schema;
+-- (no MANAGED LOCATION clause)`} />
+
+### Hive metastore pipeline can't be "upgraded," only recreated
+
+**Symptom:** No in-place upgrade path exists from a Hive-metastore-backed DLT pipeline to a Unity-Catalog-backed one in target.
+
+**Cause:** This isn't a bug to route around — Databricks does not support upgrading an existing HMS pipeline to UC. A new pipeline must be created against the target catalog, and (per the [DLT and Lakeflow](/pipelines/dlt-lakeflow) checkpoint guidance) it re-ingests from source rather than resuming any prior checkpoint state.
+
+**Resolution:** Budget this as "new pipeline, backfill run" in the migration plan from the start, not a same-day config edit discovered during cutover.
+
+## Asset Bundles (DABs)
+
+### Bundle deploy creates a duplicate job/pipeline instead of updating it
+
+**Symptom:** After importing hand-written jobs into a bundle and running `databricks bundle deploy`, a second copy of the job appears in target with a new job ID, alongside the one that already existed from the earlier manual migration.
+
+**Cause:** Databricks Asset Bundles create new resources on deploy by default; a resource block that happens to describe an already-existing job does not automatically bind to it.
+
+**Resolution:**
+
+<CodeBlock client:visible language="bash" code={`# Generate bundle config from the existing (already-migrated) resource, then bind it
+databricks bundle generate job --existing-job-id <TARGET_JOB_ID>
+databricks bundle deployment bind <bundle-resource-key> <TARGET_JOB_ID>
+
+# Only then run deploy -- it will update, not duplicate
+databricks bundle deploy --target prod`} />
+
+### `Error: Path (.../resources) doesn't exist`
+
+**Symptom:** `databricks bundle deploy` fails immediately with a path-not-found error referencing the bundle's own deployment state path in the workspace (e.g. `/Shared/.bundle/<name>/<target>/resources`).
+
+**Causes:**
+
+- Stale `.databricks/bundle/<target>` local cache copied over from a machine that deployed against source, now pointed at a target workspace where that deployment state was never created.
+- A partial or interrupted first deploy against target left deployment state inconsistent.
+
+**Resolution:**
+
+<CodeBlock client:visible language="bash" code={`# Clear local bundle cache and redeploy clean against target
+rm -rf .databricks/bundle/<target>
+databricks bundle validate --target <target>
+databricks bundle deploy --target <target>`} />
+
+## SQL: warehouses, queries, dashboards, alerts
+
+### Script still uses the deprecated `data_source_id` field
+
+**Symptom:** A query-migration script written against the legacy SQL API (`/api/2.0/preview/sql/queries`) works but silently targets the wrong warehouse, or fails with an unhelpful `data_source_id` validation error — because `data_source_id` is a deprecated proxy for a warehouse, not the warehouse ID itself.
+
+**Cause:** The legacy Databricks SQL API requires resolving a warehouse to its `data_source_id` via a separate lookup; the current Queries API (`/api/2.0/sql/queries` or Lakeview) accepts `warehouse_id` directly. Migration scripts adapted from old source-workspace tooling often carry the legacy field forward without re-deriving it for target.
+
+**Resolution:**
+
+<CodeBlock client:visible language="python" filename="resolve_warehouse.py" code={`import requests
+
+# Legacy API requires this extra lookup -- prefer migrating the script to the
+# current Queries API (warehouse_id) instead of just re-deriving this value.
+data_sources = requests.get(
+    f"{TARGET_HOST}/api/2.0/preview/sql/data_sources",
+    headers={"Authorization": f"Bearer {TARGET_TOKEN}"},
+).json()
+
+target_data_source_id = next(
+    d["id"] for d in data_sources if d["warehouse_id"] == TARGET_WAREHOUSE_ID
+)`} />
+
+### Alert references a query ID that no longer exists
+
+**Symptom:** `RESOURCE_DOES_NOT_EXIST` or a silent no-op when creating a migrated alert.
+
+**Cause:** Alerts store a `query_id`; if alerts are migrated before — or without — a completed query-ID mapping from the [SQL queries](/analytics/sql-queries) migration, the alert points at a source query ID with nothing behind it in target.
+
+**Resolution:** Always migrate queries first, build the full source-ID → target-ID map, and only then run the alert migration script against that map — never against source query IDs directly (see the [alerts](/analytics/alerts) migration script).
+
+### Serverless SQL warehouse unavailable in target region
+
+**Symptom:** Warehouse creation fails or silently falls back to classic compute; `Serverless is not supported in this region` in the API response.
+
+**Cause:** Serverless SQL warehouse availability is region-gated per cloud and lags behind classic compute rollout — a target region chosen for other reasons (data residency, cost) may not yet support serverless.
+
+**Resolution:** Check current serverless region availability for the target cloud before committing to a serverless-only warehouse strategy in the target architecture; fall back to a right-sized classic/pro warehouse where it's not yet available.
+
+## ML: MLflow, model registry, serving
+
+### `Model registry functionality is unavailable; got unsupported URI`
+
+**Symptom:** MLflow calls that used to work against source suddenly fail with this exact error after pointing scripts at the target workspace.
+
+**Cause:** The MLflow client's registry URI defaults to Unity Catalog (`databricks-uc`) in newer environments. A migration script written for the legacy Workspace Model Registry needs the registry URI set explicitly, or it silently targets the wrong registry backend in target.
+
+**Resolution:**
+
+<CodeBlock client:visible language="python" code={`import mlflow
+
+# Be explicit -- don't rely on the client's default registry URI matching
+# whatever the source workspace happened to use
+mlflow.set_registry_uri("databricks-uc")        # Unity Catalog model registry (recommended target)
+# mlflow.set_registry_uri("databricks")          # legacy workspace registry, if target isn't UC yet`} />
+
+### `RESOURCE_DOES_NOT_EXIST` on `copy_model_version` / registered model import
+
+**Symptom:** Migrating a model version from source's Workspace Model Registry raises `RESOURCE_DOES_NOT_EXIST` referencing the destination UC model.
+
+**Cause:** `copy_model_version()` will create the destination UC-registered model automatically **only** if the target catalog/schema already exist and the caller has `CREATE MODEL` privilege there — a plain missing-catalog or missing-grant problem surfacing as a registry error.
+
+**Resolution:** Confirm the target catalog/schema exist and the migrating principal has `CREATE MODEL` before retrying `copy_model_version()` — see [model registry](/ml/model-registry) for the full migration sequencing.
+
+### Serving endpoint stuck at `NOT_READY` in target
+
+**Symptom:** A newly created Model Serving endpoint in target never reaches `READY`; deployment logs show a capacity or instance-type error for the requested `workload_size`.
+
+**Cause:** Serving compute sizing/instance availability is regional and does not transfer 1:1 across clouds — the same `workload_size` that worked on source may map to unavailable capacity in the target region.
+
+**Resolution:** Load-test the target endpoint at expected traffic *before* cutting over callers (see [serving and artifacts](/ml/serving-and-artifacts)), and treat a `NOT_READY` endpoint as a capacity-planning finding, not a config bug to retry past.
+
+## Job run history missing after migration
+
+**Symptom:** A migrated job's run history, past durations, or failure rates are unavailable in the target workspace, or an auditor/incident review asks for a run that predates cutover and it can't be produced.
+
+**Causes:**
+
+- Job export/import (`databricks jobs create`) recreates the job **definition** only — it always gets a new job ID with zero run history attached.
+- Source run history was never pulled via the Jobs API or `system.lakeflow.job_run_timeline` before the source workspace was decommissioned.
+- Source system tables (365-day retention) were assumed to "follow" the migration — they don't; system tables are scoped to the source metastore/account/region and stay behind with it.
+
+**Resolution:**
+
+1. If the source workspace still exists, pull run history immediately via `2.1/jobs/runs/list` or `system.lakeflow.job_run_timeline` and archive it to a Delta table in target.
+2. If the source workspace has already been decommissioned, check whether audit-log or system-table exports were taken during migration; there is no other recovery path.
+3. Going forward, treat run-history archival as a required migration step, not an optional cleanup task — see [known limitations](/troubleshooting/known-limitations).
 
 ## Data reconciliation mismatch
 
@@ -91,5 +293,5 @@ This section catalogs errors that appear frequently during cross-cloud migration
 3. Investigate specific partitions causing mismatch.
 
 <Callout client:visible variant="tip" title="Log everything">
-  Capture full error messages, cluster event logs, and API responses. Most migration errors are caused by identity, path, or permission drift that is visible in logs.
+  Capture full error messages, cluster event logs, and API responses. Most migration errors are caused by identity, path, or permission drift that is visible in logs. This is separate from — but just as important as — archiving job run history, query history, and cluster event logs from the source workspace before it's retired; see [known limitations](/troubleshooting/known-limitations) for what to capture and why it doesn't come along automatically.
 </Callout>

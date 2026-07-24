@@ -137,6 +137,7 @@
       "items": [
         { "title": "Common errors", "slug": "troubleshooting/common-errors" },
         { "title": "Anti-patterns", "slug": "troubleshooting/anti-patterns" },
+        { "title": "Known limitations", "slug": "troubleshooting/known-limitations" },
         { "title": "FAQ", "slug": "troubleshooting/faq" }
       ]
     },

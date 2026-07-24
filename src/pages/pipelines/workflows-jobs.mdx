@@ -60,6 +60,10 @@ Update SQL and notebook code that hardcodes source catalog names. Use a naming s
   A file-arrival trigger is backed by a cloud-native event source — S3 event notifications on AWS, ADLS Gen2 events on Azure, GCS Pub/Sub notifications on GCP. Migrating a job with a file-arrival trigger across clouds means re-implementing the trigger against the target cloud's native event mechanism, not just pointing the same trigger config at a new path. Budget this as a redesign, not a config edit — see [external orchestrators](/pipelines/external-orchestrators) for the equivalent nuance on externally-scheduled triggers.
 </Callout>
 
+<Callout client:visible variant="warning" title="Recreating a job does not bring its run history with it">
+  Exporting `jobs.json` and re-creating jobs in target captures the **definition** only. The new job gets a new job ID and starts with zero run history — the source job's past runs, durations, and failure rates stay in the source workspace and age out on Databricks' own retention window (60 days via the Jobs API/UI). If run history is needed for audit, SLA reporting, or an incident investigation later, pull it via `2.1/jobs/runs/list` (or `system.lakeflow.job_run_timeline`) and archive it before the source workspace is retired — see [known limitations](/troubleshooting/known-limitations) for the full list of history that doesn't carry over and how to log it.
+</Callout>
+
 ## Scheduling freeze
 
 During cutover:
@@ -72,8 +76,9 @@ During cutover:
 ## Validation
 
 - Run every migrated job at least once in the target before cutover.
-- Compare run times, output counts, and failure rates.
+- Compare run times, output counts, and failure rates against recent source runs — there is no historical baseline in target to compare against, only what you capture from source before cutover.
 - Verify notification delivery and alerting.
+- Archive source run history if it's needed after cutover; don't assume it's retrievable from target later.
 
 ## Rollback
 
@@ -91,4 +96,5 @@ If a target job fails, re-enable the source job and investigate. Do not decommis
   { id: 'create', label: 'Create jobs in target workspace' },
   { id: 'permissions', label: 'Replay job permissions' },
   { id: 'test', label: 'Run smoke tests for each job' },
+  { id: 'history', label: 'Source job run history archived if needed post-cutover' },
 ]} />
