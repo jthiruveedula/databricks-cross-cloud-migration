@@ -13,7 +13,7 @@ interface Metric {
 const METRICS: Metric[] = [
   { value: 3, suffix: '', label: 'Clouds supported', icon: Cloud },
   { value: 7, suffix: '', label: 'Migration phases', icon: Route },
-  { value: 30, suffix: '+', label: 'Weeks, end to end', icon: CalendarClock },
+  { value: 6, suffix: '–30+', label: 'Weeks, depending on scope & tooling', icon: CalendarClock },
   { value: 100, suffix: '+', label: 'Runbook pages', icon: BookText },
 ];
 
