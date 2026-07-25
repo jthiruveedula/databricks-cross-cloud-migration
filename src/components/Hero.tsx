@@ -35,6 +35,19 @@ export default function Hero() {
     return () => clearInterval(id);
   }, []);
 
+  // The video's whole visual language (neon glow on a near-black background) is dark-mode-native;
+  // mix-blend-mode tricks can't make one rendered clip read well against a light surface too (screen
+  // blend has almost nothing to push against once the backdrop is already light). Two theme-specific
+  // renders, swapped by source, instead of fighting blend-mode math on a single file.
+  const [isDark, setIsDark] = useState(false);
+  useEffect(() => {
+    const root = document.documentElement;
+    setIsDark(root.classList.contains('dark'));
+    const observer = new MutationObserver(() => setIsDark(root.classList.contains('dark')));
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const prefersReducedMotion = useReducedMotion();
   useEffect(() => {
@@ -45,7 +58,7 @@ export default function Hero() {
     // Deferred to JS (rather than a static src on the element) so reduced-motion users
     // never trigger the download in the first place -- static SSR markup can't itself
     // condition on prefers-reduced-motion, only client-side JS can.
-    video.src = withBase('/videos/cross-cloud-hero.mp4');
+    video.src = withBase(isDark ? '/videos/cross-cloud-hero-dark.mp4' : '/videos/cross-cloud-hero-light.mp4');
 
     let trigger: ScrollTrigger | undefined;
     const setup = () => {
@@ -71,7 +84,7 @@ export default function Hero() {
       trigger?.kill();
       video.removeEventListener('loadedmetadata', setup);
     };
-  }, [prefersReducedMotion]);
+  }, [prefersReducedMotion, isDark]);
 
   function onMove(e: React.MouseEvent<HTMLDivElement>) {
     const rect = ref.current?.getBoundingClientRect();
