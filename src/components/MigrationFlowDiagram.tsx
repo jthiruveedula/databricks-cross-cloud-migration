@@ -1,69 +1,63 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useLayoutEffect } from 'react';
 import { motion, useAnimationControls, AnimatePresence } from 'framer-motion';
+import { Search, Compass, Database, Boxes, ShieldCheck, Flag, Activity, RotateCcw } from 'lucide-react';
 
-const PHASES = [
-  {
-    id: 1, title: 'Discovery', subtitle: 'Assess & inventory',
-    desc: 'Inventory workspaces, assets, dependencies & risks. Map network topology and assess migration readiness.',
-    duration: 'Wk 1–4',
-  },
-  {
-    id: 2, title: 'Foundation', subtitle: 'Landing zone & IAM',
-    desc: 'Set up target cloud landing zone, networking, identity, governance policies, and Unity Catalog metastore.',
-    duration: 'Wk 3–8',
-  },
-  {
-    id: 3, title: 'Data Migration', subtitle: 'Storage & catalog',
-    desc: 'Migrate object storage, databases, external locations, and the Hive Metastore to Unity Catalog.',
-    duration: 'Wk 5–16',
-  },
-  {
-    id: 4, title: 'Compute & Pipelines', subtitle: 'Clusters & jobs',
-    desc: 'Recreate clusters, policies, instance profiles, workflows, DLT pipelines, and CI/CD promotion chains.',
-    duration: 'Wk 8–20',
-  },
-  {
-    id: 5, title: 'Validation', subtitle: 'Test & benchmark',
-    desc: 'Technical validation, data reconciliation, performance benchmarking, security review, and business UAT sign-off.',
-    duration: 'Wk 14–24',
-  },
-  {
-    id: 6, title: 'Cutover', subtitle: 'Switch & rollback',
-    desc: 'Blue-green cutover with traffic switch, DNS changes, monitoring hooks, and verified rollback procedure.',
-    duration: 'Wk 20–26',
-  },
-  {
-    id: 7, title: 'Hypercare', subtitle: 'Monitor & handover',
-    desc: 'Active monitoring, performance tuning, cost optimization, incident response, documentation, and team handover.',
-    duration: 'Wk 24–30',
-  },
-];
-
-const CARD_W = 180;
-const CARD_H = 80;
-const ROW1_Y = 24;
-const ROW2_Y = 180;
-const GAP = 24;
-const TOTAL_W = CARD_W * 4 + GAP * 3;
-const ROW1_X = (w: number) => (w - TOTAL_W) / 2;
-
-function cardCenter(idx: number, containerW: number) {
-  const r1x = ROW1_X(containerW);
-  if (idx < 4) {
-    return { cx: r1x + CARD_W / 2 + idx * (CARD_W + GAP), cy: ROW1_Y + CARD_H / 2 };
-  }
-  const row2Count = 3;
-  const row2TotalW = CARD_W * row2Count + GAP * (row2Count - 1);
-  const r2x = (containerW - row2TotalW) / 2;
-  const i = idx - 4;
-  return { cx: r2x + CARD_W / 2 + i * (CARD_W + GAP), cy: ROW2_Y + CARD_H / 2 };
+interface Phase {
+  id: number;
+  title: string;
+  subtitle: string;
+  desc: string;
+  duration: string;
+  color: string;
+  icon: React.ElementType;
 }
+
+// Same seven phases, same hex values as TimelineEstimator's PHASE_META -- one color
+// language for "migration phase" across the whole site, not just this component.
+const PHASES: Phase[] = [
+  { id: 1, title: 'Discovery', subtitle: 'Assess & inventory', color: '#8B5CF6', icon: Search,
+    desc: 'Inventory workspaces, assets, dependencies & risks. Map network topology and assess migration readiness.', duration: 'Wk 1–4' },
+  { id: 2, title: 'Foundation', subtitle: 'Landing zone & IAM', color: '#3B82F6', icon: Compass,
+    desc: 'Set up target cloud landing zone, networking, identity, governance policies, and Unity Catalog metastore.', duration: 'Wk 3–8' },
+  { id: 3, title: 'Data Migration', subtitle: 'Storage & catalog', color: '#10B981', icon: Database,
+    desc: 'Migrate object storage, databases, external locations, and the Hive Metastore to Unity Catalog.', duration: 'Wk 5–16' },
+  { id: 4, title: 'Compute & Pipelines', subtitle: 'Clusters & jobs', color: '#F59E0B', icon: Boxes,
+    desc: 'Recreate clusters, policies, instance profiles, workflows, DLT pipelines, and CI/CD promotion chains.', duration: 'Wk 8–20' },
+  { id: 5, title: 'Validation', subtitle: 'Test & benchmark', color: '#F97316', icon: ShieldCheck,
+    desc: 'Technical validation, data reconciliation, performance benchmarking, security review, and business UAT sign-off.', duration: 'Wk 14–24' },
+  { id: 6, title: 'Cutover', subtitle: 'Switch & rollback', color: '#EF4444', icon: Flag,
+    desc: 'Blue-green cutover with traffic switch, DNS changes, monitoring hooks, and verified rollback procedure.', duration: 'Wk 20–26' },
+  { id: 7, title: 'Hypercare', subtitle: 'Monitor & handover', color: '#EC4899', icon: Activity,
+    desc: 'Active monitoring, performance tuning, cost optimization, incident response, documentation, and team handover.', duration: 'Wk 24–30' },
+];
 
 type AnimState = 'idle' | 'playing' | 'paused' | 'done';
 
+// One smooth spline through however many card centers exist, in DOM order --
+// generalizes to any flex-wrap row split instead of a hardcoded two-row shape.
+function splinePath(points: { x: number; y: number }[]): string {
+  if (points.length < 2) return '';
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i - 1] || points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] || p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
+  }
+  return d;
+}
+
 export default function MigrationFlowDiagram() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [containerW, setContainerW] = useState(800);
+  const cardRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [points, setPoints] = useState<{ x: number; y: number }[]>([]);
+  const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
+
   const [animState, setAnimState] = useState<AnimState>('idle');
   const [speed, setSpeed] = useState(1);
   const [currentPhase, setCurrentPhase] = useState(0);
@@ -72,37 +66,34 @@ export default function MigrationFlowDiagram() {
   const animRef = useRef<number | null>(null);
   const controls = useAnimationControls();
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerW(entry.contentRect.width);
-      }
+  const measure = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const containerRect = container.getBoundingClientRect();
+    const next = cardRefs.current.map((el) => {
+      if (!el) return { x: 0, y: 0 };
+      const r = el.getBoundingClientRect();
+      return { x: r.left - containerRect.left + r.width / 2, y: r.top - containerRect.top + r.height / 2 };
     });
-    ro.observe(el);
-    return () => ro.disconnect();
+    setPoints(next);
+    setStageSize({ w: containerRect.width, h: container.scrollHeight });
   }, []);
 
-  const phaseCenters = PHASES.map((_, i) => cardCenter(i, containerW));
+  useLayoutEffect(() => {
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (containerRef.current) ro.observe(containerRef.current);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [measure]);
 
-  const buildPath = useCallback(() => {
-    const pts = phaseCenters;
-    const r1End = { cx: pts[3].cx + CARD_W / 2, cy: pts[3].cy };
-    const r2Start = { cx: pts[4].cx, cy: pts[4].cy - CARD_H / 2 };
-    const midY = (r1End.cy + r2Start.cy) / 2;
-    let d = `M ${pts[0].cx} ${pts[0].cy}`;
-    for (let i = 1; i < 4; i++) d += ` L ${pts[i].cx} ${pts[i].cy}`;
-    d += ` L ${r1End.cx} ${r1End.cy}`;
-    d += ` C ${r1End.cx} ${midY}, ${r2Start.cx} ${midY}, ${r2Start.cx} ${r2Start.cy}`;
-    for (let i = 4; i < 7; i++) d += ` L ${pts[i].cx} ${pts[i].cy}`;
-    return d;
-  }, [phaseCenters]);
-
-  const play = useCallback(() => {
+  const play = useCallback((overrideSpeed?: number) => {
     setAnimState('playing');
     const progress = progressRef.current;
-    const duration = 8000 / speed;
+    const duration = 8000 / (overrideSpeed ?? speed);
 
     controls.start({
       offsetDistance: ['0%', '100%'],
@@ -114,8 +105,7 @@ export default function MigrationFlowDiagram() {
       const elapsed = now - startT;
       const p = Math.min(elapsed / duration, 1);
       progressRef.current = p;
-      const phaseIdx = Math.min(Math.floor(p * 7), 6);
-      setCurrentPhase(phaseIdx);
+      setCurrentPhase(Math.min(Math.floor(p * PHASES.length), PHASES.length - 1));
       if (p >= 1) {
         setAnimState('done');
         controls.stop();
@@ -132,56 +122,88 @@ export default function MigrationFlowDiagram() {
     if (animRef.current) cancelAnimationFrame(animRef.current);
   }, [controls]);
 
+  // Restart plays again from the top -- there's no separate play button, so this
+  // is the only way back into autoplay once a card click or the end has stopped it.
   const reset = useCallback(() => {
     if (animRef.current) cancelAnimationFrame(animRef.current);
     controls.stop();
+    controls.set({ offsetDistance: '0%' });
     progressRef.current = 0;
-    setAnimState('idle');
     setCurrentPhase(0);
     setSelectedPhase(null);
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      play();
+    } else {
+      setAnimState('idle');
+    }
+  }, [controls, play]);
+
+  // Autoplay on mount -- no play/resume button to press. Respect reduced-motion:
+  // land on a static, explorable state instead of an unrequested moving animation.
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    play();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Click-to-seek: jump the play head to any phase directly, rather than only
+  // being able to watch it advance -- the interactive win over a passive diagram.
+  const seekTrackRef = useRef<HTMLDivElement>(null);
+  const seekToFraction = useCallback((frac: number) => {
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+    controls.stop();
+    controls.set({ offsetDistance: `${frac * 100}%` });
+    progressRef.current = frac;
+    setAnimState('paused');
+    const idx = Math.min(Math.floor(frac * PHASES.length), PHASES.length - 1);
+    setCurrentPhase(idx);
+    return idx;
   }, [controls]);
 
-  const togglePlay = useCallback(() => {
-    if (animState === 'playing') pause();
-    else play();
-  }, [animState, play, pause]);
+  const seekTo = useCallback((clientX: number) => {
+    const track = seekTrackRef.current;
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    seekToFraction(Math.min(1, Math.max(0, (clientX - rect.left) / rect.width)));
+  }, [seekToFraction]);
 
-  const handleCardClick = useCallback((idx: number) => {
-    setSelectedPhase(idx === selectedPhase ? null : idx);
-  }, [selectedPhase]);
+  // Clicking any card stops autoplay and pins the play head + detail panel on it.
+  const selectCard = useCallback((i: number) => {
+    seekToFraction(i / (PHASES.length - 1));
+    setSelectedPhase((prev) => (prev === i ? null : i));
+  }, [seekToFraction]);
 
-  const svgH = ROW2_Y + CARD_H + 24;
-  const scale = containerW > 0 ? Math.min(containerW / 800, 1) : 1;
+  useEffect(() => () => { if (animRef.current) cancelAnimationFrame(animRef.current); }, []);
 
-  const svgW = Math.max(containerW, 320);
+  const path = splinePath(points);
+  const activeColor = PHASES[currentPhase]?.color ?? PHASES[0].color;
+  const selected = selectedPhase !== null ? PHASES[selectedPhase] : null;
+  const selectedX = selectedPhase !== null ? points[selectedPhase]?.x : undefined;
 
   return (
-    <div className="migration-flow-diagram" ref={containerRef}>
-      {/* Hover tooltips - native tooltips on phase cards */}
-      {PHASES.map((p, i) => {
-        const c = phaseCenters[i];
-        if (!c) return null;
-        return (
-          <g key={`tooltip-${i}`} transform={`translate(${c.cx - CARD_W/2 + 10}, ${c.cy - CARD_H/2 - 8})`}></g>
-        );
-      })}
-
-      {/* Top bar */}
-      <div className="mb-4 flex items-center justify-between">
-        <div className="text-sm font-medium text-[var(--ink-muted)]">
+    <div className="migration-flow-diagram">
+      {/* Toolbar */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-[var(--ink-muted)]">
+          {animState === 'playing' && (
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75" style={{ background: activeColor }} />
+              <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: activeColor }} />
+            </span>
+          )}
           {animState === 'done'
             ? 'Migration flow complete'
             : animState === 'idle'
-              ? 'Click Play to start the migration flow'
-              : `Phase ${currentPhase + 1} of 7 — ${PHASES[currentPhase].title}`}
+              ? 'Click any phase, or drag the rail below, to explore'
+              : `Phase ${currentPhase + 1} of ${PHASES.length} — ${PHASES[currentPhase].title}`}
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-0.5">
             {[0.5, 1, 2].map((s) => (
               <button
                 key={s}
-                onClick={() => setSpeed(s)}
-                className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                onClick={() => { setSpeed(s); if (animState === 'playing') play(s); }}
+                className={`rounded-md px-2 py-1 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${
                   speed === s ? 'bg-[var(--accent)] text-white' : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'
                 }`}
               >
@@ -190,267 +212,160 @@ export default function MigrationFlowDiagram() {
             ))}
           </div>
           <button
-            onClick={togglePlay}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white shadow-glow transition-transform hover:scale-105 active:scale-95"
-          >
-            {animState === 'playing' ? (
-              <>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="3" y="2" width="3" height="10" rx="1"/><rect x="8" y="2" width="3" height="10" rx="1"/></svg>
-                Pause
-              </>
-            ) : (
-              <>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 13,7 3,13"/></svg>
-                {animState === 'done' ? 'Replay' : 'Play'}
-              </>
-            )}
-          </button>
-          <button
             onClick={reset}
-            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-sm text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)]"
+            aria-label="Restart from the beginning"
+            title="Restart"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-sm text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 7a5 5 0 1 1 1.5 3.5"/><path d="M2 12V8.5H5.5"/></svg>
+            <RotateCcw className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
 
-      {/* SVG diagram */}
-      <div className="relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)]">
-        <svg
-          viewBox={`0 0 ${svgW} ${svgH}`}
-          className="w-full"
-          style={{ height: svgH * scale }}
-        >
-          <defs>
-            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--border)" />
-            </marker>
-          </defs>
+      {/* Seek rail */}
+      <div
+        ref={seekTrackRef}
+        role="slider"
+        aria-label="Seek migration phase"
+        aria-valuemin={1}
+        aria-valuemax={PHASES.length}
+        aria-valuenow={currentPhase + 1}
+        aria-valuetext={PHASES[currentPhase].title}
+        tabIndex={0}
+        onClick={(e) => seekTo(e.clientX)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowRight') { e.preventDefault(); const i = Math.min(currentPhase + 1, PHASES.length - 1); setCurrentPhase(i); controls.set({ offsetDistance: `${(i / (PHASES.length - 1)) * 100}%` }); setAnimState('paused'); }
+          if (e.key === 'ArrowLeft') { e.preventDefault(); const i = Math.max(currentPhase - 1, 0); setCurrentPhase(i); controls.set({ offsetDistance: `${(i / (PHASES.length - 1)) * 100}%` }); setAnimState('paused'); }
+        }}
+        className="group relative mb-6 h-2 cursor-pointer rounded-full bg-[var(--border)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+      >
+        <div
+          className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-150"
+          style={{ width: `${((currentPhase + (animState === 'playing' ? 0.5 : 0)) / PHASES.length) * 100}%`, background: `linear-gradient(90deg, ${PHASES[0].color}, ${activeColor})` }}
+        />
+        <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-between px-0.5">
+          {PHASES.map((p, i) => (
+            <span
+              key={p.id}
+              className="h-3 w-3 rounded-full ring-2 ring-[var(--surface)] transition-transform duration-200"
+              style={{ background: i <= currentPhase ? p.color : 'var(--border)', transform: i === currentPhase ? 'scale(1.3)' : 'scale(1)' }}
+            />
+          ))}
+        </div>
+      </div>
 
-          {/* Static connecting paths */}
-          {phaseCenters.length >= 7 && (() => {
-            const pts = phaseCenters;
-            const r1End = { cx: pts[3].cx + CARD_W / 2, cy: pts[3].cy };
-            const r2Start = { cx: pts[4].cx, cy: pts[4].cy - CARD_H / 2 };
-            const midY = (r1End.cy + r2Start.cy) / 2;
-
-            // Row 1 arrows
-            return (
-              <>
-                {[0, 1, 2].map((i) => (
-                  <line
-                    key={`r1-arrow-${i}`}
-                    x1={pts[i].cx + CARD_W / 2}
-                    y1={pts[i].cy}
-                    x2={pts[i + 1].cx - CARD_W / 2}
-                    y2={pts[i + 1].cy}
-                    stroke="var(--border)"
-                    strokeWidth="1.5"
-                    strokeDasharray="4 3"
-                    markerEnd="url(#arrow)"
-                  />
-                ))}
-                {/* Row 2 arrows */}
-                {[5, 6].map((i) => (
-                  <line
-                    key={`r2-arrow-${i}`}
-                    x1={pts[i - 1].cx + CARD_W / 2}
-                    y1={pts[i - 1].cy}
-                    x2={pts[i].cx - CARD_W / 2}
-                    y2={pts[i].cy}
-                    stroke="var(--border)"
-                    strokeWidth="1.5"
-                    strokeDasharray="4 3"
-                    markerEnd="url(#arrow)"
-                  />
-                ))}
-                {/* Curve arrow 4→5 */}
-                <path
-                  d={`M ${r1End.cx} ${r1End.cy} C ${r1End.cx} ${midY}, ${r2Start.cx} ${midY}, ${r2Start.cx} ${r2Start.cy}`}
-                  fill="none"
-                  stroke="var(--border)"
-                  strokeWidth="1.5"
-                  strokeDasharray="4 3"
-                  markerEnd="url(#arrow)"
+      {/* Stage: rail + cards */}
+      <div className="relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-6">
+        <div ref={containerRef} className="relative">
+          {stageSize.w > 0 && (
+            <svg
+              className="pointer-events-none absolute inset-0"
+              width={stageSize.w}
+              height={stageSize.h}
+              viewBox={`0 0 ${stageSize.w} ${stageSize.h}`}
+            >
+              <defs>
+                <linearGradient id="flow-rail-gradient" x1="0" y1="0" x2={stageSize.w} y2="0" gradientUnits="userSpaceOnUse">
+                  {PHASES.map((p, i) => (
+                    <stop key={p.id} offset={`${(i / (PHASES.length - 1)) * 100}%`} stopColor={p.color} />
+                  ))}
+                </linearGradient>
+              </defs>
+              <path d={path} fill="none" stroke="var(--border)" strokeWidth={2} strokeDasharray="1 8" strokeLinecap="round" />
+              <path d={path} fill="none" stroke="url(#flow-rail-gradient)" strokeWidth={2} strokeLinecap="round" opacity={0.55} />
+              {path && (
+                <motion.circle
+                  r={7}
+                  fill={activeColor}
+                  style={{ offsetPath: `path('${path}')`, filter: `drop-shadow(0 0 6px ${activeColor})` }}
+                  animate={controls}
+                  initial={{ offsetDistance: '0%' }}
                 />
-              </>
-            );
-          })()}
+              )}
+            </svg>
+          )}
 
-          {/* Animated progress pulse along the path */}
-          <motion.circle
-            r="8"
-            fill="var(--accent)"
-            style={{
-              offsetPath: `path('${buildPath()}')`,
-              filter: 'drop-shadow(0 0 8px var(--accent))',
-            }}
-            animate={controls}
-            initial={{ offsetDistance: '0%' }}
-          />
-          <motion.circle
-            r="6"
-            fill="white"
-            style={{
-              offsetPath: `path('${buildPath()}')`,
-            }}
-            animate={controls}
-            initial={{ offsetDistance: '0%' }}
-          />
+          <div className="relative flex flex-wrap justify-center gap-4">
+            {PHASES.map((p, i) => {
+              const active = i === currentPhase && animState !== 'idle';
+              const isSelected = i === selectedPhase;
+              const Icon = p.icon;
+              return (
+                <button
+                  key={p.id}
+                  ref={(el) => { cardRefs.current[i] = el; }}
+                  onClick={() => selectCard(i)}
+                  aria-label={`Phase ${p.id}: ${p.title}, ${p.subtitle}`}
+                  aria-expanded={isSelected}
+                  className="flow-phase-card w-[168px] rounded-xl border bg-[var(--surface)] p-3.5 text-left transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  style={{
+                    borderColor: active || isSelected ? p.color : 'var(--border)',
+                    borderWidth: active || isSelected ? 2 : 1,
+                    boxShadow: active ? `0 0 0 3px ${p.color}22, 0 8px 20px -8px ${p.color}55` : isSelected ? `0 0 0 3px ${p.color}22` : 'none',
+                    transform: active ? 'translateY(-2px)' : 'none',
+                    ['--flow-card-color' as any]: p.color,
+                  }}
+                >
+                  <div className="mb-2.5 flex items-center gap-2">
+                    <span
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white"
+                      style={{ background: p.color }}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                    </span>
+                    <span
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+                      style={{ background: `${p.color}1f`, color: p.color }}
+                    >
+                      {p.id}
+                    </span>
+                  </div>
+                  <div className="mb-0.5 text-sm font-semibold text-[var(--ink)]">{p.title}</div>
+                  <div className="mb-2.5 text-xs text-[var(--ink-muted)]">{p.subtitle}</div>
+                  <span
+                    className="inline-block rounded-full px-2 py-0.5 text-[10px] font-medium"
+                    style={{ background: `${p.color}1f`, color: p.color }}
+                  >
+                    {p.duration}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-          {/* Phase cards */}
-          {PHASES.map((p, i) => {
-            const c = phaseCenters[i];
-            if (!c) return null;
-            const active = i === currentPhase && animState !== 'idle';
-            const selected = i === selectedPhase;
-            return (
-              <g
-                key={p.id}
-                onClick={() => handleCardClick(i)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCardClick(i); }}}
-                role="button"
-                tabIndex={0}
-                className="flow-phase-card"
-                aria-label={`Phase ${p.id}: ${p.title}, ${p.subtitle}`}
-              >
-                <title>Phase {p.id}: {p.title} - {p.subtitle}</title>
-                <rect
-                  x={c.cx - CARD_W / 2}
-                  y={c.cy - CARD_H / 2}
-                  width={CARD_W}
-                  height={CARD_H}
-                  rx="10"
-                  fill={active ? 'var(--accent-soft)' : 'var(--surface)'}
-                  stroke={active ? 'var(--accent)' : selected ? 'var(--accent)' : 'var(--border)'}
-                  strokeWidth={active ? 2 : selected ? 2 : 1}
-                />
-                {/* Phase number badge */}
-                <rect
-                  x={c.cx - CARD_W / 2 + 8}
-                  y={c.cy - CARD_H / 2 + 8}
-                  width="20"
-                  height="20"
-                  rx="6"
-                  fill={active ? 'var(--accent)' : 'var(--border)'}
-                />
-                <text
-                  x={c.cx - CARD_W / 2 + 18}
-                  y={c.cy - CARD_H / 2 + 22}
-                  textAnchor="middle"
-                  fill={active ? 'white' : 'var(--ink-muted)'}
-                  fontSize="11"
-                  fontWeight="600"
-                >
-                  {p.id}
-                </text>
-
-                {/* Title */}
-                <text
-                  x={c.cx + 6}
-                  y={c.cy - 6}
-                  textAnchor="middle"
-                  fill="var(--ink)"
-                  fontSize="13"
-                  fontWeight="600"
-                  className="select-none"
-                >
-                  {p.title}
-                </text>
-                {/* Subtitle */}
-                <text
-                  x={c.cx + 6}
-                  y={c.cy + 12}
-                  textAnchor="middle"
-                  fill="var(--ink-muted)"
-                  fontSize="10"
-                  className="select-none"
-                >
-                  {p.subtitle}
-                </text>
-                {/* Duration badge */}
-                <rect
-                  x={c.cx - 22}
-                  y={c.cy + CARD_H / 2 - 18}
-                  width="44"
-                  height="14"
-                  rx="4"
-                  fill={active ? 'var(--accent-soft)' : 'var(--surface)'}
-                  stroke={active ? 'var(--accent)' : 'var(--border)'}
-                  strokeWidth="0.5"
-                />
-                <text
-                  x={c.cx}
-                  y={c.cy + CARD_H / 2 - 8}
-                  textAnchor="middle"
-                  fill="var(--accent)"
-                  fontSize="8"
-                  fontWeight="500"
-                >
-                  {p.duration}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-
-        {/* Phase detail panel */}
+        {/* Detail panel, color-matched and pointing at the selected card */}
         <AnimatePresence>
-          {selectedPhase !== null && (
+          {selected && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.25, ease: 'easeInOut' }}
-              className="overflow-hidden border-t border-[var(--border)]"
+              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              className="relative mt-5 overflow-hidden"
             >
-              <div className="px-6 py-4">
-                <h4 className="mb-1 text-sm font-semibold text-[var(--accent)]">
-                  Phase {selectedPhase + 1}: {PHASES[selectedPhase].title}
+              {selectedX !== undefined && (
+                <div
+                  className="absolute -top-[7px] h-3 w-3 rotate-45 border-l border-t"
+                  style={{ left: selectedX - 6, borderColor: selected.color, background: 'var(--surface-elevated)' }}
+                />
+              )}
+              <div
+                className="rounded-xl border-l-4 bg-[var(--surface-elevated)] p-4"
+                style={{ borderLeftColor: selected.color }}
+              >
+                <h4 className="mb-1 text-sm font-semibold" style={{ color: selected.color }}>
+                  Phase {selected.id}: {selected.title}
                 </h4>
-                <p className="text-sm leading-relaxed text-[var(--ink-muted)]">
-                  {PHASES[selectedPhase].desc}
-                </p>
+                <p className="text-sm leading-relaxed text-[var(--ink-muted)]">{selected.desc}</p>
                 <div className="mt-2 flex items-center gap-4 text-xs text-[var(--ink-muted)]">
-                  <span>Duration: <strong className="text-[var(--ink)]">{PHASES[selectedPhase].duration}</strong></span>
+                  <span>Duration: <strong className="text-[var(--ink)]">{selected.duration}</strong></span>
                   <span>Type: <strong className="text-[var(--ink)]">Migration phase</strong></span>
                 </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Phase progress dots */}
-        <div role="tablist" aria-label="Migration phases" className="flex items-center justify-center gap-1.5 border-t border-[var(--border)] px-4 py-2">
-          {PHASES.map((p, i) => (
-            <button
-              key={p.id}
-              role="tab"
-              aria-selected={i === currentPhase && animState !== 'idle'}
-              aria-label={`Phase ${p.id}: ${p.title}`}
-              onClick={() => { setSelectedPhase(i); setCurrentPhase(i); }}
-              onKeyDown={(e) => {
-                if (e.key === 'ArrowRight' && i < PHASES.length - 1) {
-                  e.preventDefault();
-                  setCurrentPhase(i + 1);
-                  setSelectedPhase(i + 1);
-                } else if (e.key === 'ArrowLeft' && i > 0) {
-                  e.preventDefault();
-                  setCurrentPhase(i - 1);
-                  setSelectedPhase(i - 1);
-                }
-              }}
-              className={`h-2 rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 ${
-                i === currentPhase && animState !== 'idle'
-                  ? 'w-6 bg-[var(--accent)]'
-                  : i === currentPhase
-                    ? 'w-3 bg-[var(--accent)]/50'
-                    : 'w-2 bg-[var(--border)] hover:bg-[var(--accent)]/40'
-              }`}
-              title={p.title}
-            />
-          ))}
-        </div>
       </div>
     </div>
   );
