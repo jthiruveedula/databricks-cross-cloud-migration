@@ -552,35 +552,18 @@ html.theme-transitioning *::after {
   100% { background-position: 0 100%; }
 }
 
-/* MigrationFlowDiagram styles (moved from inline) */
-.migration-flow-diagram {
-  --flow-accent: var(--accent, #ff3621);
-}
-.flow-controls button {
-  cursor: pointer;
-}
+/* Hallmark · component: migration-flow-diagram · genre: modern-minimal · theme: existing site tokens
+ * states: default · hover · focus-visible · active (current/selected) -- disabled/loading/error/success
+ * not applicable to a static content card
+ */
 .flow-phase-card {
   cursor: pointer;
-  transition: all 0.3s ease;
 }
 .flow-phase-card:hover {
-  filter: brightness(1.15);
+  filter: brightness(1.06);
 }
-.flow-phase-card.active {
-  filter: brightness(1.25);
-  stroke-width: 2.5;
-}
-.flow-phase-card.pulse-highlight {
-  filter: brightness(1.35);
-  stroke-width: 3;
-}
-.flow-arrowhead {
-  fill: none;
-  stroke: var(--border);
-  stroke-width: 1.5;
-}
-.flow-arrowhead-marker {
-  fill: var(--border);
+.dark .flow-phase-card:hover {
+  filter: brightness(1.18);
 }
 
 /* Scroll-aware card-grid stagger (replaces CSS-only stagger) */
