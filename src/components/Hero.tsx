@@ -1,9 +1,15 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import BrandGlyph from './BrandGlyph';
 import { BRAND_ICONS } from './logos/brandIcons';
 import { withBase } from '../lib/paths';
+
+if (typeof window !== 'undefined') {
+  gsap.registerPlugin(ScrollTrigger);
+}
 
 const CLOUD_LOGOS = ['aws', 'azure', 'googlecloud'] as const;
 
@@ -29,6 +35,44 @@ export default function Hero() {
     return () => clearInterval(id);
   }, []);
 
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const prefersReducedMotion = useReducedMotion();
+  useEffect(() => {
+    const video = videoRef.current;
+    const container = ref.current;
+    if (!video || !container || prefersReducedMotion) return;
+
+    // Deferred to JS (rather than a static src on the element) so reduced-motion users
+    // never trigger the download in the first place -- static SSR markup can't itself
+    // condition on prefers-reduced-motion, only client-side JS can.
+    video.src = withBase('/videos/cross-cloud-hero.mp4');
+
+    let trigger: ScrollTrigger | undefined;
+    const setup = () => {
+      if (!video.duration) return;
+      trigger = ScrollTrigger.create({
+        trigger: container,
+        start: 'top top',
+        end: 'bottom top',
+        scrub: true,
+        onUpdate: (self) => {
+          video.currentTime = self.progress * video.duration;
+        },
+      });
+    };
+
+    if (video.readyState >= 1) {
+      setup();
+    } else {
+      video.addEventListener('loadedmetadata', setup, { once: true });
+    }
+
+    return () => {
+      trigger?.kill();
+      video.removeEventListener('loadedmetadata', setup);
+    };
+  }, [prefersReducedMotion]);
+
   function onMove(e: React.MouseEvent<HTMLDivElement>) {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
@@ -42,10 +86,26 @@ export default function Hero() {
       onMouseMove={onMove}
       className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-6 py-16 text-center md:py-24"
     >
+      <video
+        ref={videoRef}
+        className="hero-video"
+        muted
+        playsInline
+        preload="auto"
+        aria-hidden="true"
+      />
       <motion.div className="hero-glow" style={{ x: glowX, y: glowY }} />
       <motion.div className="hero-orb hero-orb-1" style={{ x: orb1X, y: orb1Y }} />
       <motion.div className="hero-orb hero-orb-2" style={{ x: orb2X, y: orb2Y }} />
       <div className="hero-orb hero-orb-3" />
+      {/* Dark mode only: the video's brighter frames can otherwise drop text contrast below
+          WCAG AA for the paragraph (measured as low as 1.25:1 without this) -- a scrim behind
+          the whole text column keeps contrast consistent regardless of which frame is showing. */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 z-[1] hidden dark:block"
+        style={{ background: 'radial-gradient(ellipse 70% 60% at 50% 55%, transparent 30%, rgba(11, 13, 18, 0.55) 100%)' }}
+      />
       <div className="relative z-10 mx-auto max-w-3xl">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
