@@ -59,7 +59,6 @@ export default function MigrationFlowDiagram() {
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
 
   const [animState, setAnimState] = useState<AnimState>('idle');
-  const [speed, setSpeed] = useState(1);
   const [currentPhase, setCurrentPhase] = useState(0);
   const [selectedPhase, setSelectedPhase] = useState<number | null>(null);
   const progressRef = useRef(0);
@@ -90,10 +89,14 @@ export default function MigrationFlowDiagram() {
     };
   }, [measure]);
 
-  const play = useCallback((overrideSpeed?: number) => {
+  // Fixed autoplay pace -- no user-facing speed control, one consistent duration for the
+  // whole flow to play out.
+  const PLAY_DURATION_MS = 8000;
+
+  const play = useCallback(() => {
     setAnimState('playing');
     const progress = progressRef.current;
-    const duration = 8000 / (overrideSpeed ?? speed);
+    const duration = PLAY_DURATION_MS;
 
     controls.start({
       offsetDistance: ['0%', '100%'],
@@ -114,7 +117,7 @@ export default function MigrationFlowDiagram() {
       }
       animRef.current = requestAnimationFrame(tick);
     });
-  }, [speed, controls]);
+  }, [controls]);
 
   const pause = useCallback(() => {
     setAnimState('paused');
@@ -198,19 +201,6 @@ export default function MigrationFlowDiagram() {
               : `Phase ${currentPhase + 1} of ${PHASES.length} — ${PHASES[currentPhase].title}`}
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-0.5">
-            {[0.5, 1, 2].map((s) => (
-              <button
-                key={s}
-                onClick={() => { setSpeed(s); if (animState === 'playing') play(s); }}
-                className={`rounded-md px-2 py-1 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${
-                  speed === s ? 'bg-[var(--accent)] text-white' : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'
-                }`}
-              >
-                {s}×
-              </button>
-            ))}
-          </div>
           <button
             onClick={reset}
             aria-label="Restart from the beginning"
