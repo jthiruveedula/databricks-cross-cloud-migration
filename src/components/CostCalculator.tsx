@@ -12,18 +12,46 @@ import {
 } from 'lucide-react';
 
 type Cloud = 'aws' | 'azure' | 'gcp';
+type WorkloadType = 'jobs' | 'allPurpose' | 'sqlServerless';
 
 interface CloudRates {
+  /** underlying cloud VM cost, $/node-hour */
   compute: number;
+  /** blob storage, $/GB-month */
   storage: number;
+  /** egress, $/GB */
   transfer: number;
 }
 
+// Underlying cloud infrastructure rates (VM + storage + egress), not Databricks' own fee.
+// Illustrative on-demand list-price order of magnitude, mid-2026 — verify against each
+// cloud's current pricing calculator before using for a real budget.
 const CLOUD_RATES: Record<Cloud, CloudRates> = {
   aws: { compute: 0.55, storage: 0.023, transfer: 0.09 },
   azure: { compute: 0.52, storage: 0.0208, transfer: 0.087 },
   gcp: { compute: 0.49, storage: 0.02, transfer: 0.085 },
 };
+
+// Databricks Unit (DBU) list price, $/DBU, Premium tier — billed by Databricks on top of
+// the cloud infra cost above (two separate bills on AWS/GCP; consolidated on Azure).
+// Rates are broadly consistent across clouds; sources: Flexera, CloudZero, Cloudchipr,
+// OpsLyft 2026 Databricks pricing guides. Re-verify against the live Databricks pricing
+// page before using for a real budget — these are list prices, not your negotiated rate.
+const DBU_RATES: Record<WorkloadType, number> = {
+  jobs: 0.15,
+  allPurpose: 0.55,
+  sqlServerless: 0.7,
+};
+
+const WORKLOAD_LABELS: Record<WorkloadType, string> = {
+  jobs: 'Jobs Compute',
+  allPurpose: 'All-Purpose Compute',
+  sqlServerless: 'SQL Serverless',
+};
+
+// Cloud infra typically runs 30-60% on top of the DBU charge (rule of thumb from the
+// same pricing guides) — used only as a sanity-check caption, not in the formula itself.
+const GB_PER_TB = 1000;
 
 const CLOUD_LABELS: Record<Cloud, string> = {
   aws: 'AWS',
@@ -39,6 +67,7 @@ const CLOUD_COLORS: Record<Cloud, { text: string; bg: string; border: string; ba
 
 interface CostBreakdown {
   compute: number;
+  dbu: number;
   storage: number;
   transfer: number;
   total: number;
@@ -51,6 +80,7 @@ interface Params {
   storageTb: number;
   dataTransferGb: number;
   gpuWorkload: boolean;
+  workloadType: WorkloadType;
 }
 
 export function estimateCost(cloud: Cloud, params: Params): CostBreakdown {
@@ -58,11 +88,13 @@ export function estimateCost(cloud: Cloud, params: Params): CostBreakdown {
   const gpuMultiplier = params.gpuWorkload ? 2.5 : 1;
   const totalComputeUnits = params.clusterCount * params.nodesPerCluster;
   const monthlyHours = params.computeHoursPerDay * 30;
-  const compute = Math.round(totalComputeUnits * monthlyHours * rates.compute * gpuMultiplier);
-  const storage = Math.round(params.storageTb * rates.storage);
+  const nodeHours = totalComputeUnits * monthlyHours * gpuMultiplier;
+  const compute = Math.round(nodeHours * rates.compute);
+  const dbu = Math.round(nodeHours * DBU_RATES[params.workloadType]);
+  const storage = Math.round(params.storageTb * GB_PER_TB * rates.storage);
   const transfer = Math.round(params.dataTransferGb * rates.transfer);
-  const total = compute + storage + transfer;
-  return { compute, storage, transfer, total };
+  const total = compute + dbu + storage + transfer;
+  return { compute, dbu, storage, transfer, total };
 }
 
 export function formatCurrency(n: number): string {
@@ -76,11 +108,20 @@ export default function CostCalculator() {
   const [storageTb, setStorageTb] = useState(50);
   const [dataTransferGb, setDataTransferGb] = useState(500);
   const [gpuWorkload, setGpuWorkload] = useState(false);
+  const [workloadType, setWorkloadType] = useState<WorkloadType>('allPurpose');
   const [calculated, setCalculated] = useState(false);
 
   const params: Params = useMemo(
-    () => ({ clusterCount, nodesPerCluster, computeHoursPerDay, storageTb, dataTransferGb, gpuWorkload }),
-    [clusterCount, nodesPerCluster, computeHoursPerDay, storageTb, dataTransferGb, gpuWorkload],
+    () => ({
+      clusterCount,
+      nodesPerCluster,
+      computeHoursPerDay,
+      storageTb,
+      dataTransferGb,
+      gpuWorkload,
+      workloadType,
+    }),
+    [clusterCount, nodesPerCluster, computeHoursPerDay, storageTb, dataTransferGb, gpuWorkload, workloadType],
   );
 
   const results = useMemo(() => {
@@ -125,6 +166,7 @@ export default function CostCalculator() {
     setStorageTb(50);
     setDataTransferGb(500);
     setGpuWorkload(false);
+    setWorkloadType('allPurpose');
     setCalculated(false);
   }, []);
 
@@ -266,6 +308,25 @@ export default function CostCalculator() {
             </div>
           </div>
 
+          {/* Workload type (drives DBU rate) */}
+          <div>
+            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-[var(--ink)]">
+              <Cpu className="h-4 w-4 text-[var(--ink-muted)]" />
+              Compute type
+            </label>
+            <select
+              value={workloadType}
+              onChange={(e) => setWorkloadType(e.target.value as WorkloadType)}
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--ink)]"
+            >
+              {(Object.keys(WORKLOAD_LABELS) as WorkloadType[]).map((w) => (
+                <option key={w} value={w}>
+                  {WORKLOAD_LABELS[w]} (${DBU_RATES[w].toFixed(2)}/DBU)
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* GPU toggle */}
           <div className="flex items-center">
             <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-[var(--ink)]">
@@ -353,8 +414,12 @@ export default function CostCalculator() {
                     </h3>
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center justify-between text-[var(--ink)]">
-                        <span className="text-[var(--ink-muted)]">Compute</span>
+                        <span className="text-[var(--ink-muted)]">Compute (cloud infra)</span>
                         <span className="font-medium">{formatCurrency(cost.compute)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[var(--ink)]">
+                        <span className="text-[var(--ink-muted)]">Databricks DBU</span>
+                        <span className="font-medium">{formatCurrency(cost.dbu)}</span>
                       </div>
                       <div className="flex items-center justify-between text-[var(--ink)]">
                         <span className="text-[var(--ink-muted)]">Storage</span>
@@ -437,6 +502,22 @@ export default function CostCalculator() {
                 </p>
               </motion.div>
             )}
+
+            <p className="mt-4 text-xs text-[var(--ink-subtle)]">
+              Estimate only: cloud infra rates + Databricks {WORKLOAD_LABELS[workloadType]} DBU list price, mid-2026
+              order of magnitude. Excludes reserved/committed-use discounts, storage tiering, and negotiated
+              Enterprise pricing (typically 15–25% above Premium). On AWS/GCP, cloud infra and DBU are billed
+              separately; Azure consolidates them. Verify current rates on the{' '}
+              <a
+                href="https://www.databricks.com/product/pricing"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                Databricks pricing page
+              </a>{' '}
+              before budgeting.
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
