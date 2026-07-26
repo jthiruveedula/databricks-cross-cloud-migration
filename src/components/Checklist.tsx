@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check } from 'lucide-react';
 import RevealOnView from './motion/RevealOnView';
@@ -19,21 +19,35 @@ function getStorageKey(title?: string): string | null {
   return title ? `checklist:${title.replace(/\s+/g, '-').toLowerCase()}` : null;
 }
 
-function loadState(items: Item[], key: string | null): Record<string, boolean> {
-  if (typeof localStorage !== 'undefined' && key) {
-    try {
-      const saved = localStorage.getItem(key);
-      if (saved) {
-        return { ...Object.fromEntries(items.map((i) => [i.id, i.checked ?? false])), ...JSON.parse(saved) };
-      }
-    } catch {}
-  }
+function defaultState(items: Item[]): Record<string, boolean> {
   return Object.fromEntries(items.map((i) => [i.id, i.checked ?? false]));
+}
+
+function loadSavedState(key: string | null): Record<string, boolean> | null {
+  if (typeof localStorage === 'undefined' || !key) return null;
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
 }
 
 export default function Checklist({ title, items, storageKey }: Props) {
   const key = storageKey ?? getStorageKey(title);
-  const [state, setState] = useState<Record<string, boolean>>(() => loadState(items, key));
+  // Initial state must match server-rendered markup exactly -- localStorage doesn't exist
+  // during SSR, so reading it here (even guarded by typeof-check) makes the client's first
+  // render differ from the server's whenever a saved state exists, which is a hydration
+  // mismatch. Defer the localStorage read to an effect, after hydration completes.
+  const [state, setState] = useState<Record<string, boolean>>(() => defaultState(items));
+
+  useEffect(() => {
+    const saved = loadSavedState(key);
+    if (saved) {
+      setState((prev) => ({ ...prev, ...saved }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   useEffect(() => {
     if (key && typeof localStorage !== 'undefined') {
@@ -50,26 +64,36 @@ export default function Checklist({ title, items, storageKey }: Props) {
   const isComplete = progress === 100;
 
   const [displayProgress, setDisplayProgress] = useState(progress);
+  // Read via ref, not as an effect dependency -- depending on displayProgress itself
+  // re-triggers this effect on every animation tick (since the tick calls
+  // setDisplayProgress), spawning a new uncancelled rAF loop each frame that stacks
+  // exponentially with the loops already running.
+  const displayProgressRef = useRef(displayProgress);
+  useEffect(() => {
+    displayProgressRef.current = displayProgress;
+  }, [displayProgress]);
 
   useEffect(() => {
     const duration = 800;
-    const start = displayProgress;
+    const start = displayProgressRef.current;
     const startTime = Date.now();
-    
+    let rafId: number;
+
     const animate = () => {
       const elapsed = Date.now() - startTime;
       const progressRatio = Math.min(elapsed / duration, 1);
       const eased = 1 - Math.pow(1 - progressRatio, 3);
       const current = Math.round(start + (progress - start) * eased);
       setDisplayProgress(current);
-      
+
       if (progressRatio < 1) {
-        requestAnimationFrame(animate);
+        rafId = requestAnimationFrame(animate);
       }
     };
-    
-    requestAnimationFrame(animate);
-  }, [progress, displayProgress]);
+
+    rafId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafId);
+  }, [progress]);
 
   return (
     <RevealOnView className="my-6 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-1">

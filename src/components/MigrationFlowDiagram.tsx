@@ -94,6 +94,10 @@ export default function MigrationFlowDiagram() {
   const PLAY_DURATION_MS = 8000;
 
   const play = useCallback(() => {
+    // Defensive: every current caller already cancels animRef.current before calling play(),
+    // but a future caller that doesn't would spawn a second concurrent rAF loop racing the
+    // first on progressRef/setCurrentPhase. Guard here too rather than relying on callers.
+    if (animRef.current) cancelAnimationFrame(animRef.current);
     setAnimState('playing');
     const progress = progressRef.current;
     const duration = PLAY_DURATION_MS;

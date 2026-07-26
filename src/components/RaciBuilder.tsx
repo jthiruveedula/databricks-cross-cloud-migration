@@ -163,7 +163,13 @@ export default function RaciBuilder() {
   }, []);
 
   const addRole = useCallback(() => {
-    const label = `Role ${roles.length + 1}`;
+    // roles.length + 1 collides after add-then-remove-then-add (e.g. 5 roles -> add "Role 6"
+    // -> remove it -> length back to 5 -> add again computes "Role 6" again). Since matrix
+    // cells and the row `key` are keyed by role name, a collision means both columns silently
+    // share one matrix cell. Pick the lowest unused "Role N" instead.
+    let n = roles.length + 1;
+    while (roles.includes(`Role ${n}`)) n++;
+    const label = `Role ${n}`;
     setRoles((prev) => [...prev, label]);
     setMatrix((prev) => {
       const next = { ...prev };
@@ -417,7 +423,7 @@ export default function RaciBuilder() {
 
       {/* RACI Matrix Table */}
       <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full min-w-[760px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--surface)]">
               <th className="sticky left-0 z-10 border-r border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ink-muted)]">

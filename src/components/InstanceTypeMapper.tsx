@@ -367,7 +367,7 @@ export default function InstanceTypeMapper() {
 
       {/* Table */}
       <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-        <table className="w-full text-left text-sm">
+        <table className="w-full min-w-[820px] text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--surface)]">
               <th className="w-10 px-3 py-3">
