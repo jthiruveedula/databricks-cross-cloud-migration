@@ -20,6 +20,10 @@ Metastore migration moves the metadata layer—catalogs, schemas, tables, views,
 - Storage credentials and external locations are configured for target storage.
 - Source and target can access the required storage (directly or via cross-cloud replication).
 
+<Callout client:visible variant="warning" title="A metastore is region-scoped -- you are always creating a new one, never moving the source">
+  Every one of the [cloud mapping](/cloud-mappings/cross-cloud-equivalency-matrix) pages assumes this but never states it: a Unity Catalog metastore is bound to one cloud account/subscription/project **and** one region, and a workspace can only attach to a metastore in its own region. Cross-cloud migration therefore always means standing up a **brand-new metastore** in the target cloud/region and attaching the target workspace to it — there is no "move" or "clone" operation for the metastore object itself. What actually migrates is the *content* (catalogs, schemas, tables, grants — the rest of this page) from the old metastore into the new one. Plan the new metastore's creation as its own first step, before any table-upgrade strategy below, and budget for the fact that source and target metastores coexist independently throughout the migration — they are never the same object at different points in time.
+</Callout>
+
 ## Table upgrade strategies
 
 ### Foreign catalog (federate)

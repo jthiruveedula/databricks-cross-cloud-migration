@@ -34,7 +34,7 @@ A cross-cloud migration creates a discontinuity in your audit trail: source-clou
 <CodeBlock client:visible language="sql" filename="export_uc_audit.sql" code={`-- Export Unity Catalog audit history before decommissioning the source metastore
 SELECT event_time, event_type, user_identity, request_params, response
 FROM system.access.audit
-WHERE event_date >= '2026-01-01'
+WHERE event_date >= '<CUTOVER_DATE>'
 ORDER BY event_time;
 `} />
 

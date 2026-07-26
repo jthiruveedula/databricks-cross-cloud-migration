@@ -20,7 +20,7 @@ Cutover is the moment the target environment becomes the system of record. It re
 
 <Checklist client:visible title="Go/no-go gate — one sign-off per domain" items={[
   { id: 'technical', label: 'Technical: target infrastructure provisioned and passes technical validation' },
-  { id: 'data', label: 'Data: reconciliation shows parity within agreed tolerance' },
+  { id: 'data', label: 'Data: reconciliation shows exact parity per data-reconciliation\'s dimensions (0% variance, not a negotiated tolerance)' },
   { id: 'security', label: 'Security: identity, groups, secrets, and network validation passed' },
   { id: 'business', label: 'Business: stakeholders have signed off per business validation' },
   { id: 'operational', label: 'Operational: support roster, rollback plan, and hypercare severity matrix are in place' },

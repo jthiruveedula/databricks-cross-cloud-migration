@@ -15,7 +15,7 @@ A rollback returns the business to the source environment. It must be planned be
 
 Trigger rollback if any of the following occur during or after cutover:
 
-- Data reconciliation fails beyond agreed tolerance.
+- [Data reconciliation](/validation/data-reconciliation) shows any unexplained variance — its dimensions are 0% tolerance, not a negotiated threshold.
 - Critical jobs cannot start or complete in target.
 - Identity or authentication outage affects a large user group.
 - Security controls are not enforced.

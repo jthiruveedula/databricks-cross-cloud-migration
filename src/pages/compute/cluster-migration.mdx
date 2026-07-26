@@ -60,7 +60,7 @@ Map node types by workload profile (CPU, memory, GPU, local SSD) rather than by 
     "cluster_name": "etl-shared",
     "node_type_id": "Standard_DS3_v2",  # Azure
     "num_workers": 2,
-    "spark_version": "13.3.x-scala2.12",
+    "spark_version": "<SOURCE_DBR_VERSION>",  # whatever the source cluster actually runs
     "access_mode": "LEGACY_SHARED"
 }
 
@@ -68,7 +68,7 @@ target_cluster = {
     "cluster_name": source_cluster["cluster_name"],
     "node_type_id": "m5.large",  # AWS equivalent
     "num_workers": source_cluster["num_workers"],
-    "spark_version": "13.3.x-scala2.12",
+    "spark_version": "<TARGET_LTS>",  # current LTS at migration time -- see runtime-upgrade, don't hardcode a version
     "access_mode": "SHARED"
 }
 `} />

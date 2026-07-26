@@ -95,7 +95,7 @@ jobs:
 
 <Checklist client:visible title="Runtime upgrade" items={[
   { id: 'scan', label: 'Scan clusters and jobs for runtime versions' },
-  { id: 'baseline', label: 'Define target runtime baseline (e.g., DBR 13.3 LTS)' },
+  { id: 'baseline', label: 'Define target runtime baseline (the current LTS, not whatever version the source happens to run)' },
   { id: 'regression', label: 'Run regression tests on target runtime' },
   { id: 'access', label: 'Update access modes to UC-compatible' },
   { id: 'photon', label: 'Evaluate and enable Photon where beneficial' },
