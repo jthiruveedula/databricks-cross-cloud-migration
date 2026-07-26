@@ -1,0 +1,160 @@
+---
+title: 'AI-assisted assessment'
+layout: ../../layouts/Layout.astro
+description: 'A ready-to-run prompt and notebook that drives Databricks Assistant/Genie through workspace inventory, asset cataloging, lineage, and risk scoring, and produces one consolidated assessment report.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+
+# AI-assisted assessment
+
+The four discovery pages in this section — [workspace inventory](/discovery/workspace-inventory), [asset inventory](/discovery/asset-inventory), [dependency mapping](/discovery/dependency-mapping), and [risk assessment](/discovery/risk-assessment) — each document the queries that produce one slice of the picture. This page wires them into a single prompt + notebook pattern so an engineer can point it at a workspace and get one consolidated assessment report back, instead of running four separate exercises by hand.
+
+<Callout client:visible variant="warning" title='Be precise about what "automated" means here'>
+  The queries below are fully deterministic and fully automatable — they are system-table reads, not judgment calls. What they can't automate: assigning a business owner to each asset, deciding whether an "orphaned" workload is actually dead or just undocumented, and sequencing waves from the dependency graph. Treat this as compressing the data-gathering slice of discovery from days to under an hour, not as removing the human decisions layered on top of it. See [AI-assisted migration](/accelerators/ai-assisted-migration) for the same hybrid principle applied to translation and validation.
+</Callout>
+
+## The pattern: deterministic queries, one orchestrating prompt
+
+Rather than asking a model to freelance SQL against your metastore (risking exactly the hallucinated-column, wrong-join failure mode covered on the [AI-assisted migration](/accelerators/ai-assisted-migration) page), give it the **exact queries this runbook already documents** and ask it to run them, merge the results, and narrate the findings. The SQL is deterministic; the LLM's job is synthesis and report writing, not query authorship.
+
+This works equally well as:
+- A prompt pasted into **Databricks Assistant** inside a notebook (it runs cells, iterates, and writes the summary in the same notebook).
+- A question asked of **AI/BI Genie** against a Genie space scoped to the `system` catalog, for a conversational, non-technical-stakeholder-friendly version.
+- The body of a scheduled **Lakeflow Job** that runs the queries directly and calls `ai_query()` only for the narrative summary section — the fully unattended version, appropriate once you've validated the prompt manually a few times.
+
+## The master prompt
+
+Paste this into Databricks Assistant (or adapt the bracketed catalog name for a Genie space):
+
+<CodeBlock client:visible language="text" filename="assessment-prompt.txt" code={`You are assisting with pre-migration discovery for a Databricks workspace.
+Run each of the following queries, then produce one consolidated Markdown
+report with these sections: Workspace Summary, Asset Inventory, Dependency
+Hotspots, and Risk Flags. Do not invent any numbers -- every figure in your
+report must come from a query result. If a query returns zero rows or
+errors (e.g. system tables not enabled), say so explicitly in that section
+rather than omitting it.
+
+1. Workspace Summary -- run:
+   SELECT workspace_id, workspace_name, account_id, region
+   FROM system.information_schema.workspaces;
+
+2. Asset Inventory -- run, and report counts by table_type and data_source_format:
+   SELECT catalog_name, schema_name, table_name, table_type, data_source_format, storage_location
+   FROM system.information_schema.tables
+   WHERE table_schema NOT IN ('information_schema');
+
+3. Dependency Hotspots -- run, then identify the 10 tables with the highest
+   combined in-degree + out-degree (most upstream + downstream edges) --
+   these are the highest-risk migration-sequencing points:
+   SELECT source_table_full_name, target_table_full_name, source_type, target_type
+   FROM system.access.table_lineage
+   WHERE target_table_full_name LIKE '[YOUR_CATALOG].%';
+
+4. Risk Flags -- run, and flag: (a) tables with grants to more than 10 distinct
+   grantees (broad access, harder to re-permission cleanly), (b) any grantee
+   string containing 'all_users' or the workspace's default group (overly
+   broad grants), (c) jobs with no owner tag if your job-tagging convention
+   exposes one:
+   SELECT grantee, privilege_type, catalog_name, table_schema, table_name
+   FROM system.information_schema.table_privileges;
+
+Summarize each section in plain language for a migration steering committee,
+not just a raw table dump. End with a short "Open questions for the workload
+owners" list for anything the data alone can't resolve (ownership, business
+criticality, whether an orphaned-looking asset is actually retired).`} />
+
+## The deterministic notebook (no LLM required to run it)
+
+If you'd rather not depend on an LLM for the query execution itself — reasonable for a scheduled, unattended run — this notebook produces the same four sections directly, and you can point `ai_query()` at just the final cell to generate the narrative summary:
+
+<CodeBlock client:visible language="python" filename="assessment_report.py" code={`from pyspark.sql import SparkSession
+import json
+
+spark = SparkSession.builder.getOrCreate()
+CATALOG = "prod_catalog"  # adjust to your target catalog
+
+workspaces = spark.sql("""
+    SELECT workspace_id, workspace_name, account_id, region
+    FROM system.information_schema.workspaces
+""").collect()
+
+assets = spark.sql(f"""
+    SELECT table_type, data_source_format, COUNT(*) AS cnt
+    FROM system.information_schema.tables
+    WHERE table_schema NOT IN ('information_schema')
+    GROUP BY table_type, data_source_format
+""").collect()
+
+lineage = spark.sql(f"""
+    SELECT source_table_full_name, target_table_full_name
+    FROM system.access.table_lineage
+    WHERE target_table_full_name LIKE '{CATALOG}.%'
+""").collect()
+
+# Degree count approximates dependency-mapping's connected-components signal
+# without pulling in networkx for a one-shot report -- see /discovery/dependency-mapping
+# for the full graph-clustering version when you need wave boundaries, not just a report.
+degree = {}
+for row in lineage:
+    degree[row.source_table_full_name] = degree.get(row.source_table_full_name, 0) + 1
+    degree[row.target_table_full_name] = degree.get(row.target_table_full_name, 0) + 1
+hotspots = sorted(degree.items(), key=lambda kv: -kv[1])[:10]
+
+broad_grants = spark.sql("""
+    SELECT catalog_name, table_schema, table_name, COUNT(DISTINCT grantee) AS grantee_count
+    FROM system.information_schema.table_privileges
+    GROUP BY catalog_name, table_schema, table_name
+    HAVING COUNT(DISTINCT grantee) > 10
+""").collect()
+
+report = {
+    "workspace_summary": [row.asDict() for row in workspaces],
+    "asset_inventory": [row.asDict() for row in assets],
+    "dependency_hotspots": hotspots,
+    "broad_grant_flags": [row.asDict() for row in broad_grants],
+}
+
+# Deterministic sections are done. Only the narrative synthesis below touches an LLM,
+# and it only sees the aggregated report, never raw table/column contents.
+summary_prompt = f"Summarize this Databricks pre-migration assessment for a steering committee, in plain language, under 300 words: {json.dumps(report, default=str)}"
+narrative = spark.sql(
+    "SELECT ai_query('databricks-meta-llama-3-3-70b-instruct', :prompt) AS summary",
+    args={"prompt": summary_prompt},
+).collect()[0].summary
+
+print(narrative)
+`} />
+
+<Callout client:visible variant="tip" title="Only the last step touches an LLM">
+  Every section above the narrative summary is a plain Spark SQL aggregation — reproducible, auditable, and requiring no model call at all. The `ai_query()` call at the end only ever sees the already-aggregated JSON summary (counts, table names, hotspot lists), never raw row contents or credentials, which keeps this compatible with the data-boundary requirements on the [AI-assisted migration](/accelerators/ai-assisted-migration) page.
+</Callout>
+
+## Turning this into a Genie space
+
+For a version stakeholders can question conversationally rather than read as a static report, register the four queries above as **Genie space** sample questions against a space scoped to the `system` catalog (Unity Catalog system tables). Genie answers follow-up questions like "which of those hotspot tables have no assigned owner?" by re-running SQL against the same governed tables — it doesn't hallucinate an answer, it generates and executes a new query, which is exactly the reconciliation discipline this runbook asks for everywhere else.
+
+## Validation
+
+- Spot-check the LLM-generated narrative summary against the raw query results it was built from — confirm every number in the prose actually appears in the underlying data, per the prompt's own "do not invent numbers" instruction.
+- Confirm system tables are actually enabled and populated for the workspace/metastore in scope; an empty result set reads very differently from "no risk" and the prompt is instructed to say so, but verify it did.
+- Cross-check the dependency-hotspot output against what job owners believe are their most critical dependencies, same as [dependency mapping](/discovery/dependency-mapping)'s own validation step — this pattern doesn't replace that check, it feeds it.
+
+## Rollback
+
+This is read-only discovery tooling; there is nothing to roll back. A wrong or incomplete report is a planning-quality issue, not an execution risk — re-run the prompt or notebook rather than treating it as an environment change.
+
+## Automation opportunity
+
+- Schedule the notebook version as a Lakeflow Job that runs weekly during discovery and lands the report as a Delta table, so drift (new tables, new broad grants) surfaces automatically rather than only at the one-time kickoff assessment.
+- Feed the dependency-hotspot output directly into [risk assessment](/discovery/risk-assessment)'s scoring model as the `dependency_count` dimension input, rather than re-deriving it by hand.
+
+<Checklist client:visible title="AI-assisted assessment" items={[
+  { id: 'system-tables', label: 'Confirmed system tables are enabled and populated for the workspace/metastore' },
+  { id: 'prompt-run', label: 'Master prompt or notebook run and consolidated report produced' },
+  { id: 'spot-check', label: 'Narrative summary spot-checked against raw query results for invented figures' },
+  { id: 'hotspots-fed', label: 'Dependency hotspots fed into risk assessment and/or wave planning' },
+  { id: 'owner-followup', label: 'Open-questions list reviewed with workload owners, not left unanswered' },
+]} />

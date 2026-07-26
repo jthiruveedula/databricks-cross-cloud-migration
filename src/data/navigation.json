@@ -18,7 +18,8 @@
         { "title": "Workspace inventory", "slug": "discovery/workspace-inventory" },
         { "title": "Asset inventory", "slug": "discovery/asset-inventory" },
         { "title": "Dependency mapping", "slug": "discovery/dependency-mapping" },
-        { "title": "Risk assessment", "slug": "discovery/risk-assessment" }
+        { "title": "Risk assessment", "slug": "discovery/risk-assessment" },
+        { "title": "AI-assisted assessment", "slug": "discovery/ai-assisted-assessment" }
       ]
     },
     {
