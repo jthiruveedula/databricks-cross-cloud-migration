@@ -31,12 +31,7 @@ Databricks accounts support SSO via SAML 2.0 and OIDC, and user/group provisioni
 
 ## Workspace-local to account groups
 
-Before migrating, convert workspace-local groups to account-level groups. This ensures grants and workspace attachments work correctly.
-
-- Export workspace-local groups from the source workspace.
-- Create matching account-level groups.
-- Reassign ownership and grants.
-- Remove or archive workspace-local groups after validation.
+Before migrating, convert workspace-local groups to account-level groups — this ensures grants and workspace attachments work correctly. The mechanics (export, create matching account-level groups, reassign ownership/grants, retire workspace-local groups) are the same regardless of cloud change; see [UCX-assisted migration](/governance/ucx-strategy)'s group migration workflow for the actual `migrate-groups` job, or run the equivalent steps manually if not using UCX.
 
 ## Validation
 
