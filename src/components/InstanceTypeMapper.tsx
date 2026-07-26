@@ -7,6 +7,7 @@ import {
   SlidersHorizontal,
   ArrowUpDown,
   Check,
+  ArrowLeftRight,
 } from 'lucide-react';
 import CloudLogo from './CloudLogo.tsx';
 import instanceData from '../data/instanceTypes.json';
@@ -44,6 +45,34 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'memoryGb', label: 'Memory' },
   { key: 'gpu', label: 'GPU' },
 ];
+
+/**
+ * Find the closest equivalent to `source` among `data` on `targetCloud`.
+ * Restricted to the same Databricks tier and matching GPU presence, then
+ * scored by normalized vCPU/memory distance (plus a GPU-family penalty so a
+ * same-name GPU generation, e.g. A100, beats a different one at similar size).
+ */
+export function findBestMatch(
+  source: InstanceType,
+  data: InstanceType[],
+  targetCloud: Cloud
+): InstanceType | null {
+  const candidates = data.filter(
+    (d) => d.cloud === targetCloud && d.tier === source.tier && Boolean(d.gpu) === Boolean(source.gpu)
+  );
+  if (candidates.length === 0) return null;
+
+  const score = (d: InstanceType) => {
+    let s = Math.abs(d.vCpu - source.vCpu) / source.vCpu + Math.abs(d.memoryGb - source.memoryGb) / source.memoryGb;
+    if (source.gpu && d.gpu) {
+      s += d.gpuType === source.gpuType ? 0 : 0.5;
+      s += Math.abs(d.gpu - source.gpu) / source.gpu;
+    }
+    return s;
+  };
+
+  return candidates.reduce((best, c) => (score(c) < score(best) ? c : best));
+}
 
 export default function InstanceTypeMapper() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -110,6 +139,14 @@ export default function InstanceTypeMapper() {
       setSortKey(key);
       setSortDir('asc');
     }
+  }
+
+  function mapToOtherClouds(source: InstanceType) {
+    const otherClouds = (['aws', 'azure', 'gcp'] as Cloud[]).filter((c) => c !== source.cloud);
+    const matches = otherClouds
+      .map((c) => findBestMatch(source, data, c))
+      .filter((m): m is InstanceType => m !== null);
+    setSelectedNames(new Set([source.name, ...matches.map((m) => m.name)]));
   }
 
   function toggleSelected(name: string) {
@@ -362,12 +399,15 @@ export default function InstanceTypeMapper() {
               <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--ink-muted)]">
                 Category
               </th>
+              <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--ink-muted)]">
+                <span className="sr-only">Map</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-6 py-16 text-center">
+                <td colSpan={10} className="px-6 py-16 text-center">
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -464,6 +504,16 @@ export default function InstanceTypeMapper() {
                       >
                         {row.category}
                       </span>
+                    </td>
+                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => mapToOtherClouds(row)}
+                        title="Find equivalents on other clouds"
+                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-2 py-1 text-xs font-medium text-[var(--ink-muted)] transition-colors hover:border-[var(--accent)]/50 hover:text-[var(--accent)]"
+                      >
+                        <ArrowLeftRight className="h-3.5 w-3.5" />
+                        Map
+                      </button>
                     </td>
                   </motion.tr>
                 );
