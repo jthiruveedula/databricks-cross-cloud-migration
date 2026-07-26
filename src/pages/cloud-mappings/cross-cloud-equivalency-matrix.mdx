@@ -22,6 +22,10 @@ Databricks abstracts the control plane, but the underlying cloud primitives diff
 | Service principal | Entra ID app registration | IAM role with external ID | Service account with key or impersonation |
 | SCIM provisioning | Entra ID provisioning | IAM Identity Center SCIM | Google Workspace / Cloud Identity SCIM |
 
+## Metastore
+
+A Unity Catalog metastore is region-scoped, one per cloud account/subscription/project per region — moving cloud always means creating a **new** metastore in the target, never relocating the source one. See [metastore migration](/governance/metastore-migration) for what that actually means for sequencing and what content migrates versus what's simply recreated.
+
 ## Storage
 
 | Concept | Azure Databricks | AWS Databricks | GCP Databricks |
