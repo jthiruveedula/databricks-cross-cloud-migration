@@ -37,7 +37,12 @@ const RACI_META: Record<string, { bg: string; text: string; label: string }> = {
 
 const CYCLE: RaciValue[] = [null, 'R', 'A', 'C', 'I'];
 
-const DEFAULT_ROLES = ['Cloud Architect', 'Data Engineering', 'Security Engineering'];
+// "Migration Automation Lead" has no single standardized industry title yet -- AI-accelerated
+// migration tooling (UCX, Lakebridge, GenAI code conversion) is too new for that. But every
+// source on AI-assisted migration agrees someone has to own reviewing/validating generated
+// output before it ships, so it's included as a sensible default, not a claimed industry norm.
+// Rename or remove it freely -- every role here is editable.
+const DEFAULT_ROLES = ['Cloud Architect', 'Data Engineering', 'Security Engineering', 'Migration Automation Lead'];
 
 function cycleValue(current: RaciValue): RaciValue {
   const idx = CYCLE.indexOf(current);
@@ -55,55 +60,68 @@ function buildDefaultMatrix(): Matrix {
     set(phase, 'Cloud Architect', null);
     set(phase, 'Data Engineering', null);
     set(phase, 'Security Engineering', null);
+    set(phase, 'Migration Automation Lead', null);
   }
 
   set('Discovery', 'Cloud Architect', 'A');
   set('Discovery', 'Data Engineering', 'R');
   set('Discovery', 'Security Engineering', 'C');
+  set('Discovery', 'Migration Automation Lead', 'C');
 
   set('Cloud Mapping', 'Cloud Architect', 'R');
   set('Cloud Mapping', 'Data Engineering', 'C');
   set('Cloud Mapping', 'Security Engineering', 'C');
+  set('Cloud Mapping', 'Migration Automation Lead', 'C');
 
   set('Governance Setup', 'Cloud Architect', 'A');
   set('Governance Setup', 'Data Engineering', 'I');
   set('Governance Setup', 'Security Engineering', 'R');
+  set('Governance Setup', 'Migration Automation Lead', 'I');
 
   set('Security Hardening', 'Cloud Architect', 'C');
   set('Security Hardening', 'Data Engineering', 'I');
   set('Security Hardening', 'Security Engineering', 'R');
+  set('Security Hardening', 'Migration Automation Lead', 'I');
 
   set('Compute Migration', 'Cloud Architect', 'C');
   set('Compute Migration', 'Data Engineering', 'R');
   set('Compute Migration', 'Security Engineering', 'I');
+  set('Compute Migration', 'Migration Automation Lead', 'C');
 
   set('Pipeline Migration', 'Cloud Architect', 'A');
   set('Pipeline Migration', 'Data Engineering', 'R');
   set('Pipeline Migration', 'Security Engineering', 'C');
+  set('Pipeline Migration', 'Migration Automation Lead', 'R');
 
   set('Analytics Migration', 'Cloud Architect', 'C');
   set('Analytics Migration', 'Data Engineering', 'R');
   set('Analytics Migration', 'Security Engineering', 'I');
+  set('Analytics Migration', 'Migration Automation Lead', 'R');
 
   set('ML Migration', 'Cloud Architect', 'C');
   set('ML Migration', 'Data Engineering', 'R');
   set('ML Migration', 'Security Engineering', 'I');
+  set('ML Migration', 'Migration Automation Lead', 'C');
 
   set('Data Validation', 'Cloud Architect', 'I');
   set('Data Validation', 'Data Engineering', 'R');
   set('Data Validation', 'Security Engineering', 'A');
+  set('Data Validation', 'Migration Automation Lead', 'C');
 
   set('Integration Testing', 'Cloud Architect', 'A');
   set('Integration Testing', 'Data Engineering', 'R');
   set('Integration Testing', 'Security Engineering', 'C');
+  set('Integration Testing', 'Migration Automation Lead', 'I');
 
   set('Cutover', 'Cloud Architect', 'R');
   set('Cutover', 'Data Engineering', 'A');
   set('Cutover', 'Security Engineering', 'C');
+  set('Cutover', 'Migration Automation Lead', 'I');
 
   set('Hypercare', 'Cloud Architect', 'A');
   set('Hypercare', 'Data Engineering', 'R');
   set('Hypercare', 'Security Engineering', 'C');
+  set('Hypercare', 'Migration Automation Lead', 'I');
 
   return m;
 }
@@ -247,6 +265,12 @@ export default function RaciBuilder() {
           <p className="max-w-2xl text-[var(--ink-muted)]">
             Assign Responsible, Accountable, Consulted, and Informed roles across
             migration phases. Click cells to cycle through values.
+          </p>
+          <p className="mt-2 max-w-2xl text-xs text-[var(--ink-subtle)]">
+            Includes a "Migration Automation Lead" by default -- someone needs to own
+            reviewing AI-generated migration output (UCX, Lakebridge, GenAI code conversion)
+            before it ships. No industry-standard title exists for this yet; rename or
+            remove it freely.
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
