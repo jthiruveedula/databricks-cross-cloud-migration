@@ -41,6 +41,13 @@ function ImageGlyph({ icon, className, brandColor }: Props & { icon: BrandIconIm
         </div>
       ) : (
         <img
+          ref={(node) => {
+            // A cached image can already be `complete` by the time this ref runs, in which
+            // case the browser has already fired (or will never fire) its 'load' event --
+            // relying on onLoad alone leaves `loaded` false forever and the image permanently
+            // display:none. Check .complete on mount to cover that case.
+            if (node?.complete && node.naturalWidth > 0) setLoaded(true);
+          }}
           src={icon.url}
           width={icon.width}
           height={icon.height}

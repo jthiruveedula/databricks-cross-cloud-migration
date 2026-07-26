@@ -11,9 +11,21 @@ if (typeof window !== 'undefined') {
   gsap.registerPlugin(ScrollTrigger);
 }
 
-const CLOUD_LOGOS = ['aws', 'azure', 'googlecloud'] as const;
+// Google blue exact from simple-icons (#4285F4); switched from the flat webp so the
+// strip below reads as unmistakably Google Cloud rather than a generic cloud outline.
+const CLOUD_LOGOS = ['aws', 'azure', 'googlecloudsvg'] as const;
 
 const ROTATING = ['across any cloud', 'to AWS', 'to Azure', 'to GCP'];
+
+// Per-brand text color for the rotating headline word -- AWS orange, Azure blue, Google's
+// four-color scheme split across the letters -- instead of one generic gradient for every
+// word. 'across any cloud' keeps the generic gradient since it names no single brand.
+const ROTATING_COLOR: Record<string, string | null> = {
+  'across any cloud': null,
+  'to AWS': '#FF9900',
+  'to Azure': '#0078D4',
+  'to GCP': null, // rendered letter-by-letter in Google's four brand colors, see below
+};
 
 export default function Hero() {
   const ref = useRef<HTMLDivElement>(null);
@@ -152,7 +164,7 @@ export default function Hero() {
           className="mb-6 text-4xl font-bold tracking-tight md:text-6xl"
         >
           Migrate Databricks{' '}
-          <span className="gradient-text inline-block min-w-[3ch]">
+          <span className="inline-block min-w-[3ch]">
             <AnimatePresence mode="wait">
               <motion.span
                 key={word}
@@ -162,7 +174,18 @@ export default function Hero() {
                 transition={{ duration: 0.35, ease: 'easeOut' }}
                 className="inline-block"
               >
-                {ROTATING[word]}
+                {ROTATING[word] === 'to GCP' ? (
+                  <>
+                    to{' '}
+                    <span style={{ color: '#4285F4' }}>G</span>
+                    <span style={{ color: '#EA4335' }}>C</span>
+                    <span style={{ color: '#34A853' }}>P</span>
+                  </>
+                ) : ROTATING_COLOR[ROTATING[word]] ? (
+                  <span style={{ color: ROTATING_COLOR[ROTATING[word]]! }}>{ROTATING[word]}</span>
+                ) : (
+                  <span className="gradient-text">{ROTATING[word]}</span>
+                )}
               </motion.span>
             </AnimatePresence>
           </span>
