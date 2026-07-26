@@ -36,7 +36,7 @@ Rule-based conversion for the 80% that is mechanical (dialect mapping, function 
 
 ## SQL dialect translation
 
-Databricks **Lakebridge** (free, open, GA) is the reference converter: rule-based core for Teradata BTEQ, T-SQL, and Oracle PL/SQL → Databricks SQL / Spark SQL, with an AI-powered layer for complex transforms. AWS DMS Schema Conversion added a GenAI capability (Bedrock) in Dec 2024 for procedures the rule engine cannot handle; Google BigQuery ships batch + interactive translators for 15+ sources.
+Databricks **Lakebridge** (free, open, GA) is the reference converter: rule-based core for Teradata BTEQ, T-SQL, and Oracle PL/SQL → Databricks SQL / Spark SQL, with an AI-powered layer for complex transforms — see [Databricks migration tooling](/accelerators/databricks-tooling) for its full Analyzer/Converter/Validator breakdown and where it fits in the broader accelerator stack. AWS DMS Schema Conversion added a GenAI capability (Bedrock) in Dec 2024 for procedures the rule engine cannot handle; Google BigQuery ships batch + interactive translators for 15+ sources.
 
 <CodeBlock
   language="sql"

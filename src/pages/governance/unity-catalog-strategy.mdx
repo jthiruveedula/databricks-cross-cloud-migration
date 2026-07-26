@@ -58,7 +58,7 @@ If active-active or DR is required, replicate Delta tables and use a second meta
   Unity Catalog centralizes identity at the account level. Convert workspace-local groups to account-level groups before attaching workspaces to the target metastore. This avoids broken grants and duplicated group names.
 </Callout>
 
-Use the Databricks CLI or Accounts API to list and convert groups:
+See [identity federation](/security/identity-federation) and [UCX-assisted migration](/governance/ucx-strategy) for the full group-conversion workflow. To list and convert groups directly via CLI or Accounts API:
 
 <CodeBlock client:visible language="bash" code={`databricks account groups list --output json | jq '.[] | {id, displayName, externalId}'
 
