@@ -42,6 +42,7 @@
         { "title": "Unity Catalog strategy", "slug": "governance/unity-catalog-strategy" },
         { "title": "Metastore migration", "slug": "governance/metastore-migration" },
         { "title": "Grants and roles", "slug": "governance/grants-and-roles" },
+        { "title": "Row and column-level security", "slug": "governance/row-column-security" },
         { "title": "External locations and volumes", "slug": "governance/external-locations-and-volumes" },
         { "title": "Legacy Hive transition", "slug": "governance/legacy-hive-transition" },
         { "title": "UCX-assisted migration", "slug": "governance/ucx-strategy" }

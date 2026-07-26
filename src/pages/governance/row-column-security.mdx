@@ -1,0 +1,98 @@
+---
+title: 'Row and column-level security'
+layout: ../../layouts/Layout.astro
+description: 'Migrate Unity Catalog row filters, column masks, and attribute-based access control to the target metastore.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Row and column-level security
+
+[Grants and roles](/governance/grants-and-roles) control access at the object level — who can touch a table at all. Row filters, column masks, and tag-based attribute policies control access **inside** a table — which rows a grantee sees, and which columns are redacted for them. These are Unity Catalog objects in their own right and do not travel with `GRANT` replication or Deep Clone; they need their own migration step.
+
+<Callout client:visible variant="warning" title="Fine-grained policies do not travel with data or grants">
+  A row filter or column mask defined on the source catalog is not reproduced by cloning the table or re-issuing grants on the target. If this step is skipped, the most likely failure mode is silent over-exposure — a user who was row-filtered on source sees the full table on target, with no error to signal the gap.
+</Callout>
+
+## What Unity Catalog offers
+
+| Mechanism | Enforces | Applies to |
+|---|---|---|
+| Row filter (`ROW FILTER`) | A `WHERE`-style predicate function, evaluated per query, restricting which rows a principal can see | Tables |
+| Column mask (`MASK`) | A function that transforms or redacts a column's value per principal (e.g. hash, partial redact, null-out) | Columns |
+| Attribute-based access control (ABAC) | Policies driven by **tags** on catalogs/schemas/tables/columns rather than hardcoded object names — one policy governs every object carrying a given tag, present or future | Catalogs, schemas, tables, columns |
+
+Row filters and column masks are both implemented as SQL functions registered in Unity Catalog, then attached to the table. ABAC policies are a separate object that reference tags instead of being attached per-table — new tables that inherit the tag are covered automatically, which is the main reason to prefer ABAC over hand-attaching filters/masks to every object during migration.
+
+## Inventory source policies first
+
+The same discipline as grants applies: extract the full source policy set before writing anything against the target.
+
+<CodeBlock client:visible language="sql" filename="inventory_row_column_security.sql" code={`-- Row filters and column masks currently attached to tables
+SELECT table_catalog, table_schema, table_name, column_name, mask_name
+FROM system.information_schema.column_masks
+WHERE table_catalog = 'source_catalog';
+
+SELECT table_catalog, table_schema, table_name, row_filter_name
+FROM system.information_schema.row_filters
+WHERE table_catalog = 'source_catalog';
+
+-- ABAC policies and the tags they key off
+SHOW POLICIES ON CATALOG source_catalog;
+`} />
+
+## Migration pattern
+
+| Step | Action |
+|------|--------|
+| 1 | Export row filters, column masks, and ABAC policies from `information_schema` / `SHOW POLICIES` |
+| 2 | Re-create the underlying filter/mask **functions** in the target catalog — these are UDFs and must be redeployed, not just referenced |
+| 3 | Re-attach row filters and column masks to the equivalent target tables |
+| 4 | Re-create ABAC policies against the target's tag taxonomy — confirm tags were actually migrated (see [Unity Catalog strategy](/governance/unity-catalog-strategy)) before assuming a policy will attach correctly |
+| 5 | Query as a representative non-privileged principal and diff visible rows/columns against the source behavior |
+
+<CodeBlock client:visible language="sql" filename="recreate_row_filter.sql" code={`-- 1. Re-create the filter function in the target catalog
+CREATE FUNCTION target_catalog.security.region_filter(region STRING)
+RETURN IF(IS_ACCOUNT_GROUP_MEMBER('admins'), true, region = current_user_region());
+
+-- 2. Attach it to the target table
+ALTER TABLE target_catalog.sales.orders
+SET ROW FILTER target_catalog.security.region_filter ON (region);
+
+-- Column mask follows the same two-step pattern
+CREATE FUNCTION target_catalog.security.mask_ssn(ssn STRING)
+RETURN IF(IS_ACCOUNT_GROUP_MEMBER('pii-readers'), ssn, '***-**-****');
+
+ALTER TABLE target_catalog.sales.customers
+ALTER COLUMN ssn SET MASK target_catalog.security.mask_ssn;
+`} />
+
+<Callout client:visible variant="tip" title="Prefer ABAC for anything migrating in bulk">
+  Hand-attaching row filters and column masks to hundreds of tables during a migration is exactly the kind of step that silently drops coverage. Where the source used per-table filters/masks driven by a consistent pattern (e.g. "any table tagged `pii` gets this mask"), migrating to an ABAC policy keyed on that tag is both less error-prone and self-extending to tables added after cutover.
+</Callout>
+
+## Validation
+
+- For every table with a source-side row filter or column mask, confirm the target has the equivalent attached — diff the `information_schema.row_filters` / `column_masks` views between source and target, not a sample.
+- Run the same query as the same class of non-privileged principal (a real user or service principal in the mapped target group, not an admin) against both source and target, and diff the returned rows/columns.
+- For ABAC, confirm the tag taxonomy migrated first — a policy that references a tag that doesn't exist on the target silently governs nothing.
+
+## Rollback
+
+Row filters, column masks, and ABAC policies are metadata-only changes on the target — rolling back means correcting or re-attaching the policy on the target metastore. No data movement is involved, so this is fix-forward, not a data rollback. Keep source policies untouched and treat them as the reference until validation is complete.
+
+## Automation opportunity
+
+- Declare row filters, column masks, and ABAC policies as Terraform (`databricks_sql_table` row/column security blocks, or the ABAC policy resource) so the full set is visible in a diff rather than scattered across manual `ALTER TABLE` statements.
+- Script the source-vs-target policy diff from `information_schema` as a scheduled check through hypercare, mirroring the grants diff in [Grants and roles](/governance/grants-and-roles).
+
+<Checklist client:visible title="Row and column-level security migration" items={[
+  { id: 'inventory', label: 'Full source row filter, column mask, and ABAC policy inventory extracted' },
+  { id: 'functions', label: 'Filter/mask functions re-created in the target catalog' },
+  { id: 'attach', label: 'Row filters and column masks re-attached to target tables' },
+  { id: 'abac', label: 'ABAC policies re-created against a confirmed target tag taxonomy' },
+  { id: 'diff', label: 'Source vs. target policy coverage diffed with zero gaps' },
+  { id: 'real-user-test', label: 'Row/column visibility validated with a real non-admin principal' },
+]} />
