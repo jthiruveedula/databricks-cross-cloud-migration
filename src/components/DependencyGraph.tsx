@@ -95,6 +95,72 @@ function calcPositions(nodes: GraphNode[]): Record<string, { x: number; y: numbe
 }
 
 // ---------------------------------------------------------------------------
+// Migration wave sequencing — an edge {source, target} means "source depends
+// on target", so target must migrate first. A node's wave = 1 + the deepest
+// wave among its dependencies (0 if it has none). Cycles can't be ordered —
+// they're real migration blockers (e.g. two pipelines that mutually feed each
+// other) and are surfaced separately rather than silently broken.
+// ---------------------------------------------------------------------------
+
+export function computeMigrationWaves(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+): { waves: Record<string, number>; cycles: string[] } {
+  const depsOf = new Map<string, string[]>();
+  for (const n of nodes) depsOf.set(n.id, []);
+  for (const e of edges) {
+    if (depsOf.has(e.source)) depsOf.get(e.source)!.push(e.target);
+  }
+
+  const wave: Record<string, number> = {};
+  const state = new Map<string, 0 | 1 | 2>();
+  const cycles = new Set<string>();
+
+  function visit(id: string): number {
+    const st = state.get(id) ?? 0;
+    if (st === 2) return wave[id];
+    if (st === 1) {
+      cycles.add(id);
+      return 0;
+    }
+    state.set(id, 1);
+    let w = 0;
+    for (const dep of depsOf.get(id) ?? []) {
+      if (!depsOf.has(dep)) continue; // dependency outside the visible node set
+      w = Math.max(w, visit(dep) + 1);
+    }
+    state.set(id, 2);
+    wave[id] = w;
+    return w;
+  }
+
+  for (const n of nodes) visit(n.id);
+  return { waves: wave, cycles: Array.from(cycles) };
+}
+
+/** Count of nodes that transitively depend on `nodeId` — what breaks if it's disrupted. */
+export function blastRadius(nodeId: string, edges: GraphEdge[]): number {
+  const dependents = new Map<string, string[]>();
+  for (const e of edges) {
+    if (!dependents.has(e.target)) dependents.set(e.target, []);
+    dependents.get(e.target)!.push(e.source);
+  }
+
+  const visited = new Set<string>();
+  const stack = [nodeId];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    for (const dep of dependents.get(cur) ?? []) {
+      if (!visited.has(dep)) {
+        visited.add(dep);
+        stack.push(dep);
+      }
+    }
+  }
+  return visited.size;
+}
+
+// ---------------------------------------------------------------------------
 // Edge path — quadratic bezier with perpendicular offset
 // ---------------------------------------------------------------------------
 
@@ -198,6 +264,17 @@ export default function DependencyGraph() {
       })
       .filter((c) => c.other);
   }, [selected]);
+
+  const { waves, cycles } = useMemo(
+    () => computeMigrationWaves(data.nodes, data.edges),
+    [],
+  );
+
+  const selectedWave = selected ? waves[selected] : undefined;
+  const selectedBlastRadius = useMemo(
+    () => (selected ? blastRadius(selected, data.edges) : 0),
+    [selected],
+  );
 
   const isTransitioning = useRef(false);
 
@@ -385,6 +462,15 @@ export default function DependencyGraph() {
         </motion.button>
       </div>
 
+      {/* ---- Cycle warning ---- */}
+      {cycles.length > 0 && (
+        <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          <span className="font-semibold">{cycles.length} node{cycles.length === 1 ? '' : 's'} in a dependency cycle</span>{' '}
+          — a migration wave can't be assigned until the circular dependency is broken (marked with{' '}
+          <span className="font-bold">!</span> on the graph): {cycles.map((id) => data.nodes.find((n) => n.id === id)?.label ?? id).join(', ')}.
+        </div>
+      )}
+
       {/* ---- Filter bar + legend ---- */}
       <div className="mb-5 flex flex-wrap items-center gap-4">
         {/* Filter buttons */}
@@ -547,6 +633,32 @@ export default function DependencyGraph() {
                   >
                     {node.label}
                   </text>
+
+                  {/* Migration wave badge */}
+                  {waves[node.id] !== undefined && (
+                    <g className="pointer-events-none" opacity={labelOpacity(node.id)}>
+                      <circle
+                        cx={pos.x + NODE_R - 6}
+                        cy={pos.y - NODE_R + 6}
+                        r={8}
+                        fill="var(--surface-elevated)"
+                        stroke={cycles.includes(node.id) ? '#ef4444' : color}
+                        strokeWidth={1.25}
+                      />
+                      <text
+                        x={pos.x + NODE_R - 6}
+                        y={pos.y - NODE_R + 7}
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        fill={cycles.includes(node.id) ? '#ef4444' : 'var(--ink)'}
+                        fontSize={9}
+                        fontWeight={700}
+                        style={{ fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif' }}
+                      >
+                        {cycles.includes(node.id) ? '!' : waves[node.id]}
+                      </text>
+                    </g>
+                  )}
                 </g>
               );
             })}
@@ -649,6 +761,26 @@ export default function DependencyGraph() {
                     Group
                   </p>
                   <p className="text-sm text-[var(--ink)]">{selectedNode.group}</p>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--ink-subtle)]">
+                    Migration wave
+                  </p>
+                  <p className="text-sm text-[var(--ink)]">
+                    {cycles.includes(selectedNode.id)
+                      ? 'Unassignable — part of a dependency cycle'
+                      : `Wave ${selectedWave} ${selectedWave === 0 ? '(no dependencies — migrate first)' : `(after wave ${selectedWave! - 1} completes)`}`}
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--ink-subtle)]">
+                    Downstream impact
+                  </p>
+                  <p className="text-sm text-[var(--ink)]">
+                    {selectedBlastRadius === 0
+                      ? 'Nothing depends on this'
+                      : `${selectedBlastRadius} node${selectedBlastRadius === 1 ? '' : 's'} affected if this breaks`}
+                  </p>
                 </div>
               </div>
 
