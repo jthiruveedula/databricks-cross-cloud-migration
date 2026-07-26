@@ -58,7 +58,7 @@ for wh in warehouses:
 
 - Warehouse-level permissions (`CAN_USE`, `CAN_MANAGE`) are workspace-local and must be re-granted in target — they do not travel with a warehouse config export.
 - Table/schema-level access is governed by Unity Catalog grants, not the warehouse — see [grants and roles](/governance/grants-and-roles) for that half of the access story.
-- Re-validate row/column-level security policies (if used) against the target warehouse; UC-based fine-grained access control is enforced per-query, not per-warehouse, but it's worth a explicit re-check during pilot.
+- Re-validate row/column-level security policies (if used) against the target warehouse; UC-based fine-grained access control is enforced per-query, not per-warehouse, but it's worth a explicit re-check during pilot. These policies are separate Unity Catalog objects that must be migrated on their own — see [row and column-level security](/governance/row-column-security).
 
 ## Validation
 

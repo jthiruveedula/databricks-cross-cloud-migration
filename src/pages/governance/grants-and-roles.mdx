@@ -10,7 +10,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 # Grants and roles
 
-Creating the target metastore, catalogs, and schemas from [Unity Catalog strategy](/governance/unity-catalog-strategy) only reproduces structure. Grants are what make data usable — and they are the part most teams under-budget time for, because there is no bulk "copy grants" operation across metastores.
+Creating the target metastore, catalogs, and schemas from [Unity Catalog strategy](/governance/unity-catalog-strategy) only reproduces structure. Grants are what make data usable — and they are the part most teams under-budget time for, because there is no bulk "copy grants" operation across metastores. Grants control access to the object as a whole; for row filters, column masks, and tag-based ABAC policies that restrict access *inside* a table, see [row and column-level security](/governance/row-column-security).
 
 <Callout client:visible variant="warning" title="Grants do not travel with data">
   Cloning a table with Delta Deep Clone copies data and history, not Unity Catalog grants. Every `GRANT` statement on the source metastore must be re-issued explicitly against the target — plan for this as its own migration step, not an assumed side effect of data replication.
