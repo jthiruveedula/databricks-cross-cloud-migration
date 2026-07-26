@@ -20,4 +20,28 @@ describe('computeTimeline', () => {
   it('hypercare is fixed at two weeks', () => {
     expect(cross.phases[6].weeks).toBe(2);
   });
+
+  it('AI-accelerated totals less than traditional for the same inputs', () => {
+    const traditional = computeTimeline(5, 100, 400, 60, 6, 'azure-aws', false, 50);
+    const accelerated = computeTimeline(5, 100, 400, 60, 6, 'azure-aws', true, 50);
+    expect(accelerated.totalWeeks).toBeLessThan(traditional.totalWeeks);
+  });
+
+  it('a bigger team compresses the total, with diminishing returns', () => {
+    const small = computeTimeline(5, 100, 400, 60, 2, 'azure-aws', true, 50);
+    const mid = computeTimeline(5, 100, 400, 60, 6, 'azure-aws', true, 50);
+    const big = computeTimeline(5, 100, 400, 60, 15, 'azure-aws', true, 50);
+    expect(mid.totalWeeks).toBeLessThan(small.totalWeeks);
+    expect(big.totalWeeks).toBeLessThan(mid.totalWeeks);
+    // Diminishing returns: the 2->6 jump saves more than the 6->15 jump per person added.
+    const firstJumpSavings = (small.totalWeeks - mid.totalWeeks) / 4;
+    const secondJumpSavings = (mid.totalWeeks - big.totalWeeks) / 9;
+    expect(firstJumpSavings).toBeGreaterThan(secondJumpSavings);
+  });
+
+  it('more data volume extends the migration phase', () => {
+    const lean = computeTimeline(5, 100, 400, 60, 6, 'azure-aws', true, 1);
+    const heavy = computeTimeline(5, 100, 400, 60, 6, 'azure-aws', true, 800);
+    expect(heavy.phases[2].weeks).toBeGreaterThan(lean.phases[2].weeks);
+  });
 });
