@@ -185,7 +185,11 @@ export default function CodeBlock({
             {tokens.map((line, i) => {
               const lineNum = i + 1;
               const isHighlighted = highlight.includes(lineNum);
-              const lineProps = getLineProps({ line, key: i });
+              // Destructure `key` out before spreading -- getLineProps({..., key: i}) returns
+              // it inside the props object, and spreading a `key` field via {...lineProps}
+              // (rather than passing it as a literal key= JSX attribute) triggers React's
+              // "props object containing a key prop is being spread into JSX" warning.
+              const { key: _lineKey, ...lineProps } = getLineProps({ line, key: i });
               return (
                 <div
                   key={i}

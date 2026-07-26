@@ -74,10 +74,10 @@ const pageTitle = title === siteName ? title : `${title} | ${siteName}`;
     <KeyboardShortcuts client:load />
     <BackToTop client:load />
     <div class="flex pt-[var(--header-height)]">
-      <div class="flex-1">
+      <div class="min-w-0 flex-1">
         <main class="mx-auto min-h-[calc(100vh-var(--header-height))] max-w-6xl px-6 py-10 lg:px-10">
           <div class={`flex gap-8 ${!hideToc ? '' : ''}`}>
-            <article class={bare ? 'w-full max-w-none' : 'prose w-full max-w-none'}>
+            <article class={bare ? 'w-full min-w-0 max-w-none' : 'prose w-full min-w-0 max-w-none'}>
               {!bare && <Breadcrumb currentSlug={currentSlug} />}
               <slot />
               {!bare && <PrevNext currentSlug={currentSlug} />}
