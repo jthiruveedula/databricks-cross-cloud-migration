@@ -6,6 +6,7 @@ import MigrationFlowDiagram from '../components/MigrationFlowDiagram.tsx';
 import Hero from '../components/Hero.tsx';
 import MetricsBand from '../components/MetricsBand.tsx';
 import MigrationJourney from '../components/MigrationJourney.tsx';
+import RunbookStagesFlow from '../components/RunbookStagesFlow.tsx';
 import CtaBand from '../components/CtaBand.tsx';
 import { withBase } from '../lib/paths';
 import { ArrowRight, BookOpen, Cloud, Shield, Cpu, Workflow, ClipboardList, Activity, Wrench, Route } from 'lucide-react';
@@ -54,20 +55,7 @@ const sections = [
     <p class="mb-6 text-[var(--ink-muted)]">
       Cross-cloud migration is not a lift-and-shift. It is a deliberate reset of identity, storage, networking, governance, and compute. This runbook gives you the decision framework, sequencing, commands, and validation patterns to execute it safely.
     </p>
-    <div class="grid gap-6 md:grid-cols-3">
-      <div>
-        <h3 class="mb-2 font-semibold text-[var(--ink)]">Plan</h3>
-        <p class="text-sm text-[var(--ink-muted)]">Inventory assets, map dependencies, assess risk, and choose the right migration archetype for your constraints.</p>
-      </div>
-      <div>
-        <h3 class="mb-2 font-semibold text-[var(--ink)]">Migrate</h3>
-        <p class="text-sm text-[var(--ink-muted)]">Move metastores, data, compute, pipelines, SQL assets, and ML artifacts with reusable automation and validation.</p>
-      </div>
-      <div>
-        <h3 class="mb-2 font-semibold text-[var(--ink)]">Validate & cutover</h3>
-      <p class="text-sm text-[var(--ink-muted)]">Reconcile data, verify IAM and networking, run business UAT, and execute blue-green cutover with rollback guardrails.</p>
-      </div>
-    </div>
+    <RunbookStagesFlow client:visible />
 
     <CtaBand client:load />
   </div>
