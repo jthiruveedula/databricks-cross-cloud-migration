@@ -7,19 +7,16 @@ description: 'Define cross-cloud migration for Databricks, common drivers, and t
 import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Card from '../../components/Card.tsx';
+import PlatformResetGrid from '../../components/PlatformResetGrid.tsx';
 import { ArrowRight, Cloud, Shield, Scale, Globe } from 'lucide-react';
 
 # What is cross-cloud migration?
 
 A **Databricks cross-cloud migration** moves a Databricks deployment from one public cloud environment to another, or from one landing zone to another within the same cloud. It includes the workspaces, metastores, data, compute, identity, networking, governance, pipelines, and operational tooling that together make the platform usable.
 
-Unlike a simple data copy, a Databricks migration is a **platform reset**:
+Unlike a simple data copy, a Databricks migration is a **platform reset**: none of the constructs below carry over as-is.
 
-- Account boundaries are different on each cloud (Azure tenant/subscription, AWS account, GCP project).
-- Identity is federated differently (Azure AD / Entra ID, AWS IAM, GCP IAM).
-- Storage protocols change (ADLS Gen2, S3, GCS) and so do path semantics.
-- Networking constructs (VNet, VPC, private endpoints, PSC) are not portable.
-- Unity Catalog is the cross-cloud governance layer, but metastores are region-specific and account-scoped.
+<PlatformResetGrid client:visible />
 
 This runbook treats migration as a **program of work**, not a single operation. It covers planning, discovery, execution, validation, cutover, and hypercare.
 
