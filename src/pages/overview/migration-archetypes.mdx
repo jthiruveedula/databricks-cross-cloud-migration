@@ -13,46 +13,28 @@ No single migration pattern fits every Databricks estate. The right archetype de
 
 ## Common archetypes
 
-### Workspace-only
-
-Move the workspace configuration, permissions, and notebooks while leaving data and metastores behind or reconnecting them later.
-
-- Fastest for assets that are code-heavy and data-light.
-- Use when data already lives in a cloud-agnostic storage layer.
-- Risk: users expect old data paths to resolve immediately.
-
-### Workspace + metastore
-
-Migrate the workspace and recreate or clone the Unity Catalog metastore in the target cloud.
-
-- The standard pattern for Unity Catalog customers.
-- Requires storage credentials and external locations in the target.
-- Data movement depends on table type: managed, external, or foreign.
-
-### Cross-subscription / account / project
-
-Same cloud, new billing or identity boundary. Easier than cross-cloud because storage, networking, and identity models stay the same.
-
-- Can often use cross-account replication for data.
-- Identity federation and private links still require rework.
-- Least privilege must be re-verified in the new account.
-
-### Data-only
-
-Move only the data and rebuild compute and code in the target. Common when modernizing runtimes and governance at the same time.
-
-- Cleanest from a technical-debt perspective.
-- Highest manual effort for notebooks, jobs, and dashboards.
-- Best when source has heavy legacy Hive or DBFS usage.
-
-### Blue-green cutover
-
-Run source and target in parallel, dual-write or dual-read, then switch traffic with a DNS, connection string, or endpoint change.
-
-- Lowest business risk for critical workloads.
-- Highest operational cost and complexity.
-- Requires reconciliation tooling and rollback runway.
-
+<Tabs client:visible tabs={[
+  {
+    label: 'Workspace-only',
+    content: 'Move the workspace configuration, permissions, and notebooks while leaving data and metastores behind or reconnecting them later. Fastest for assets that are code-heavy and data-light, and a good fit when data already lives in a cloud-agnostic storage layer — but users will expect old data paths to resolve immediately.'
+  },
+  {
+    label: 'Workspace + metastore',
+    content: 'Migrate the workspace and recreate or clone the Unity Catalog metastore in the target cloud. The standard pattern for Unity Catalog customers: it requires storage credentials and external locations in the target, and data movement depends on table type (managed, external, or foreign).'
+  },
+  {
+    label: 'Cross-subscription / account / project',
+    content: 'Same cloud, new billing or identity boundary — easier than cross-cloud because storage, networking, and identity models stay the same. Can often use cross-account replication for data, but identity federation and private links still require rework, and least privilege must be re-verified in the new account.'
+  },
+  {
+    label: 'Data-only',
+    content: 'Move only the data and rebuild compute and code in the target. Common when modernizing runtimes and governance at the same time — cleanest from a technical-debt perspective, but the highest manual effort for notebooks, jobs, and dashboards. Best when the source has heavy legacy Hive or DBFS usage.'
+  },
+  {
+    label: 'Blue-green cutover',
+    content: 'Run source and target in parallel, dual-write or dual-read, then switch traffic with a DNS, connection string, or endpoint change. Lowest business risk for critical workloads, but the highest operational cost and complexity — requires reconciliation tooling and rollback runway.'
+  },
+]} />
 
 ## Archetype selection matrix
 
