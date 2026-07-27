@@ -7,6 +7,7 @@ description: 'A structured approach to choosing migration strategy, sequencing, 
 import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
+import CutoverModelCompare from '../../components/CutoverModelCompare.tsx';
 
 # Decision framework
 
@@ -45,11 +46,7 @@ Choices:
 
 ## Step 5: Define cutover model
 
-| Model | Downtime | Risk | Cost | Use case |
-|-------|----------|------|------|----------|
-| Big-bang | Hours to days | High | Low | Small estate, tolerant users |
-| Incremental | Minimal | Medium | Medium | Large tables, daily sync |
-| Blue-green | Near-zero | Low | High | Mission-critical workloads |
+<CutoverModelCompare />
 
 ## Validation
 
