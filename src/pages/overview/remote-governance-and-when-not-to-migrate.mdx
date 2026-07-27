@@ -7,6 +7,7 @@ description: 'Decide whether to migrate, govern remotely, or do both — before 
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ApplicabilityCompare from '../../components/ApplicabilityCompare.tsx';
 
 # Remote governance vs. migration: when not to move data
 
@@ -14,11 +15,15 @@ Physically migrating data across clouds is expensive, slow, and carries egress c
 
 ## Why this matters
 
-Teams that jump straight to "we're migrating to cloud X" without asking this question routinely discover mid-migration that the actual business requirement — a single pane of governance, a compliance boundary, or query access for a new team — could have been met in weeks with federation instead of the quarters a physical migration takes. Getting this decision wrong is expensive in both directions: over-migrating wastes egress and cutover risk; under-migrating (governing remotely when physical migration was actually required) leaves latency, cost, or sovereignty problems unsolved.
+Teams that jump straight to "we're migrating to cloud X" routinely discover mid-migration that the real requirement — a single pane of governance, a compliance boundary, query access for a new team — could have been met in weeks with federation instead of the quarters a physical migration takes.
+
+<Callout client:visible variant="warning" title="Wrong in either direction is expensive">
+  Over-migrating wastes egress spend and cutover risk on data that didn't need to move. Under-migrating — governing remotely when physical migration was actually required — leaves latency, cost, or sovereignty problems unsolved.
+</Callout>
 
 ## Applicability
 
-Evaluate this decision whenever the driver is one of: a new consumer needs read access to data that lives in another cloud, a merger/acquisition needs a unified catalog across two estates on different clouds, a compliance program needs centralized audit/lineage without disturbing data residency, or leadership has mandated "get everything on one cloud" without a clear technical reason. It does not apply once a genuine technical driver is present — sustained low-latency compute co-location, egress cost of repeated cross-cloud reads exceeding one-time migration cost, or a hard data-residency requirement that federation cannot satisfy.
+<ApplicabilityCompare />
 
 ## The three options
 
