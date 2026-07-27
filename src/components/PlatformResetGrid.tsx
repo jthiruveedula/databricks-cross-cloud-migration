@@ -12,7 +12,7 @@ const ROWS: Row[] = [
   { label: 'Account boundary', azure: 'Tenant / subscription', aws: 'Account', gcp: 'Project' },
   { label: 'Identity', azure: 'Entra ID', aws: 'IAM', gcp: 'IAM' },
   { label: 'Storage', azure: 'ADLS Gen2', aws: 'S3', gcp: 'GCS' },
-  { label: 'Networking', azure: 'VNet, private endpoints', aws: 'VPC, PrivateLink', gcp: 'VPC, PSC' },
+  { label: 'Networking', azure: 'VNet, private endpoints', aws: 'VPC, private endpoints', gcp: 'VPC, PSC' },
 ];
 
 export default function PlatformResetGrid() {
@@ -44,6 +44,9 @@ export default function PlatformResetGrid() {
           ))}
         </tbody>
       </table>
+      <p className="border-t border-[var(--border)] p-3 text-xs text-[var(--ink-subtle)]">
+        Storage protocols change and so do path semantics — don't assume paths carry over as-is.
+      </p>
       <p className="border-t border-[var(--border)] bg-[var(--surface-elevated)] p-3 text-xs text-[var(--ink-subtle)]">
         Unity Catalog is the one governance layer that spans all three — but metastores stay region-specific and account-scoped.
       </p>
