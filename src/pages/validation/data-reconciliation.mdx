@@ -52,8 +52,12 @@ gsutil -m rsync -r gs://source-bucket/path gs://target-bucket/path -d -n`} />
 <CodeBlock client:visible language="sql" filename="describe_history.sql" code={`DESCRIBE HISTORY source_catalog.schema.table;
 DESCRIBE HISTORY target_catalog.schema.table;`} />
 
-<Callout client:visible variant="warning" title="Zero history on target is a migration-method bug, not a data bug">
-  If the target table's history is empty or starts only at the migration date, the table was very likely copied with `CREATE TABLE AS SELECT`, `INSERT OVERWRITE`, or a raw cloud-storage sync (`aws s3 sync`, `gsutil rsync`) instead of `CREATE TABLE ... DEEP CLONE`. Row counts and checksums will still match — this check exists specifically because those checks alone won't catch it. Time travel and audit queries against pre-migration versions will silently fail once source is decommissioned. Confirm which tables genuinely don't need history (see [FAQ](/troubleshooting/faq)) versus which lost it by accident.
+<Callout client:visible variant="warning" title="Target history will never match source history — that's expected, not a bug">
+  `CLONE` (deep or shallow) never copies Delta Lake table history. Even a correctly-run `DEEP CLONE` produces a target whose `DESCRIBE HISTORY` starts fresh at its own `CLONE` operation — it will not contain source's pre-migration versions, and time travel against those versions will fail once source is decommissioned. Don't reconcile by comparing history *row-for-row*; instead confirm:
+
+  - Target's most recent operation is `CLONE` (not `WRITE`/`CREATE TABLE AS SELECT`/`STREAMING UPDATE`) — the tell for a raw sync or CTAS copy, which additionally risk a `_delta_log` inconsistent with the copied data files.
+  - `operationParameters` on that `CLONE` row references the correct source table and version.
+  - Any table where pre-cutover time travel is a real requirement has that requirement satisfied separately — via `cloneAtVersion`/`cloneAtTimestamp` snapshots taken before cutover, or a source retention plan — per [known limitations](/troubleshooting/known-limitations) and the [FAQ](/troubleshooting/faq). Row counts and checksums matching does not mean history was preserved; this is a distinct check.
 </Callout>
 
 ## Handling mismatches
@@ -88,5 +92,5 @@ If reconciliation fails beyond tolerance, halt cutover and re-sync. Do not proce
   { id: 'files', label: 'File counts and checksums match for volumes' },
   { id: 'schema', label: 'Schemas match exactly' },
   { id: 'partitions', label: 'Partitions match' },
-  { id: 'history', label: 'Delta table history present on target where required (DEEP CLONE used, not CTAS/raw sync)' },
+  { id: 'history', label: 'Target CLONE operation verified (not CTAS/raw sync); tables needing pre-cutover time travel have separate version snapshots or a source-retention plan' },
 ]} />

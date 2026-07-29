@@ -18,7 +18,16 @@ It depends. If the source storage is accessible from the target, you can use for
 
 ## How do I preserve Delta table history?
 
-Use `CREATE TABLE ... DEEP CLONE` to copy the table and its transaction log to target storage. This preserves time travel and table history within the target's retention settings.
+You can't, not by default. `CREATE TABLE ... DEEP CLONE` copies the current data files and metadata (schema, partitioning, constraints, table properties) faithfully — far better than a raw storage sync, which can desynchronize the `_delta_log` from the data files it references. But Databricks explicitly excludes **Delta Lake table history** from what clone copies: the target gets a brand-new, independent transaction log starting from the `CLONE` commit. `DESCRIBE HISTORY` on target will not show source's pre-migration versions, and time travel queries against those versions will fail once source is decommissioned — see [known limitations](/troubleshooting/known-limitations).
+
+If pre-cutover time travel is a real requirement (compliance holds, point-in-time audit queries, ML reproducibility against a specific training snapshot), address it before cutover:
+
+- Materialize the specific historical versions you need as separate archive tables using `deltaTable.cloneAtVersion(...)` or `cloneAtTimestamp(...)` against source, tagged with their original version number and timestamp.
+- Or keep the source table (and its storage) read-only and queryable through the compliance retention window instead of decommissioning it at cutover.
+- For tables under active CDC consumption (`table_changes()` / Change Data Feed readers), confirm downstream jobs re-baseline against the clone's version 0 — reads for pre-migration version ranges will error, not silently return empty.
+- Check source `delta.deletedFileRetentionDuration` / `VACUUM` history first — if source has already vacuumed past the version you need, that version's data files are gone and cannot be cloned at all.
+
+Document which tables actually need this before wave planning; it's expensive to retrofit per-table after cutover.
 
 ## What happens to DBFS mounts?
 

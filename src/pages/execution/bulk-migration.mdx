@@ -43,6 +43,10 @@ if failed:
   Cloud storage APIs and Unity Catalog metastore operations both rate-limit. Tune `max_workers` against your source and target cloud's actual throttling limits — a naive "migrate everything at once" run degrades into throttling errors, not faster migration.
 </Callout>
 
+<Callout client:visible variant="tip" title="Re-run DEEP CLONE incrementally for tables still being written to">
+  `DEEP CLONE` only copies files that changed since the last clone — re-running it against an already-cloned target is cheap and copies just the delta. For a table that keeps accumulating new versions during a wave's migration window, don't treat the loop above as a single one-shot copy: run an initial clone early in the wave, then a final incremental clone immediately before that table's cutover to catch every version committed in between. Neither run preserves source's pre-migration history either way — see [known limitations](/troubleshooting/known-limitations) if that history needs to survive.
+</Callout>
+
 ## Per-wave sequence
 
 | Step | Action |
