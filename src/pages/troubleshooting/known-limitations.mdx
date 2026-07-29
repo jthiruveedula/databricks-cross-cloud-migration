@@ -28,7 +28,8 @@ Treat every row below as a decision, not a surprise: archive it, accept the loss
 | Cluster event logs | No bulk export path — only the per-cluster Events API, and events fall out of that window entirely | 60 days | Pull via the [Clusters API](https://docs.databricks.com/aws/en/compute/clusters-manage) into a Delta table for any cluster tied to an incident or audit finding |
 | Audit logs | Delivered to your own cloud storage, but scoped to the account/region pairing of the *source* deployment — a cross-cloud cutover starts a second, disconnected audit trail under the new account, it doesn't extend the old one | ~1 year (account-level log delivery) | Keep source audit log delivery running through your compliance retention window, or export/consolidate both trails into one queryable location |
 | Personal access tokens | Access Tokens are Unsupported for both export and import in Databricks' own migration tooling — PATs are tied to a specific workspace/user pairing by design | N/A | Re-issue as OAuth service principals / managed identities in target — see [anti-patterns](/troubleshooting/anti-patterns) |
-| DBFS root copied via raw storage sync | `aws s3 sync` / `gsutil rsync` of the whole DBFS root moves bytes but breaks the Delta transaction log that sits alongside them | N/A | Use `CREATE TABLE ... DEEP CLONE` for every managed Delta table so the transaction log — and therefore time travel — survives; reserve raw sync for genuinely non-tabular files |
+| DBFS root copied via raw storage sync | `aws s3 sync` / `gsutil rsync` of the whole DBFS root moves bytes but breaks the Delta transaction log that sits alongside them — the `_delta_log` ends up pointing at files that copied out of order or not at all | N/A | Use `CREATE TABLE ... DEEP CLONE` for every managed Delta table so the target gets a faithful, consistent copy of the current version and log; reserve raw sync for genuinely non-tabular files |
+| Delta table version history / time travel | `CLONE` (deep or shallow) explicitly does not copy [Delta Lake table history](https://docs.databricks.com/aws/en/tables/operations/clone) — the clone target starts a **new, independent** transaction log from the `CLONE` commit. This is true even for deep clone; it is not a raw-sync-only problem | Governed by source's `delta.logRetentionDuration` / `delta.deletedFileRetentionDuration` (30 days default) — and only while source still exists | Decide per table whether pre-cutover time travel is required; if so, snapshot the specific versions needed via `cloneAtVersion`/`cloneAtTimestamp` before cutover, or keep source read-only through the retention window — see [FAQ](/troubleshooting/faq) |
 | MLflow run/experiment lineage to source notebook | Covered in depth on the [MLflow](/ml/mlflow) page — re-logged runs lose their pointer to the exact source notebook revision that produced them | N/A | Preserve `mlflow.parentRunId` and treat notebook-revision lineage as unrecoverable unless captured before migration |
 
 ## Why "60 days" and "365 days" are both misleading
@@ -85,12 +86,13 @@ None of this blocks rollback — archiving history is additive and read-only aga
   { id: 'query-history', label: 'Query history archived if required for audit' },
   { id: 'cluster-events', label: 'Cluster event logs archived for any cluster tied to an incident or audit finding' },
   { id: 'audit-logs', label: 'Audit log continuity plan agreed with compliance across the cutover boundary' },
-  { id: 'delta-history', label: 'Delta table history preserved via DEEP CLONE, not raw storage sync' },
+  { id: 'delta-history', label: 'Delta table version history: per-table decision made — snapshot needed versions, keep source alive, or accept the gap (DEEP CLONE does not carry it over)' },
   { id: 'signoff', label: 'Compliance/audit sign-off obtained for anything not archived' },
 ]} />
 
 ## Sources
 
+- Databricks — [Clone a table on Databricks](https://docs.databricks.com/aws/en/tables/operations/clone) (metadata cloned vs. not cloned, incremental clone, `cloneAtVersion`/`cloneAtTimestamp`)
 - Databricks — [E2 Migration Playbook](https://docs.databricks.com/_extras/documents/aws-st-workspace-migration-guide.pdf) (migration tool export/import support matrix, MLflow notebook-revision-linking limitations)
 - Databricks — [Monitor Lakeflow Jobs](https://docs.databricks.com/aws/en/jobs/monitor)
 - Databricks — [Query history](https://docs.databricks.com/aws/en/sql/user/queries/query-history)
