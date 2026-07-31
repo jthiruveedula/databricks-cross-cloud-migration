@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { motion, useScroll, useTransform, useMotionValueEvent } from 'framer-motion';
+import React, { useRef, useState, useEffect } from 'react';
+import { motion, useScroll, useTransform, useMotionValueEvent, useReducedMotion } from 'framer-motion';
 import {
   Sparkles,
   Search,
@@ -15,7 +15,7 @@ interface Chapter {
   eyebrow: string;
   title: string;
   icon: React.ElementType;
-  narrative: string;
+  tagline: string;
   bullets: { label: string; href: string }[];
 }
 
@@ -25,8 +25,7 @@ const CHAPTERS: Chapter[] = [
     eyebrow: 'Chapter 01 — The Trigger',
     title: 'Why the cloud has to change',
     icon: Sparkles,
-    narrative:
-      'Every cross-cloud move starts with pressure: a merger, a data-residency mandate, a cloud credits cliff, or a mandate to consolidate on one provider. The runbook frames the trade-offs so you can defend the decision before a single byte moves.',
+    tagline: 'Defend the decision before a byte moves.',
     bullets: [
       { label: 'Migration drivers & archetypes', href: '/overview/what-is-cross-cloud-migration' },
       { label: 'Decision framework', href: '/overview/decision-framework' },
@@ -37,8 +36,7 @@ const CHAPTERS: Chapter[] = [
     eyebrow: 'Chapter 02 — The Assessment',
     title: 'Map the estate before you move it',
     icon: Search,
-    narrative:
-      'You cannot migrate what you cannot see. Inventory workspaces, catalogs, jobs, and notebooks; map the dependency graph; and score risk so the cutover sequence is driven by evidence, not gut feel.',
+    tagline: 'Evidence, not gut feel, drives the cutover sequence.',
     bullets: [
       { label: 'Workspace & asset inventory', href: '/discovery/workspace-inventory' },
       { label: 'Dependency mapping', href: '/discovery/dependency-mapping' },
@@ -50,8 +48,7 @@ const CHAPTERS: Chapter[] = [
     eyebrow: 'Chapter 03 — The Blueprint',
     title: 'Architect the target landing zone',
     icon: DraftingCompass,
-    narrative:
-      'Identity, networking, and governance are reset, not copied. Stand up the target cloud landing zone, federate identity, and lay Unity Catalog as the single governance plane before data ever lands.',
+    tagline: 'Identity, networking, governance — reset, not copied.',
     bullets: [
       { label: 'Unity Catalog strategy', href: '/governance/unity-catalog-strategy' },
       { label: 'Identity federation', href: '/security/identity-federation' },
@@ -63,8 +60,7 @@ const CHAPTERS: Chapter[] = [
     eyebrow: 'Chapter 04 — The Move',
     title: 'Migrate data, compute & pipelines',
     icon: ArrowRightLeft,
-    narrative:
-      'With governance in place, move storage, metastores, clusters, and pipelines in waves. Reusable automation and CI/CD promotion keep every environment reproducible and rollback-ready.',
+    tagline: 'Storage, metastores, clusters, pipelines — in waves.',
     bullets: [
       { label: 'Metastore migration', href: '/governance/metastore-migration' },
       { label: 'Cluster migration', href: '/compute/cluster-migration' },
@@ -76,8 +72,7 @@ const CHAPTERS: Chapter[] = [
     eyebrow: 'Chapter 05 — The Cutover',
     title: 'Switch traffic, then prove it',
     icon: Flag,
-    narrative:
-      'Blue-green cutover, data reconciliation, and business UAT sign-off. Hypercare watches the new home until confidence is earned — and a verified rollback path stays one command away throughout.',
+    tagline: 'Hypercare until confidence is earned. Rollback always ready.',
     bullets: [
       { label: 'Wave planning & cutover', href: '/execution/cutover' },
       { label: 'Rollback guardrails', href: '/execution/rollback' },
@@ -100,10 +95,41 @@ export default function MigrationJourney() {
     setActive(Math.min(CHAPTERS.length - 1, Math.max(0, Math.floor(v * CHAPTERS.length))));
   });
 
+  // The clip is an 8s seamless loop covering the whole section's scroll range (not one
+  // segment per chapter) -- it reads as continuous ambient motion behind the story rather
+  // than a literal per-chapter illustration, same restrained role the hero video plays.
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const prefersReducedMotion = useReducedMotion();
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || prefersReducedMotion) return;
+    video.src = withBase('/videos/migration-journey-flow-dark.mp4');
+  }, [prefersReducedMotion]);
+  useMotionValueEvent(scrollYProgress, 'change', (v) => {
+    const video = videoRef.current;
+    if (!video || !video.duration) return;
+    video.currentTime = v * video.duration;
+  });
+
   return (
     <section ref={sectionRef} className="relative my-16" style={{ height: `${CHAPTERS.length * 100}vh` }}>
       <div className="sticky top-0 flex h-screen items-center overflow-hidden">
+        {/* Dark-mode only, same restraint as the hero: this abstract loop has no light-mode
+            render, so it only shows where screen-blend actually reads (see hero-video comment). */}
+        <video
+          ref={videoRef}
+          className="hero-video hidden dark:block"
+          muted
+          playsInline
+          preload="auto"
+          aria-hidden="true"
+        />
         <div className="hero-glow" />
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 z-[1] hidden dark:block"
+          style={{ background: 'radial-gradient(ellipse 70% 65% at 50% 50%, transparent 25%, rgba(11, 13, 18, 0.6) 100%)' }}
+        />
         <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-6 lg:grid-cols-[280px_1fr] lg:px-10">
           {/* Progress rail */}
           <div className="hidden lg:block">
@@ -162,11 +188,11 @@ export default function MigrationJourney() {
                     <c.icon className="h-4 w-4" />
                     {c.eyebrow}
                   </div>
-                  <h3 className="mb-4 text-3xl font-bold tracking-tight text-[var(--ink)] md:text-4xl">
+                  <h3 className="mb-3 text-3xl font-bold tracking-tight text-[var(--ink)] md:text-4xl">
                     {c.title}
                   </h3>
-                  <p className="mb-8 max-w-2xl text-lg leading-relaxed text-[var(--ink-muted)]">
-                    {c.narrative}
+                  <p className="mb-8 max-w-xl text-lg font-medium text-[var(--accent)]">
+                    {c.tagline}
                   </p>
                   <div className="flex flex-wrap gap-3">
                     {c.bullets.map((b) => (
