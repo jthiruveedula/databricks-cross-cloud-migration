@@ -98,27 +98,40 @@ export default function MigrationJourney() {
   // The clip is an 8s seamless loop covering the whole section's scroll range (not one
   // segment per chapter) -- it reads as continuous ambient motion behind the story rather
   // than a literal per-chapter illustration, same restrained role the hero video plays.
+  // Theme-swapped the same way Hero.tsx swaps its video: a dark-neon render and a separate
+  // light-purposed render (screen-blend reads on dark, not on a light backdrop).
   const videoRef = useRef<HTMLVideoElement>(null);
   const prefersReducedMotion = useReducedMotion();
+  const [isDark, setIsDark] = useState(false);
+  useEffect(() => {
+    const root = document.documentElement;
+    setIsDark(root.classList.contains('dark'));
+    const observer = new MutationObserver(() => setIsDark(root.classList.contains('dark')));
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     const video = videoRef.current;
     if (!video || prefersReducedMotion) return;
-    video.src = withBase('/videos/migration-journey-flow-dark.mp4');
-  }, [prefersReducedMotion]);
+    video.src = withBase(isDark ? '/videos/migration-journey-flow-dark.mp4' : '/videos/migration-journey-flow-light.mp4');
+  }, [prefersReducedMotion, isDark]);
   useMotionValueEvent(scrollYProgress, 'change', (v) => {
     const video = videoRef.current;
     if (!video || !video.duration) return;
     video.currentTime = v * video.duration;
   });
 
+  // Slow continuous push-in across the whole section scroll -- a real camera move, not just
+  // the loop scrubbing in place, so the background reads as cinematic rather than a static gif.
+  const cameraScale = useTransform(scrollYProgress, [0, 1], [1, 1.1]);
+
   return (
     <section ref={sectionRef} className="relative my-16" style={{ height: `${CHAPTERS.length * 100}vh` }}>
       <div className="sticky top-0 flex h-screen items-center overflow-hidden">
-        {/* Dark-mode only, same restraint as the hero: this abstract loop has no light-mode
-            render, so it only shows where screen-blend actually reads (see hero-video comment). */}
-        <video
+        <motion.video
           ref={videoRef}
-          className="hero-video hidden dark:block"
+          className="hero-video"
+          style={{ scale: cameraScale }}
           muted
           playsInline
           preload="auto"
@@ -128,7 +141,12 @@ export default function MigrationJourney() {
         <div
           aria-hidden="true"
           className="absolute inset-0 z-[1] hidden dark:block"
-          style={{ background: 'radial-gradient(ellipse 70% 65% at 50% 50%, transparent 25%, rgba(11, 13, 18, 0.6) 100%)' }}
+          style={{ background: 'radial-gradient(ellipse 70% 65% at 50% 50%, transparent 30%, rgba(11, 13, 18, 0.5) 100%)' }}
+        />
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 z-[1] dark:hidden"
+          style={{ background: 'radial-gradient(ellipse 70% 65% at 50% 50%, transparent 35%, rgba(255, 255, 255, 0.55) 100%)' }}
         />
         <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-6 lg:grid-cols-[280px_1fr] lg:px-10">
           {/* Progress rail */}
