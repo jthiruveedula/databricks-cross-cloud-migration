@@ -17,19 +17,19 @@ const STAGES: Stage[] = [
     label: 'Plan',
     color: '#8B5CF6',
     icon: ClipboardList,
-    desc: 'Inventory assets, map dependencies, assess risk, and choose the right migration archetype for your constraints.',
+    desc: 'Inventory, dependencies, risk, archetype — before a byte moves.',
   },
   {
     label: 'Migrate',
     color: '#10B981',
     icon: ArrowRightLeft,
-    desc: 'Move metastores, data, compute, pipelines, SQL assets, and ML artifacts with reusable automation and validation.',
+    desc: 'Metastores, data, compute, pipelines, ML — moved and validated.',
   },
   {
     label: 'Validate & cutover',
     color: '#EF4444',
     icon: ShieldCheck,
-    desc: 'Reconcile data, verify IAM and networking, run business UAT, and execute blue-green cutover with rollback guardrails.',
+    desc: 'Reconcile, verify, sign off, cut over — rollback ready.',
   },
 ];
 
@@ -56,7 +56,25 @@ export default function RunbookStagesFlow() {
             </div>
           </motion.div>
           {i < STAGES.length - 1 && (
-            <ArrowRight className="mx-auto h-5 w-5 shrink-0 rotate-90 text-[var(--ink-subtle)] sm:mx-0 sm:rotate-0" />
+            <div className="relative mx-auto flex shrink-0 items-center justify-center">
+              <ArrowRight className="h-5 w-5 rotate-90 text-[var(--ink-subtle)] sm:rotate-0" />
+              {/* Traveling glow pulse along the connector -- the same "current flows through
+                  the runbook" motif as the landing page's circuit-loop background video. */}
+              <motion.span
+                aria-hidden="true"
+                className="absolute block h-1.5 w-1.5 rounded-full sm:hidden"
+                style={{ background: stage.color, boxShadow: `0 0 6px 2px ${stage.color}` }}
+                animate={{ y: [-9, 9] }}
+                transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.25 }}
+              />
+              <motion.span
+                aria-hidden="true"
+                className="absolute hidden h-1.5 w-1.5 rounded-full sm:block"
+                style={{ background: stage.color, boxShadow: `0 0 6px 2px ${stage.color}` }}
+                animate={{ x: [-9, 9] }}
+                transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.25 }}
+              />
+            </div>
           )}
         </React.Fragment>
       ))}

@@ -22,7 +22,7 @@ export default function CtaBand() {
           Ready to move Databricks across clouds?
         </h2>
         <p className="mb-8 text-lg text-[var(--ink-muted)]">
-          Start with the decision framework, or jump straight to execution and plan your first wave. Every section links to the next, so the runbook reads like a path, not a pile of docs.
+          Every section links to the next — a path, not a pile of docs.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-4">
           <a
