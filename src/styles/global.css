@@ -193,9 +193,10 @@ html.theme-transitioning *::after {
   animation: gradient 8s ease infinite;
 }
 
-/* Light mode plays a dedicated light-background render (cross-cloud-hero-light.mp4) at
-   near-full opacity with normal blending -- its background is purpose-matched to the page
-   surface, so it composites by color-match rather than by blend-mode transparency tricks. */
+/* Light mode plays a dedicated light-background render at near-full opacity with normal
+   blending -- its background is purpose-matched to the page surface, so it composites by
+   color-match rather than by blend-mode transparency tricks. Used by MigrationJourney.tsx's
+   scroll-scrubbed background video (Hero.tsx now renders a WebGL scene instead). */
 .hero-video {
   position: absolute;
   inset: 0;
@@ -207,11 +208,11 @@ html.theme-transitioning *::after {
   z-index: 0;
 }
 
-/* Dark mode plays cross-cloud-hero-dark.mp4 instead (swapped in Hero.tsx) and keeps the
-   screen-blend treatment -- screen blend is strong against a dark backdrop, so it reads as an
-   ambient glow rather than a literal rectangle. Screen blend has almost nothing to push against
-   on a light backdrop, which is why light mode above uses a different render entirely rather
-   than the same trick at a different opacity. */
+/* Dark mode plays a different, dark-purposed render instead and keeps the screen-blend
+   treatment -- screen blend is strong against a dark backdrop, so it reads as an ambient glow
+   rather than a literal rectangle. Screen blend has almost nothing to push against on a light
+   backdrop, which is why light mode above uses a different render entirely rather than the
+   same trick at a different opacity. */
 .dark .hero-video {
   mix-blend-mode: screen;
   opacity: 0.45;
