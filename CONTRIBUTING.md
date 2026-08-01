@@ -72,12 +72,30 @@ run the dev server and check it in a real browser before opening the PR — a pa
 only proves the page compiles, not that the interaction works. Check the browser console for
 hydration errors, not just visible rendering.
 
+## Issue tracking
+
+Every PR references an issue — `Closes #123` (fully resolves it) or `Relates to #123` (partial —
+the PR template has this field at the top). This is what lets a reader tell *why* a change
+happened without archaeology through commit messages, and it's what the issue-link check below
+nudges toward.
+
+For anything bigger than a single-page fix — a new phase, a framework/major-version upgrade, a
+multi-page rework — open one tracking issue describing the overall goal, then break it into
+sub-issues (or a task-list checklist in the tracking issue, whichever fits) for each independently
+mergeable piece. Each PR closes its own sub-issue, not the tracking issue directly; the tracking
+issue closes once every sub-issue does. This keeps individual PRs small and independently
+reviewable instead of one sprawling diff, and gives the tracking issue as a single place to see
+overall progress.
+
 ## Pull request flow
 
 - Branch off `main`: `git checkout -b content/<short-description>` or `ci/<short-description>`.
-- CI runs automatically: unit tests, a full build (on PRs, via the `check` job), CodeQL, and
-  Dependency Review. All four are **required status checks** on `main` — a PR can't merge until
-  they pass.
+- CI runs automatically: unit tests, a full build (on PRs, via the `check` job — skipped if the
+  PR doesn't touch anything that affects the built site), CodeQL, and Dependency Review. All four
+  are **required status checks** on `main` — a PR can't merge until they pass.
+- A separate, non-blocking check reminds you (as a PR comment) if the PR doesn't reference an
+  issue — it's a nudge, not a required check, since it can't tell a real omission from a
+  trivial fix that doesn't need one.
 - Keep PRs scoped to their stated intent — a content fix shouldn't also refactor an unrelated
   component. Note anything you noticed but didn't fix so it doesn't get lost.
 - Direct pushes to `main` are reserved for trivial docs typos; everything else goes through a PR.
