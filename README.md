@@ -23,16 +23,19 @@ Before committing to a physical migration, it's also worth asking whether the ac
 | **Overview** | What cross-cloud migration is, migration archetypes, the decision framework for choosing one, and when to govern remotely instead of migrating |
 | **Discovery** | Workspace/asset inventory, dependency mapping, risk assessment |
 | **Cloud mappings** | Construct-by-construct equivalency matrix plus all 6 directional deep-dives (Azure↔AWS, Azure↔GCP, AWS↔GCP) with concrete path-rewrite scripts |
-| **Governance** | Unity Catalog strategy, metastore migration, grants and roles, legacy Hive transition, external locations and volumes, UCX-assisted migration |
+| **Governance** | Unity Catalog strategy, metastore migration, grants and roles, legacy Hive transition, external locations and volumes, UCX-assisted migration, disaster recovery |
 | **Security** | IAM mapping, identity federation, secrets and KMS, network security, audit and compliance |
 | **Compute** | Cluster migration, runtime upgrade, cluster policies, init scripts and libraries |
 | **Pipelines** | Databricks Workflows/Lakeflow (DLT), external orchestrators, CI/CD promotion |
-| **Analytics** | SQL queries, dashboards, alerts, notebooks and repos |
+| **Analytics** | SQL queries, dashboards, alerts, notebooks and repos, BI tool reconnection (Power BI/Tableau/Looker) |
 | **ML** | MLflow, model registry, feature assets, serving and artifacts |
-| **Execution** | Wave planning → pilot → bulk migration → cutover → hypercare → rollback |
+| **Execution** | Wave planning → pilot → large-scale data transfer → bulk migration → cutover → hypercare → rollback |
 | **Validation** | Technical, data reconciliation, security, and business sign-off |
 | **Templates** | Checklists, Terraform patterns, sample scripts, RACI, risk register |
 | **Troubleshooting** | Common errors, anti-patterns, FAQ |
+| **Accelerators** | AI-assisted migration, Databricks migration tooling (UCX, Lakebridge, Replicator) |
+| **Collaboration** | Cross-cloud data collaboration — Delta Sharing, Lakehouse Federation, Clean Rooms, dual-run CDC |
+| **Tools** | Browser-only, no-data-leaves-the-page calculators: cost calculator, instance type mapper, timeline estimator, RACI builder, dependency graph |
 
 Every page follows the same shape: executive framing, why it matters, applicability, inputs required, recommended sequence, validation, rollback, automation opportunity, evidence to capture, and cloud-specific caveats, with code examples labeled illustrative where they aren't meant to be copy-pasted into production as-is.
 
@@ -40,6 +43,21 @@ Every page follows the same shape: executive framing, why it matters, applicabil
 
 The homepage includes an interactive planner: pick a source and target cloud and it returns whether you're looking at a same-cloud landing-zone move or a full cross-cloud platform reset, the specific identity/storage/network rework that pair requires, a recommended runbook reading path through the phases above, and the relevant toolset (Databricks CLI, UCX, Terraform provider, Delta Deep Clone, Delta Sharing, cloud CLIs).
 
+## Tech stack and content tooling
+
+- **[Astro 7](https://astro.build/)** with **[MDX](https://docs.astro.build/en/guides/integrations-guide/mdx/)** — every runbook page is a `.mdx` file: prose plus interactive React islands (`client:visible`), not a static-site-generator template.
+- **React 18** components for anything interactive — `Callout`, `Checklist` (localStorage-persisted progress tracking), `CodeBlock` (copy/download, syntax highlighted via `prism-react-renderer`), `Tabs`, plus purpose-built tools (cost calculator, instance mapper, dependency graph, RACI builder, timeline estimator) — animated with **Framer Motion** and **GSAP**.
+- **[rehype-mermaid](https://github.com/remcohaszing/rehype-mermaid)** — renders ` ```mermaid ` code fences into diagrams at build time.
+- **A custom remark plugin** (`src/remark-base-path-links.mjs`) — rewrites root-relative markdown links (`[x](/path)`) to include the GitHub Pages base path (`/databricks-cross-cloud-migration/`) at build time, so page authors can write normal-looking links without knowing about the base path. Wired via `markdown.remarkPlugins` in `astro.config.mjs` (not `mdx({ remarkPlugins })` — that option is a no-op in this Astro version).
+- **Shiki** (`github-dark` theme) for static syntax highlighting in fenced code blocks.
+- **[MiniSearch](https://github.com/lucaong/minisearch)** — powers full-text search (⌘K) over an index generated from every page's headings and prose (`scripts/build-search-index.mjs`, regenerated on every `dev`/`build`).
+- **[Tailwind CSS v4](https://tailwindcss.com/)** via the Vite plugin, with light/dark theme support (`next-themes`).
+- **Vitest** for unit tests (`src/**/*.test.ts`) — path helpers, the search-index builder, and the interactive tool components' calculation logic.
+
+## Contributing
+
+Found a gap, an inaccuracy, or want to add a phase/page? Open an issue or a PR — anyone can propose changes, and review is evidence-based (a docs citation, a repro, a passing test), not opinion-based. Every PR references an issue (`Closes #N`); anything bigger than a single-page fix — a new phase, a major upgrade — gets a tracking issue broken into sub-issues first. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full page-authoring conventions (frontmatter, the Validation/Rollback/Automation-opportunity shape, navigation + search-index wiring) and the PR/CI workflow.
+
 ## License
 
-This is a reference implementation. Validate all commands and Terraform configurations against your environment and official Databricks documentation before production use.
+[MIT](./LICENSE) — reuse the structure and code freely. This is still a reference implementation: validate all commands and Terraform configurations against your environment and official Databricks documentation before production use.
