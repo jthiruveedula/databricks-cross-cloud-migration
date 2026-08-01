@@ -1,5 +1,5 @@
 // Enhanced icon registry with error handling and lazy loading
-import { BrandIcon, BRAND_ICONS } from './brandIcons';
+import { type BrandIcon, BRAND_ICONS } from './brandIcons';
 
 export interface IconMetadata extends BrandIcon {
   loaded: boolean;

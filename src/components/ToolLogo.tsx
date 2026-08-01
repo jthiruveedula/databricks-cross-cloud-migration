@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Database, Network } from 'lucide-react';
 import BrandGlyph from './BrandGlyph';
-import { BRAND_ICONS } from './logos/brandIcons';
+import { BRAND_ICONS, type BrandIcon } from './logos/brandIcons';
+import { iconRegistry } from './logos/iconRegistry';
 
 interface ToolDef {
   kind: 'brand' | 'lucide';
