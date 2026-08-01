@@ -7,6 +7,12 @@ updates:
     groups:
       npm-minor-patch:
         update-types: ['minor', 'patch']
+      react:
+        patterns:
+          - 'react'
+          - 'react-dom'
+          - '@types/react'
+          - '@types/react-dom'
     open-pull-requests-limit: 10
     labels:
       - 'dependencies'
