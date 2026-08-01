@@ -1,4 +1,9 @@
-name: Deploy to GitHub Pages
+name: CI
+
+# Validation only -- tests, PR build check, and CodeQL security scan on every
+# push/PR to main. Deploying to GitHub Pages is a separate, deliberate step
+# (see deploy-site.yml) gated on a published release tag, not on every push
+# that passes here. A push passing CI means "safe to release", not "now live".
 
 on:
   push:
@@ -11,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pages-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -79,48 +84,3 @@ jobs:
       - uses: github/codeql-action/analyze@v4
         with:
           category: '/language:javascript-typescript'
-
-  build:
-    if: github.event_name != 'pull_request' && needs.changes.outputs.site == 'true'
-    needs: [test, security, changes]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build site
-        run: npm run build
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v6
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5

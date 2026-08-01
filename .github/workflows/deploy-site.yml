@@ -1,0 +1,162 @@
+name: Deploy site to GitHub Pages
+
+# Deploys only on a published GitHub Release (a tag, e.g. v1.4.0) -- not on
+# every push to main. main can carry several merged, CI-passed PRs ahead of
+# what's actually live; a release is the deliberate "these merged changes go
+# live now" gate. workflow_dispatch remains for a manual re-run of whatever
+# ref is currently checked out (e.g. retrying a flaky Pages deploy of the
+# same release), not for shipping unreleased main.
+#
+# Tests and a CodeQL security scan run again here, at the exact release tag,
+# before anything deploys -- push/PR-time CI (ci.yml) already ran once, but a
+# release tag can in principle be cut from any point on main, so this is the
+# gate against the commit that's actually about to go live, not against
+# whatever happened to pass earlier.
+#
+# A final `notify` job always posts a run-summary: a "site is live" summary
+# with the release tag and URL on success, or a table naming the failed
+# stage and the release tag on failure -- so the outcome of a deploy is
+# visible from the Actions run without opening step logs.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  security-events: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      failed_stage: ${{ steps.record_stage.outputs.failed_stage }}
+    steps:
+      - id: checkout
+        uses: actions/checkout@v7
+      - id: setup_node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - id: install
+        name: Install dependencies
+        run: npm ci
+      - id: unit_tests
+        name: Unit tests
+        run: npm test
+      - id: security_scan
+        name: CodeQL init + analyze
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+      - id: security_analyze
+        name: CodeQL analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: '/language:javascript-typescript'
+      - id: astro_build
+        name: Build
+        run: npm run build
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+      - id: record_stage
+        name: Record which stage failed (if any)
+        if: always()
+        run: |
+          failed_stage=""
+          declare -A LABELS=(
+            [checkout]="Checkout"
+            [setup_node]="Set up Node"
+            [install]="Install dependencies"
+            [unit_tests]="Unit tests"
+            [security_scan]="CodeQL init"
+            [security_analyze]="CodeQL analyze"
+            [astro_build]="Build"
+          )
+          declare -A OUTCOMES=(
+            [checkout]="${{ steps.checkout.outcome }}"
+            [setup_node]="${{ steps.setup_node.outcome }}"
+            [install]="${{ steps.install.outcome }}"
+            [unit_tests]="${{ steps.unit_tests.outcome }}"
+            [security_scan]="${{ steps.security_scan.outcome }}"
+            [security_analyze]="${{ steps.security_analyze.outcome }}"
+            [astro_build]="${{ steps.astro_build.outcome }}"
+          )
+          for id in checkout setup_node install unit_tests security_scan security_analyze astro_build; do
+            if [ "${OUTCOMES[$id]}" = "failure" ]; then
+              failed_stage="${LABELS[$id]}"
+              break
+            fi
+          done
+          echo "failed_stage=$failed_stage" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: build
+    if: needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
+  notify:
+    needs: [build, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post deploy summary
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          TAG="${TAG:-manual workflow_dispatch (no release tag)}"
+
+          BUILD_RESULT="${{ needs.build.result }}"
+          DEPLOY_RESULT="${{ needs.deploy.result }}"
+          FAILED_STAGE="${{ needs.build.outputs.failed_stage }}"
+          PAGE_URL="${{ needs.deploy.outputs.page_url }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          if [ "$BUILD_RESULT" = "success" ] && [ "$DEPLOY_RESULT" = "success" ]; then
+            {
+              echo "### 🎉 Site is live"
+              echo ""
+              echo "Release **$TAG** deployed successfully."
+              echo ""
+              echo "| | |"
+              echo "|---|---|"
+              echo "| Release tag | \`$TAG\` |"
+              echo "| Live URL | ${PAGE_URL:-https://jthiruveedula.github.io/databricks-cross-cloud-migration/} |"
+              echo "| Tests | ✅ unit tests + CodeQL passed at this exact commit |"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            STAGE_LABEL="${FAILED_STAGE:-deploy step}"
+            if [ "$BUILD_RESULT" != "success" ] && [ -z "$FAILED_STAGE" ]; then
+              STAGE_LABEL="build job (cancelled or infra error before a stage recorded)"
+            fi
+            {
+              echo "### ❌ Deploy failed — site NOT updated"
+              echo ""
+              echo "| | |"
+              echo "|---|---|"
+              echo "| Release tag | \`$TAG\` |"
+              echo "| Failed stage | **$STAGE_LABEL** |"
+              echo "| Build job | $BUILD_RESULT |"
+              echo "| Deploy job | ${DEPLOY_RESULT:-skipped (build did not succeed)} |"
+              echo "| Logs | [View this run]($RUN_URL) |"
+              echo ""
+              echo "The previously deployed release is still live — this workflow only replaces it on a successful deploy."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
