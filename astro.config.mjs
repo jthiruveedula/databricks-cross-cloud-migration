@@ -12,13 +12,9 @@ export default defineConfig({
   vite: {
     plugins: [tailwindcss()],
   },
-  integrations: [
-    react(),
-    mdx({
-      remarkPlugins: [[remarkBasePathLinks, base]],
-    }),
-  ],
+  integrations: [react(), mdx()],
   markdown: {
+    remarkPlugins: [[remarkBasePathLinks, base]],
     shikiConfig: {
       theme: 'github-dark',
       wrap: true,
