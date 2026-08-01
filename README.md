@@ -43,6 +43,21 @@ Every page follows the same shape: executive framing, why it matters, applicabil
 
 The homepage includes an interactive planner: pick a source and target cloud and it returns whether you're looking at a same-cloud landing-zone move or a full cross-cloud platform reset, the specific identity/storage/network rework that pair requires, a recommended runbook reading path through the phases above, and the relevant toolset (Databricks CLI, UCX, Terraform provider, Delta Deep Clone, Delta Sharing, cloud CLIs).
 
+## Tech stack and content tooling
+
+- **[Astro 7](https://astro.build/)** with **[MDX](https://docs.astro.build/en/guides/integrations-guide/mdx/)** — every runbook page is a `.mdx` file: prose plus interactive React islands (`client:visible`), not a static-site-generator template.
+- **React 18** components for anything interactive — `Callout`, `Checklist` (localStorage-persisted progress tracking), `CodeBlock` (copy/download, syntax highlighted via `prism-react-renderer`), `Tabs`, plus purpose-built tools (cost calculator, instance mapper, dependency graph, RACI builder, timeline estimator) — animated with **Framer Motion** and **GSAP**.
+- **[rehype-mermaid](https://github.com/remcohaszing/rehype-mermaid)** — renders ` ```mermaid ` code fences into diagrams at build time.
+- **A custom remark plugin** (`src/remark-base-path-links.mjs`) — rewrites root-relative markdown links (`[x](/path)`) to include the GitHub Pages base path (`/databricks-cross-cloud-migration/`) at build time, so page authors can write normal-looking links without knowing about the base path. Wired via `markdown.remarkPlugins` in `astro.config.mjs` (not `mdx({ remarkPlugins })` — that option is a no-op in this Astro version).
+- **Shiki** (`github-dark` theme) for static syntax highlighting in fenced code blocks.
+- **[MiniSearch](https://github.com/lucaong/minisearch)** — powers full-text search (⌘K) over an index generated from every page's headings and prose (`scripts/build-search-index.mjs`, regenerated on every `dev`/`build`).
+- **[Tailwind CSS v4](https://tailwindcss.com/)** via the Vite plugin, with light/dark theme support (`next-themes`).
+- **Vitest** for unit tests (`src/**/*.test.ts`) — path helpers, the search-index builder, and the interactive tool components' calculation logic.
+
+## Contributing
+
+Found a gap, an inaccuracy, or want to add a phase/page? See [CONTRIBUTING.md](./CONTRIBUTING.md) for the page-authoring conventions (frontmatter, the Validation/Rollback/Automation-opportunity shape, navigation + search-index wiring) and the PR/CI workflow.
+
 ## License
 
-This is a reference implementation. Validate all commands and Terraform configurations against your environment and official Databricks documentation before production use.
+[MIT](./LICENSE) — reuse the structure and code freely. This is still a reference implementation: validate all commands and Terraform configurations against your environment and official Databricks documentation before production use.
