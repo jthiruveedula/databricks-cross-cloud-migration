@@ -1,6 +1,8 @@
+Closes #<!-- issue number — required, see CONTRIBUTING.md#issue-tracking. Use "Relates to #N" instead of "Closes" if this only partially addresses it. -->
+
 ## Summary
 
-<!-- What changed and why. Link the issue this addresses, if any. -->
+<!-- What changed and why. -->
 
 ## Evidence
 

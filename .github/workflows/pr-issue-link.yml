@@ -1,0 +1,45 @@
+name: PR issue link reminder
+
+on:
+  pull_request:
+    types: [opened, edited, reopened]
+    branches: [main]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  check-issue-link:
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for an issue reference
+        id: check
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if echo "$PR_TITLE $PR_BODY" | grep -qiE '(close[sd]?|fixe?[sd]?|resolve[sd]?|relates? to)[[:space:]]+#[0-9]+'; then
+            echo "linked=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "linked=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment if no issue is referenced
+        if: steps.check.outputs.linked == 'false'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const marker = '<!-- pr-issue-link-reminder -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            if (comments.some((c) => c.body.includes(marker))) return;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `${marker}\nThis PR doesn't seem to reference an issue (e.g. \`Closes #123\` or \`Relates to #123\`). See [CONTRIBUTING.md#issue-tracking](../blob/main/CONTRIBUTING.md#issue-tracking) — if this is intentional (a trivial fix, or an admin/CI action) feel free to ignore this, it's a reminder, not a required check.`,
+            });
