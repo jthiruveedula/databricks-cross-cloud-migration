@@ -27,7 +27,7 @@ jobs:
 
       - name: Comment if no issue is referenced
         if: steps.check.outputs.linked == 'false'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const marker = '<!-- pr-issue-link-reminder -->';
