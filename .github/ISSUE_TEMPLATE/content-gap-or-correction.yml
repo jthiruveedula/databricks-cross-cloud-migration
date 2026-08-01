@@ -1,0 +1,36 @@
+name: Content gap or correction
+description: Something is missing, outdated, or wrong on a runbook page.
+labels: ['content']
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page or section
+      description: URL or path under src/pages, e.g. /governance/unity-catalog-strategy
+      placeholder: /governance/unity-catalog-strategy
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's missing, outdated, or wrong
+      description: Be specific — a claim that's no longer accurate, a step that broke in practice, a tool that's changed behavior, a gap you hit during a real migration.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Links to official docs, a changelog entry, an error message you hit, a screenshot, or what actually happened when you followed this page. Claims without evidence are much slower to act on — see CONTRIBUTING.md.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested-fix
+    attributes:
+      label: Suggested fix (optional)
+      description: If you already know what the correction should say, put it here — or open a PR directly and reference this issue.
+    validations:
+      required: false
