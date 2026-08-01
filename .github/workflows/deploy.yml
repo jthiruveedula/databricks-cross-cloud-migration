@@ -15,6 +15,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      site: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.site }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            site:
+              - 'src/**'
+              - 'public/**'
+              - 'scripts/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'astro.config.mjs'
+              - 'tsconfig.json'
+
   test:
     runs-on: ubuntu-latest
     permissions:
@@ -29,8 +50,8 @@ jobs:
       - run: npm test
 
   check:
-    if: github.event_name == 'pull_request'
-    needs: [test]
+    if: github.event_name == 'pull_request' && needs.changes.outputs.site == 'true'
+    needs: [test, changes]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -44,8 +65,8 @@ jobs:
       - run: npm run build
 
   security:
-    if: github.event_name != 'pull_request'
-    needs: [test]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.site == 'true'
+    needs: [test, changes]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -60,8 +81,8 @@ jobs:
           category: '/language:javascript-typescript'
 
   build:
-    if: github.event_name != 'pull_request'
-    needs: [test, security]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.site == 'true'
+    needs: [test, security, changes]
     runs-on: ubuntu-latest
     permissions:
       contents: read
