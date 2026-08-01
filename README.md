@@ -23,16 +23,19 @@ Before committing to a physical migration, it's also worth asking whether the ac
 | **Overview** | What cross-cloud migration is, migration archetypes, the decision framework for choosing one, and when to govern remotely instead of migrating |
 | **Discovery** | Workspace/asset inventory, dependency mapping, risk assessment |
 | **Cloud mappings** | Construct-by-construct equivalency matrix plus all 6 directional deep-dives (Azure↔AWS, Azure↔GCP, AWS↔GCP) with concrete path-rewrite scripts |
-| **Governance** | Unity Catalog strategy, metastore migration, grants and roles, legacy Hive transition, external locations and volumes, UCX-assisted migration |
+| **Governance** | Unity Catalog strategy, metastore migration, grants and roles, legacy Hive transition, external locations and volumes, UCX-assisted migration, disaster recovery |
 | **Security** | IAM mapping, identity federation, secrets and KMS, network security, audit and compliance |
 | **Compute** | Cluster migration, runtime upgrade, cluster policies, init scripts and libraries |
 | **Pipelines** | Databricks Workflows/Lakeflow (DLT), external orchestrators, CI/CD promotion |
-| **Analytics** | SQL queries, dashboards, alerts, notebooks and repos |
+| **Analytics** | SQL queries, dashboards, alerts, notebooks and repos, BI tool reconnection (Power BI/Tableau/Looker) |
 | **ML** | MLflow, model registry, feature assets, serving and artifacts |
-| **Execution** | Wave planning → pilot → bulk migration → cutover → hypercare → rollback |
+| **Execution** | Wave planning → pilot → large-scale data transfer → bulk migration → cutover → hypercare → rollback |
 | **Validation** | Technical, data reconciliation, security, and business sign-off |
 | **Templates** | Checklists, Terraform patterns, sample scripts, RACI, risk register |
 | **Troubleshooting** | Common errors, anti-patterns, FAQ |
+| **Accelerators** | AI-assisted migration, Databricks migration tooling (UCX, Lakebridge, Replicator) |
+| **Collaboration** | Cross-cloud data collaboration — Delta Sharing, Lakehouse Federation, Clean Rooms, dual-run CDC |
+| **Tools** | Browser-only, no-data-leaves-the-page calculators: cost calculator, instance type mapper, timeline estimator, RACI builder, dependency graph |
 
 Every page follows the same shape: executive framing, why it matters, applicability, inputs required, recommended sequence, validation, rollback, automation opportunity, evidence to capture, and cloud-specific caveats, with code examples labeled illustrative where they aren't meant to be copy-pasted into production as-is.
 
