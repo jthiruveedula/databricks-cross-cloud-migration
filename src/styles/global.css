@@ -178,21 +178,6 @@ html.theme-transitioning *::after {
   background: var(--surface-elevated);
 }
 
-@keyframes gradient {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-.gradient-text {
-  background: linear-gradient(135deg, var(--accent), #ff8a3d, #ffb199);
-  background-size: 200% 200%;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  animation: gradient 8s ease infinite;
-}
-
 /* Light mode plays a dedicated light-background render at near-full opacity with normal
    blending -- its background is purpose-matched to the page surface, so it composites by
    color-match rather than by blend-mode transparency tricks. Used by MigrationJourney.tsx's
@@ -455,67 +440,9 @@ html.theme-transitioning *::after {
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes float {
-  0%, 100% { transform: translate(0, 0); }
-  33% { transform: translate(20px, -30px); }
-  66% { transform: translate(-15px, 15px); }
-}
-
-@keyframes pulse-glow {
-  0%, 100% { opacity: 0.5; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.05); }
-}
-
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
-}
-
-.hero-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(60px);
-  opacity: 0.55;
-  animation: float 12s ease-in-out infinite, pulse-glow 6s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.hero-orb-1 {
-  top: -10%;
-  left: -5%;
-  width: 280px;
-  height: 280px;
-  background: radial-gradient(circle, rgba(255, 54, 33, 0.45), transparent 70%);
-}
-
-.hero-orb-2 {
-  bottom: -15%;
-  right: -5%;
-  width: 320px;
-  height: 320px;
-  background: radial-gradient(circle, rgba(255, 138, 61, 0.35), transparent 70%);
-  animation-delay: -4s;
-}
-
-.hero-orb-3 {
-  top: 40%;
-  right: 20%;
-  width: 160px;
-  height: 160px;
-  background: radial-gradient(circle, rgba(255, 177, 153, 0.3), transparent 70%);
-  animation-delay: -8s;
-}
-
-.dark .hero-orb-1 {
-  background: radial-gradient(circle, rgba(255, 106, 82, 0.35), transparent 70%);
-}
-
-.dark .hero-orb-2 {
-  background: radial-gradient(circle, rgba(255, 138, 61, 0.28), transparent 70%);
-}
-
-.dark .hero-orb-3 {
-  background: radial-gradient(circle, rgba(255, 177, 153, 0.2), transparent 70%);
 }
 
 .cta-band {
@@ -699,11 +626,7 @@ html.theme-transitioning *::after {
     page-break-inside: avoid;
   }
   .hero-glow,
-  .hero-video,
-  .hero-orb,
-  .hero-orb-1,
-  .hero-orb-2,
-  .hero-orb-3 {
+  .hero-video {
     display: none !important;
   }
   .breadcrumb,

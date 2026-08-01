@@ -1,92 +1,40 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import BrandGlyph from './BrandGlyph';
 import { BRAND_ICONS } from './logos/brandIcons';
-import HeroScene3D, { type ActiveCloud } from './HeroScene3D';
+import MigrationDiagram, { type ActiveCloud } from './MigrationDiagram';
 import { withBase } from '../lib/paths';
 
-// Google blue exact from simple-icons (#4285F4); switched from the flat webp so the
-// strip below reads as unmistakably Google Cloud rather than a generic cloud outline.
 const CLOUD_LOGOS = ['aws', 'azure', 'googlecloudsvg'] as const;
 
 const ROTATING = ['across any cloud', 'to AWS', 'to Azure', 'to GCP'];
 
-// Maps the rotating headline word to the 3D scene's active source cloud, so the migration
-// visual isn't decorative -- it lights up and speeds up exactly the stream the headline is
-// currently naming. 'across any cloud' has no single source, so all three stream evenly.
+// Maps the rotating headline word to the diagram's active source cloud, so the migration
+// visual isn't decorative -- the connector for whichever cloud the headline is currently
+// naming lights up. 'across any cloud' has no single source, so all three light up evenly.
 const ROTATING_CLOUD: ActiveCloud[] = [null, 'aws', 'azure', 'gcp'];
 
-// Per-brand text color for the rotating headline word -- AWS orange, Azure blue, Google's
-// four-color scheme split across the letters -- instead of one generic gradient for every
-// word. 'across any cloud' keeps the generic gradient since it names no single brand.
+// Solid per-brand colors for the rotating headline word -- AWS orange, Azure blue, Google's
+// four-color scheme split across the letters. 'across any cloud' stays solid ink (no single
+// brand to anchor to, and a gradient fill here would read as decorative rather than factual).
 const ROTATING_COLOR: Record<string, string | null> = {
   'across any cloud': null,
   'to AWS': '#FF9900',
   'to Azure': '#0078D4',
-  'to GCP': null, // rendered letter-by-letter in Google's four brand colors, see below
+  'to GCP': null,
 };
 
 export default function Hero() {
-  const ref = useRef<HTMLDivElement>(null);
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
-  const sx = useSpring(mouseX, { stiffness: 60, damping: 18 });
-  const sy = useSpring(mouseY, { stiffness: 60, damping: 18 });
-
-  const orb1X = useTransform(sx, [-0.5, 0.5], [18, -18]);
-  const orb1Y = useTransform(sy, [-0.5, 0.5], [14, -14]);
-  const orb2X = useTransform(sx, [-0.5, 0.5], [-22, 22]);
-  const orb2Y = useTransform(sy, [-0.5, 0.5], [-16, 16]);
-  const glowX = useTransform(sx, [-0.5, 0.5], [-12, 12]);
-  const glowY = useTransform(sy, [-0.5, 0.5], [-10, 10]);
-
   const [word, setWord] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setWord((w) => (w + 1) % ROTATING.length), 2600);
     return () => clearInterval(id);
   }, []);
 
-  // Lighting/material tuning in the 3D scene differs by theme (see HeroScene3D), same
-  // dark/light split the previous hero video needed -- a bright scene doesn't read on a
-  // light backdrop and a dim one disappears against near-black, so it's theme-aware rather
-  // than one fixed look.
-  const [isDark, setIsDark] = useState(false);
-  useEffect(() => {
-    const root = document.documentElement;
-    setIsDark(root.classList.contains('dark'));
-    const observer = new MutationObserver(() => setIsDark(root.classList.contains('dark')));
-    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
-
-  function onMove(e: React.MouseEvent<HTMLDivElement>) {
-    const rect = ref.current?.getBoundingClientRect();
-    if (!rect) return;
-    mouseX.set((e.clientX - rect.left) / rect.width - 0.5);
-    mouseY.set((e.clientY - rect.top) / rect.height - 0.5);
-  }
-
   return (
-    <div
-      ref={ref}
-      onMouseMove={onMove}
-      className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-6 py-16 text-center md:py-24"
-    >
-      <HeroScene3D isDark={isDark} activeCloud={ROTATING_CLOUD[word]} />
-      <motion.div className="hero-glow" style={{ x: glowX, y: glowY }} />
-      <motion.div className="hero-orb hero-orb-1" style={{ x: orb1X, y: orb1Y }} />
-      <motion.div className="hero-orb hero-orb-2" style={{ x: orb2X, y: orb2Y }} />
-      <div className="hero-orb hero-orb-3" />
-      {/* Dark mode only: the video's brighter frames can otherwise drop text contrast below
-          WCAG AA for the paragraph (measured as low as 1.25:1 without this) -- a scrim behind
-          the whole text column keeps contrast consistent regardless of which frame is showing. */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 z-[1] hidden dark:block"
-        style={{ background: 'radial-gradient(ellipse 70% 60% at 50% 55%, transparent 30%, rgba(11, 13, 18, 0.55) 100%)' }}
-      />
-      <div className="relative z-10 mx-auto max-w-3xl">
+    <div className="hero-split grid items-center gap-10 py-12 md:py-16 lg:grid-cols-[7fr_5fr] lg:gap-16">
+      <div>
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -103,7 +51,7 @@ export default function Hero() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.05, ease: 'easeOut' }}
-          className="mb-6 flex items-center justify-center gap-5"
+          className="mb-6 flex items-center gap-5"
         >
           {CLOUD_LOGOS.map((key, i) => (
             <React.Fragment key={key}>
@@ -139,7 +87,7 @@ export default function Hero() {
                 ) : ROTATING_COLOR[ROTATING[word]] ? (
                   <span style={{ color: ROTATING_COLOR[ROTATING[word]]! }}>{ROTATING[word]}</span>
                 ) : (
-                  <span className="gradient-text">{ROTATING[word]}</span>
+                  <span className="text-[var(--ink)]">{ROTATING[word]}</span>
                 )}
               </motion.span>
             </AnimatePresence>
@@ -149,7 +97,7 @@ export default function Hero() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2, ease: 'easeOut' }}
-          className="mx-auto mb-8 max-w-2xl text-lg text-[var(--ink-muted)]"
+          className="mb-8 max-w-xl text-lg text-[var(--ink-muted)]"
         >
           A deeply detailed, practical runbook for platform teams, cloud architects, and security engineers moving Databricks between Azure, AWS, and GCP.
         </motion.p>
@@ -157,7 +105,7 @@ export default function Hero() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3, ease: 'easeOut' }}
-          className="flex flex-wrap items-center justify-center gap-4"
+          className="flex flex-wrap items-center gap-4"
         >
           <a
             href={withBase('/overview/what-is-cross-cloud-migration')}
@@ -173,6 +121,15 @@ export default function Hero() {
           </a>
         </motion.div>
       </div>
+
+      <motion.div
+        initial={{ opacity: 0, x: 16 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.6, delay: 0.25, ease: 'easeOut' }}
+        className="flex justify-center rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-6 md:p-8 lg:justify-end"
+      >
+        <MigrationDiagram activeCloud={ROTATING_CLOUD[word]} />
+      </motion.div>
     </div>
   );
 }
