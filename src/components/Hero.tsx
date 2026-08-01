@@ -3,7 +3,7 @@ import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from
 import { ArrowRight } from 'lucide-react';
 import BrandGlyph from './BrandGlyph';
 import { BRAND_ICONS } from './logos/brandIcons';
-import HeroScene3D from './HeroScene3D';
+import HeroScene3D, { type ActiveCloud } from './HeroScene3D';
 import { withBase } from '../lib/paths';
 
 // Google blue exact from simple-icons (#4285F4); switched from the flat webp so the
@@ -11,6 +11,11 @@ import { withBase } from '../lib/paths';
 const CLOUD_LOGOS = ['aws', 'azure', 'googlecloudsvg'] as const;
 
 const ROTATING = ['across any cloud', 'to AWS', 'to Azure', 'to GCP'];
+
+// Maps the rotating headline word to the 3D scene's active source cloud, so the migration
+// visual isn't decorative -- it lights up and speeds up exactly the stream the headline is
+// currently naming. 'across any cloud' has no single source, so all three stream evenly.
+const ROTATING_CLOUD: ActiveCloud[] = [null, 'aws', 'azure', 'gcp'];
 
 // Per-brand text color for the rotating headline word -- AWS orange, Azure blue, Google's
 // four-color scheme split across the letters -- instead of one generic gradient for every
@@ -68,7 +73,7 @@ export default function Hero() {
       onMouseMove={onMove}
       className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-6 py-16 text-center md:py-24"
     >
-      <HeroScene3D isDark={isDark} />
+      <HeroScene3D isDark={isDark} activeCloud={ROTATING_CLOUD[word]} />
       <motion.div className="hero-glow" style={{ x: glowX, y: glowY }} />
       <motion.div className="hero-orb hero-orb-1" style={{ x: orb1X, y: orb1Y }} />
       <motion.div className="hero-orb hero-orb-2" style={{ x: orb2X, y: orb2Y }} />
