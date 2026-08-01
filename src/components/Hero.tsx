@@ -34,7 +34,7 @@ export default function Hero() {
 
   return (
     <div className="hero-split grid items-center gap-10 py-12 md:py-16 lg:grid-cols-[7fr_5fr] lg:gap-16">
-      <div>
+      <div className="min-w-0">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -126,7 +126,7 @@ export default function Hero() {
         initial={{ opacity: 0, x: 16 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.6, delay: 0.25, ease: 'easeOut' }}
-        className="flex justify-center rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-6 md:p-8 lg:justify-end"
+        className="flex min-w-0 justify-center rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-6 md:p-8"
       >
         <MigrationDiagram activeCloud={ROTATING_CLOUD[word]} />
       </motion.div>
