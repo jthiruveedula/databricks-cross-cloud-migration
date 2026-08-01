@@ -1,5 +1,5 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { motion, useScroll, useTransform, useMotionValueEvent, useReducedMotion } from 'framer-motion';
+import React, { useRef, useState } from 'react';
+import { motion, useScroll, useTransform, useMotionValueEvent } from 'framer-motion';
 import {
   Sparkles,
   Search,
@@ -9,9 +9,10 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { withBase } from '../lib/paths';
+import JourneyVisual, { CHAPTER_COLOR, type ChapterKey } from './JourneyVisual';
 
 interface Chapter {
-  key: string;
+  key: ChapterKey;
   eyebrow: string;
   title: string;
   icon: React.ElementType;
@@ -95,48 +96,9 @@ export default function MigrationJourney() {
     setActive(Math.min(CHAPTERS.length - 1, Math.max(0, Math.floor(v * CHAPTERS.length))));
   });
 
-  // The clip is an 8s seamless loop covering the whole section's scroll range (not one
-  // segment per chapter) -- it reads as continuous ambient motion behind the story rather
-  // than a literal per-chapter illustration, same restrained role the hero video plays.
-  // Theme-swapped the same way Hero.tsx swaps its video: a dark-neon render and a separate
-  // light-purposed render (screen-blend reads on dark, not on a light backdrop).
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const prefersReducedMotion = useReducedMotion();
-  const [isDark, setIsDark] = useState(false);
-  useEffect(() => {
-    const root = document.documentElement;
-    setIsDark(root.classList.contains('dark'));
-    const observer = new MutationObserver(() => setIsDark(root.classList.contains('dark')));
-    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || prefersReducedMotion) return;
-    video.src = withBase(isDark ? '/videos/migration-journey-flow-dark.mp4' : '/videos/migration-journey-flow-light.mp4');
-  }, [prefersReducedMotion, isDark]);
-  useMotionValueEvent(scrollYProgress, 'change', (v) => {
-    const video = videoRef.current;
-    if (!video || !video.duration) return;
-    video.currentTime = v * video.duration;
-  });
-
-  // Slow continuous push-in across the whole section scroll -- a real camera move, not just
-  // the loop scrubbing in place, so the background reads as cinematic rather than a static gif.
-  const cameraScale = useTransform(scrollYProgress, [0, 1], [1, 1.1]);
-
   return (
     <section ref={sectionRef} className="relative my-16" style={{ height: `${CHAPTERS.length * 100}vh` }}>
       <div className="sticky top-0 flex h-screen items-center overflow-hidden">
-        <motion.video
-          ref={videoRef}
-          className="hero-video"
-          style={{ scale: cameraScale }}
-          muted
-          playsInline
-          preload="auto"
-          aria-hidden="true"
-        />
         <div className="hero-glow" />
         <div
           aria-hidden="true"
@@ -169,10 +131,8 @@ export default function MigrationJourney() {
                   <span
                     className="absolute -left-6 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 transition-all duration-300"
                     style={{
-                      borderColor:
-                        'var(--border)',
-                      backgroundColor:
-                        i === active ? 'var(--accent)' : 'var(--surface)',
+                      borderColor: 'var(--border)',
+                      backgroundColor: i === active ? CHAPTER_COLOR[c.key] : 'var(--surface)',
                     }}
                   />
                   <span
@@ -201,28 +161,36 @@ export default function MigrationJourney() {
                 }}
                 transition={{ duration: 0.5, ease: 'easeOut' }}
               >
-                <div className="w-full">
-                  <div className="mb-5 inline-flex items-center gap-3 rounded-full border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-4 py-1.5 text-sm font-medium text-[var(--accent)]">
-                    <c.icon className="h-4 w-4" />
-                    {c.eyebrow}
+                <div className="flex w-full flex-col gap-8 lg:flex-row lg:items-center lg:gap-12">
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className="mb-5 inline-flex items-center gap-3 rounded-full border px-4 py-1.5 text-sm font-medium"
+                      style={{ borderColor: `${CHAPTER_COLOR[c.key]}4D`, background: `${CHAPTER_COLOR[c.key]}1A`, color: CHAPTER_COLOR[c.key] }}
+                    >
+                      <c.icon className="h-4 w-4" />
+                      {c.eyebrow}
+                    </div>
+                    <h3 className="mb-3 text-3xl font-bold tracking-tight text-[var(--ink)] md:text-4xl">
+                      {c.title}
+                    </h3>
+                    <p className="mb-8 max-w-xl text-lg font-medium" style={{ color: CHAPTER_COLOR[c.key] }}>
+                      {c.tagline}
+                    </p>
+                    <div className="flex flex-wrap gap-3">
+                      {c.bullets.map((b) => (
+                        <a
+                          key={b.href}
+                          href={withBase(b.href)}
+                          className="group inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium text-[var(--ink)] transition-colors hover:border-[var(--accent)]/40 hover:bg-[var(--surface-hover)]"
+                        >
+                          {b.label}
+                          <ArrowRight className="h-3.5 w-3.5 text-[var(--ink-subtle)] transition-transform group-hover:translate-x-1 group-hover:text-[var(--accent)]" />
+                        </a>
+                      ))}
+                    </div>
                   </div>
-                  <h3 className="mb-3 text-3xl font-bold tracking-tight text-[var(--ink)] md:text-4xl">
-                    {c.title}
-                  </h3>
-                  <p className="mb-8 max-w-xl text-lg font-medium text-[var(--accent)]">
-                    {c.tagline}
-                  </p>
-                  <div className="flex flex-wrap gap-3">
-                    {c.bullets.map((b) => (
-                      <a
-                        key={b.href}
-                        href={withBase(b.href)}
-                        className="group inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium text-[var(--ink)] transition-colors hover:border-[var(--accent)]/40 hover:bg-[var(--surface-hover)]"
-                      >
-                        {b.label}
-                        <ArrowRight className="h-3.5 w-3.5 text-[var(--ink-subtle)] transition-transform group-hover:translate-x-1 group-hover:text-[var(--accent)]" />
-                      </a>
-                    ))}
+                  <div className="shrink-0 lg:pt-0">
+                    {i === active && <JourneyVisual chapterKey={c.key} />}
                   </div>
                 </div>
               </motion.div>
