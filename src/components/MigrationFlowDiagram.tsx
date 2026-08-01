@@ -221,7 +221,8 @@ export default function MigrationFlowDiagram() {
   useEffect(() => () => { if (animRef.current) cancelAnimationFrame(animRef.current); }, []);
 
   const path = splinePath(points);
-  const activeColor = PHASES[currentPhase]?.color ?? PHASES[0].color;
+  const currentPhaseData = PHASES[currentPhase] ?? PHASES[0];
+  const activeColor = currentPhaseData.color;
   const selected = selectedPhase !== null ? PHASES[selectedPhase] : null;
 
   return (
@@ -239,7 +240,7 @@ export default function MigrationFlowDiagram() {
             ? 'Migration flow complete'
             : animState === 'idle'
               ? 'Click any phase, or drag the rail below, to explore'
-              : `Phase ${currentPhase + 1} of ${PHASES.length} — ${PHASES[currentPhase].title}`}
+              : `Phase ${currentPhase + 1} of ${PHASES.length} — ${currentPhaseData.title}`}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -261,7 +262,7 @@ export default function MigrationFlowDiagram() {
         aria-valuemin={1}
         aria-valuemax={PHASES.length}
         aria-valuenow={currentPhase + 1}
-        aria-valuetext={PHASES[currentPhase].title}
+        aria-valuetext={currentPhaseData.title}
         tabIndex={0}
         onClick={(e) => seekTo(e.clientX)}
         onKeyDown={(e) => {
