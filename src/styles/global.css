@@ -127,6 +127,19 @@ button {
   display: none;
 }
 
+/* Generic "this is a scroll-snap rail / carousel, not a document" scrollbar hide -- the
+   global `* { scrollbar-width: thin }` rule above only sets a default, but a horizontally
+   scrollable component rail (e.g. MigrationFlowDiagram's phase timeline) reads better with
+   no visible scrollbar chrome at all, relying on edge fades + chevron buttons instead. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

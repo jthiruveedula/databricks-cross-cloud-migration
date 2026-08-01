@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useLayoutEffect } from 'react';
 import { motion, useAnimationControls, AnimatePresence } from 'framer-motion';
-import { Search, Compass, Database, Boxes, ShieldCheck, Flag, Activity, RotateCcw } from 'lucide-react';
+import { Search, Compass, Database, Boxes, ShieldCheck, Flag, Activity, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface Phase {
   id: number;
@@ -54,9 +54,28 @@ function splinePath(points: { x: number; y: number }[]): string {
 
 export default function MigrationFlowDiagram() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [points, setPoints] = useState<{ x: number; y: number }[]>([]);
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
+  // Single-row timeline that scrolls horizontally rather than wrapping -- seven cards at a
+  // fixed width don't fit most containers on one line, and wrapping onto a second row forced
+  // the connector spline to zigzag down and back up between rows. A scrollable rail (same
+  // pattern as a CI pipeline or deploy-history view) keeps the flow reading as one continuous
+  // line at any container width.
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  }, []);
+
+  const scrollByCards = useCallback((dir: 1 | -1) => {
+    scrollAreaRef.current?.scrollBy({ left: dir * 200, behavior: 'smooth' });
+  }, []);
 
   const [animState, setAnimState] = useState<AnimState>('idle');
   const [currentPhase, setCurrentPhase] = useState(0);
@@ -80,14 +99,18 @@ export default function MigrationFlowDiagram() {
 
   useLayoutEffect(() => {
     measure();
-    const ro = new ResizeObserver(measure);
+    updateScrollState();
+    const ro = new ResizeObserver(() => {
+      measure();
+      updateScrollState();
+    });
     if (containerRef.current) ro.observe(containerRef.current);
     window.addEventListener('resize', measure);
     return () => {
       ro.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, [measure]);
+  }, [measure, updateScrollState]);
 
   // Fixed autoplay pace -- no user-facing speed control, one consistent duration for the
   // whole flow to play out.
@@ -178,6 +201,7 @@ export default function MigrationFlowDiagram() {
   const selectCard = useCallback((i: number) => {
     seekToFraction(i / (PHASES.length - 1));
     setSelectedPhase((prev) => (prev === i ? null : i));
+    cardRefs.current[i]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   }, [seekToFraction]);
 
   useEffect(() => () => { if (animRef.current) cancelAnimationFrame(animRef.current); }, []);
@@ -185,7 +209,6 @@ export default function MigrationFlowDiagram() {
   const path = splinePath(points);
   const activeColor = PHASES[currentPhase]?.color ?? PHASES[0].color;
   const selected = selectedPhase !== null ? PHASES[selectedPhase] : null;
-  const selectedX = selectedPhase !== null ? points[selectedPhase]?.x : undefined;
 
   return (
     <div className="migration-flow-diagram">
@@ -248,87 +271,119 @@ export default function MigrationFlowDiagram() {
         </div>
       </div>
 
-      {/* Stage: rail + cards */}
+      {/* Stage: a single-row, horizontally scrollable timeline -- keeps the connector a
+          clean unbroken line at any container width instead of wrapping onto a second row. */}
       <div className="relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-6">
-        <div ref={containerRef} className="relative">
-          {stageSize.w > 0 && (
-            <svg
-              className="pointer-events-none absolute inset-0"
-              width={stageSize.w}
-              height={stageSize.h}
-              viewBox={`0 0 ${stageSize.w} ${stageSize.h}`}
-            >
-              <defs>
-                <linearGradient id="flow-rail-gradient" x1="0" y1="0" x2={stageSize.w} y2="0" gradientUnits="userSpaceOnUse">
-                  {PHASES.map((p, i) => (
-                    <stop key={p.id} offset={`${(i / (PHASES.length - 1)) * 100}%`} stopColor={p.color} />
-                  ))}
-                </linearGradient>
-              </defs>
-              <path d={path} fill="none" stroke="var(--border)" strokeWidth={2} strokeDasharray="1 8" strokeLinecap="round" />
-              <path d={path} fill="none" stroke="url(#flow-rail-gradient)" strokeWidth={2} strokeLinecap="round" opacity={0.55} />
-              {path && (
-                <motion.circle
-                  r={7}
-                  fill={activeColor}
-                  style={{ offsetPath: `path('${path}')`, filter: `drop-shadow(0 0 6px ${activeColor})` }}
-                  animate={controls}
-                  initial={{ offsetDistance: '0%' }}
-                />
-              )}
-            </svg>
-          )}
-
-          <div className="relative flex flex-wrap justify-center gap-4">
-            {PHASES.map((p, i) => {
-              const active = i === currentPhase && animState !== 'idle';
-              const isSelected = i === selectedPhase;
-              const Icon = p.icon;
-              return (
-                <button
-                  key={p.id}
-                  ref={(el) => { cardRefs.current[i] = el; }}
-                  onClick={() => selectCard(i)}
-                  aria-label={`Phase ${p.id}: ${p.title}, ${p.subtitle}`}
-                  aria-expanded={isSelected}
-                  className="flow-phase-card w-[168px] rounded-xl border bg-[var(--surface)] p-3.5 text-left transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                  style={{
-                    borderColor: active || isSelected ? p.color : 'var(--border)',
-                    borderWidth: active || isSelected ? 2 : 1,
-                    boxShadow: active ? `0 0 0 3px ${p.color}22, 0 8px 20px -8px ${p.color}55` : isSelected ? `0 0 0 3px ${p.color}22` : 'none',
-                    transform: active ? 'translateY(-2px)' : 'none',
-                    ['--flow-card-color' as any]: p.color,
-                  }}
+        <div className="relative">
+          <div
+            ref={scrollAreaRef}
+            onScroll={updateScrollState}
+            className="no-scrollbar overflow-x-auto pb-2"
+            style={{
+              maskImage: `linear-gradient(90deg, ${canScrollLeft ? 'transparent' : 'black'} 0, black 24px, black calc(100% - 24px), ${canScrollRight ? 'transparent' : 'black'} 100%)`,
+              WebkitMaskImage: `linear-gradient(90deg, ${canScrollLeft ? 'transparent' : 'black'} 0, black 24px, black calc(100% - 24px), ${canScrollRight ? 'transparent' : 'black'} 100%)`,
+            }}
+          >
+            <div ref={containerRef} className="relative w-max">
+              {stageSize.w > 0 && (
+                <svg
+                  className="pointer-events-none absolute inset-0"
+                  width={stageSize.w}
+                  height={stageSize.h}
+                  viewBox={`0 0 ${stageSize.w} ${stageSize.h}`}
                 >
-                  <div className="mb-2.5 flex items-center gap-2">
-                    <span
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white"
-                      style={{ background: p.color }}
+                  <defs>
+                    <linearGradient id="flow-rail-gradient" x1="0" y1="0" x2={stageSize.w} y2="0" gradientUnits="userSpaceOnUse">
+                      {PHASES.map((p, i) => (
+                        <stop key={p.id} offset={`${(i / (PHASES.length - 1)) * 100}%`} stopColor={p.color} />
+                      ))}
+                    </linearGradient>
+                  </defs>
+                  <path d={path} fill="none" stroke="var(--border)" strokeWidth={2} strokeDasharray="1 8" strokeLinecap="round" />
+                  <path d={path} fill="none" stroke="url(#flow-rail-gradient)" strokeWidth={2} strokeLinecap="round" opacity={0.55} />
+                  {path && (
+                    <motion.circle
+                      r={7}
+                      fill={activeColor}
+                      style={{ offsetPath: `path('${path}')`, filter: `drop-shadow(0 0 6px ${activeColor})` }}
+                      animate={controls}
+                      initial={{ offsetDistance: '0%' }}
+                    />
+                  )}
+                </svg>
+              )}
+
+              <div className="relative flex gap-4">
+                {PHASES.map((p, i) => {
+                  const active = i === currentPhase && animState !== 'idle';
+                  const isSelected = i === selectedPhase;
+                  const Icon = p.icon;
+                  return (
+                    <button
+                      key={p.id}
+                      ref={(el) => { cardRefs.current[i] = el; }}
+                      onClick={() => selectCard(i)}
+                      aria-label={`Phase ${p.id}: ${p.title}, ${p.subtitle}`}
+                      aria-expanded={isSelected}
+                      className="flow-phase-card w-[168px] shrink-0 rounded-xl border bg-[var(--surface)] p-3.5 text-left transition-all duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                      style={{
+                        borderColor: active || isSelected ? p.color : 'var(--border)',
+                        borderWidth: active || isSelected ? 2 : 1,
+                        boxShadow: active ? `0 0 0 3px ${p.color}22, 0 8px 20px -8px ${p.color}55` : isSelected ? `0 0 0 3px ${p.color}22` : 'none',
+                        transform: active ? 'translateY(-2px)' : 'none',
+                        ['--flow-card-color' as any]: p.color,
+                      }}
                     >
-                      <Icon className="h-3.5 w-3.5" />
-                    </span>
-                    <span
-                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
-                      style={{ background: `${p.color}1f`, color: p.color }}
-                    >
-                      {p.id}
-                    </span>
-                  </div>
-                  <div className="mb-0.5 text-sm font-semibold text-[var(--ink)]">{p.title}</div>
-                  <div className="mb-2.5 text-xs text-[var(--ink-muted)]">{p.subtitle}</div>
-                  <span
-                    className="inline-block rounded-full px-2 py-0.5 text-[10px] font-medium"
-                    style={{ background: `${p.color}1f`, color: p.color }}
-                  >
-                    {p.duration}
-                  </span>
-                </button>
-              );
-            })}
+                      <div className="mb-2.5 flex items-center gap-2">
+                        <span
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white"
+                          style={{ background: p.color }}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                        </span>
+                        <span
+                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+                          style={{ background: `${p.color}1f`, color: p.color }}
+                        >
+                          {p.id}
+                        </span>
+                      </div>
+                      <div className="mb-0.5 text-sm font-semibold text-[var(--ink)]">{p.title}</div>
+                      <div className="mb-2.5 text-xs text-[var(--ink-muted)]">{p.subtitle}</div>
+                      <span
+                        className="inline-block rounded-full px-2 py-0.5 text-[10px] font-medium"
+                        style={{ background: `${p.color}1f`, color: p.color }}
+                      >
+                        {p.duration}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
+
+          {canScrollLeft && (
+            <button
+              onClick={() => scrollByCards(-1)}
+              aria-label="Scroll earlier phases into view"
+              className="absolute left-1 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--ink-muted)] shadow-card transition-colors hover:text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          )}
+          {canScrollRight && (
+            <button
+              onClick={() => scrollByCards(1)}
+              aria-label="Scroll later phases into view"
+              className="absolute right-1 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--ink-muted)] shadow-card transition-colors hover:text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
-        {/* Detail panel, color-matched and pointing at the selected card */}
+        {/* Detail panel, color-matched to the selected phase */}
         <AnimatePresence>
           {selected && (
             <motion.div
@@ -338,12 +393,6 @@ export default function MigrationFlowDiagram() {
               transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
               className="relative mt-5 overflow-hidden"
             >
-              {selectedX !== undefined && (
-                <div
-                  className="absolute -top-[7px] h-3 w-3 rotate-45 border-l border-t"
-                  style={{ left: selectedX - 6, borderColor: selected.color, background: 'var(--surface-elevated)' }}
-                />
-              )}
               <div
                 className="rounded-xl border-l-4 bg-[var(--surface-elevated)] p-4"
                 style={{ borderLeftColor: selected.color }}
