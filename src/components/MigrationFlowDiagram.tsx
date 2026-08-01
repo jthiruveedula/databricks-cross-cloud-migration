@@ -112,6 +112,18 @@ export default function MigrationFlowDiagram() {
     };
   }, [measure, updateScrollState]);
 
+  // Keeps the card rail panned in sync with the playhead -- without this, autoplay reaches
+  // phases 6-7 while the rail is still showing 1-3, so the "active" card the user is
+  // supposed to be watching is scrolled off-screen.
+  const scrollRailToProgress = useCallback((p: number) => {
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    if (max <= 0) return;
+    el.scrollLeft = p * max;
+    updateScrollState();
+  }, [updateScrollState]);
+
   // Fixed autoplay pace -- no user-facing speed control, one consistent duration for the
   // whole flow to play out.
   const PLAY_DURATION_MS = 8000;
@@ -136,6 +148,7 @@ export default function MigrationFlowDiagram() {
       const p = Math.min(elapsed / duration, 1);
       progressRef.current = p;
       setCurrentPhase(Math.min(Math.floor(p * PHASES.length), PHASES.length - 1));
+      scrollRailToProgress(p);
       if (p >= 1) {
         setAnimState('done');
         controls.stop();
@@ -144,7 +157,7 @@ export default function MigrationFlowDiagram() {
       }
       animRef.current = requestAnimationFrame(tick);
     });
-  }, [controls]);
+  }, [controls, scrollRailToProgress]);
 
   const pause = useCallback(() => {
     setAnimState('paused');
@@ -187,8 +200,9 @@ export default function MigrationFlowDiagram() {
     setAnimState('paused');
     const idx = Math.min(Math.floor(frac * PHASES.length), PHASES.length - 1);
     setCurrentPhase(idx);
+    scrollRailToProgress(frac);
     return idx;
-  }, [controls]);
+  }, [controls, scrollRailToProgress]);
 
   const seekTo = useCallback((clientX: number) => {
     const track = seekTrackRef.current;
@@ -251,8 +265,8 @@ export default function MigrationFlowDiagram() {
         tabIndex={0}
         onClick={(e) => seekTo(e.clientX)}
         onKeyDown={(e) => {
-          if (e.key === 'ArrowRight') { e.preventDefault(); const i = Math.min(currentPhase + 1, PHASES.length - 1); setCurrentPhase(i); controls.set({ offsetDistance: `${(i / (PHASES.length - 1)) * 100}%` }); setAnimState('paused'); }
-          if (e.key === 'ArrowLeft') { e.preventDefault(); const i = Math.max(currentPhase - 1, 0); setCurrentPhase(i); controls.set({ offsetDistance: `${(i / (PHASES.length - 1)) * 100}%` }); setAnimState('paused'); }
+          if (e.key === 'ArrowRight') { e.preventDefault(); const i = Math.min(currentPhase + 1, PHASES.length - 1); setCurrentPhase(i); controls.set({ offsetDistance: `${(i / (PHASES.length - 1)) * 100}%` }); setAnimState('paused'); scrollRailToProgress(i / (PHASES.length - 1)); }
+          if (e.key === 'ArrowLeft') { e.preventDefault(); const i = Math.max(currentPhase - 1, 0); setCurrentPhase(i); controls.set({ offsetDistance: `${(i / (PHASES.length - 1)) * 100}%` }); setAnimState('paused'); scrollRailToProgress(i / (PHASES.length - 1)); }
         }}
         className="group relative mb-6 h-2 cursor-pointer rounded-full bg-[var(--border)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
       >
