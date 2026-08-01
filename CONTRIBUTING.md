@@ -84,6 +84,17 @@ hydration errors, not just visible rendering.
 
 ## Reporting a gap without writing the fix
 
-Open an issue describing what's missing or wrong and, if you can, which page it belongs on or
-near. Field experience on a specific cloud pairing, a tool that's changed behavior, or a step that
-broke in practice are all useful even without a draft PR.
+Open an issue using the "Content gap or correction" template — describe what's missing or wrong,
+which page it belongs on or near, and the evidence behind it (an official docs link, an error
+message you hit, what actually happened when you followed the page). Field experience on a
+specific cloud pairing, a tool that's changed behavior, or a step that broke in practice are all
+useful even without a draft PR.
+
+## How review works
+
+Anyone can open an issue or a PR — proposals are welcome from outside contributors, not just the
+maintainer. Review and approval are evidence-based: a claim backed by an official docs link,
+a reproducible error, or a passing test carries weight; an unsupported assertion or preference
+doesn't, however confidently stated. If a PR changes a factual claim about current cloud/Databricks
+behavior, cite the source in the PR description (see the PR template) — that's what gets it merged
+quickly rather than sitting in review.
