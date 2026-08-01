@@ -56,7 +56,7 @@ The homepage includes an interactive planner: pick a source and target cloud and
 
 ## Contributing
 
-Found a gap, an inaccuracy, or want to add a phase/page? See [CONTRIBUTING.md](./CONTRIBUTING.md) for the page-authoring conventions (frontmatter, the Validation/Rollback/Automation-opportunity shape, navigation + search-index wiring) and the PR/CI workflow.
+Found a gap, an inaccuracy, or want to add a phase/page? Open an issue or a PR — anyone can propose changes, and review is evidence-based (a docs citation, a repro, a passing test), not opinion-based. Every PR references an issue (`Closes #N`); anything bigger than a single-page fix — a new phase, a major upgrade — gets a tracking issue broken into sub-issues first. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full page-authoring conventions (frontmatter, the Validation/Rollback/Automation-opportunity shape, navigation + search-index wiring) and the PR/CI workflow.
 
 ## License
 
