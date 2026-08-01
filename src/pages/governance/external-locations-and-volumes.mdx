@@ -40,7 +40,7 @@ COMMENT 'Raw data landing zone';`} />
 | GCP | Service account | Azure | Managed identity |
 | GCP | Service account | AWS | IAM role |
 
-<p className="text-xs text-[var(--ink-subtle)]">The identity mapping alone isn't sufficient — the target identity also needs an explicit role/policy grant on the target storage account (e.g. Azure's `Storage Blob Data Contributor` on the storage account, not just the managed identity's existence). See <a href="/security/iam-mapping">IAM mapping</a> for the actual role-assignment step.</p>
+The identity mapping alone isn't sufficient — the target identity also needs an explicit role/policy grant on the target storage account (e.g. Azure's `Storage Blob Data Contributor` on the storage account, not just the managed identity's existence). See [IAM mapping](/security/iam-mapping) for the actual role-assignment step.
 
 ## Volumes
 

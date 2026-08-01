@@ -1,0 +1,88 @@
+---
+title: 'Large-scale data transfer'
+layout: ../../layouts/Layout.astro
+description: 'Plan the network and throughput mechanics of moving multi-TB to multi-PB Delta estates across clouds, before wave execution starts.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Large-scale data transfer
+
+Every [cloud mapping](/cloud-mappings/cross-cloud-equivalency-matrix) page and [bulk migration](/execution/bulk-migration) assume the bytes move. This page is about the part underneath that assumption: at 10s–100s of TB, and certainly at PB scale, the public internet path and a single `DEEP CLONE` job are not a transfer plan — they're a bottleneck you discover during wave 1 instead of during planning.
+
+<Callout client:visible variant="prerequisite" title="Size the pipe before you size the wave">
+  Wave planning tells you *what* moves in what order. This page tells you *how fast bytes can actually move* between the source and target cloud — the number that determines whether your cutover window is realistic. Do this math before committing dates to the business.
+</Callout>
+
+## Do the throughput math first
+
+Transfer time is a function of effective throughput, not link-advertised bandwidth — concurrency limits, per-object overhead, and egress throttling all cut into the theoretical number.
+
+<CodeBlock client:visible language="python" filename="transfer_time_estimate.py" code={`data_volume_tb = 480
+effective_throughput_gbps = 8   # measured, not advertised -- run a pilot transfer first
+overhead_factor = 1.35          # object listing, retries, small-file penalty
+
+hours = (data_volume_tb * 8 * 1024 * overhead_factor) / (effective_throughput_gbps * 3600)
+print(f"Estimated transfer window: {hours:.1f} hours")
+`} />
+
+<Callout client:visible variant="warning" title="Measure, don't assume, effective throughput">
+  Run a representative pilot transfer (a real wave-1 table set, not a synthetic benchmark) before publishing a cutover date. Small-file-heavy tables (many partitions, small Parquet/Delta files) throttle hardest — per-object API overhead dominates over raw bandwidth.
+</Callout>
+
+## Transfer path options
+
+| Path | Best for | Trade-off |
+|------|----------|-----------|
+| Public internet + `DEEP CLONE` / cloud-native copy tool | Low-to-mid volume (under ~20 TB), no existing interconnect | Simplest to stand up; throughput capped by egress throttling and internet variability |
+| **AWS DataSync (Enhanced mode)** | S3 ↔ GCS / Azure Blob / Oracle Object Storage, agentless | Direct cloud-to-cloud over HTTPS, parallel listing/transfer/verification, no size cap on object count |
+| **Azure Storage Mover** (cloud-to-cloud, preview) | S3 → Blob at scale | Fully managed; confirm current region/source support before committing a date |
+| **Private interconnect** (Megaport, Equinix Fabric, cloud-native Direct Connect/ExpressRoute/Partner Interconnect paired at a colocation) | Sustained PB-scale transfer, or an ongoing dual-run window measured in weeks | Bypasses public-internet egress path entirely for predictable throughput; procurement lead time is real — start this conversation in Foundation, not Cutover |
+| Physical transfer appliance (AWS Snowball, Azure Data Box, GCP Transfer Appliance) | Genuinely offline-constrained sites, or when the math above returns a transfer window measured in weeks | Removes the network bottleneck entirely; introduces device logistics, chain-of-custody, and a hard resync-the-delta step for anything written after the appliance shipped |
+
+## Tuning Deep Clone for bulk throughput
+
+- Disable auto-compaction during the initial bulk load — let the clone finish, then run `OPTIMIZE` as its own step. Compacting mid-clone competes for the same cluster and I/O budget as the copy itself.
+- Separate `CLONE`, `OPTIMIZE`, and `VACUUM` into distinct jobs rather than one script — isolates failures and lets you re-run just the step that failed.
+- Prefer incremental (repeated) `CLONE` for delta-only re-sync in the days before cutover instead of one giant final copy — see the [bulk migration](/execution/bulk-migration) parallelism guidance for the same principle applied per-wave.
+- Cluster sizing, not a Delta setting, is what controls clone throughput — scale worker count to the source cloud's actual per-account API rate limit, not to an arbitrary "bigger is faster" instinct.
+
+## Sequencing against the wave plan
+
+1. Pilot the transfer path against a representative wave-1 table set; measure real throughput.
+2. Compare the measured transfer window against the [wave plan](/execution/wave-planning) schedule — if the math doesn't fit, fix the transfer path (interconnect, appliance) before fixing the schedule.
+3. If a private interconnect is the answer, start procurement during Foundation — colocation and cross-connect lead times routinely run 4-8 weeks and will not compress under program pressure.
+4. Re-run the throughput pilot after any interconnect/appliance goes live to confirm the estimate before committing bulk migration dates.
+
+## Validation
+
+- Confirm measured (not advertised) throughput against at least one full wave's data volume before publishing the cutover date.
+- Confirm the transfer path handles the actual file-size distribution of the source estate, not just large-table happy-path benchmarks.
+- Confirm a private interconnect, if used, is provisioned and tested with real traffic before bulk migration depends on it.
+
+## Rollback
+
+Transfer-path failures are recoverable without touching migrated state — retry, fail over to the public-internet path as a fallback, or reduce parallelism. None of this blocks a wave rollback; see [rollback](/execution/rollback).
+
+## Automation opportunity
+
+- Wire the throughput pilot into CI so a regression (a slower measured number on re-run) fails the check before it becomes a missed cutover date.
+- Feed the measured throughput number back into the [timeline estimator](/tools/timeline-estimator) so schedule estimates use real numbers, not a default assumption.
+
+<Checklist client:visible title="Large-scale data transfer" items={[
+  { id: 'math', label: 'Transfer time estimated from measured (not advertised) throughput' },
+  { id: 'pilot', label: 'Representative pilot transfer run against real wave-1 data' },
+  { id: 'path', label: 'Transfer path chosen (internet, managed service, interconnect, or appliance) and justified against volume' },
+  { id: 'interconnect', label: 'Private interconnect procurement started early if required' },
+  { id: 'clone-tuning', label: 'CLONE/OPTIMIZE/VACUUM separated into distinct jobs with tuned parallelism' },
+  { id: 'fit', label: 'Measured transfer window checked against the wave plan schedule before dates are published' },
+]} />
+
+## Sources
+
+- AWS — [DataSync accelerates cross-cloud data transfers (Enhanced mode)](https://aws.amazon.com/about-aws/whats-new/2025/05/aws-datasync-accelerates-cross-cloud-data-transfers/)
+- Microsoft Azure — [Fully managed cloud-to-cloud transfers with Azure Storage Mover](https://azure.microsoft.com/en-us/blog/)
+- Databricks — [Clone a table on Databricks](https://docs.databricks.com/aws/en/tables/operations/clone)
+- Megaport — [Connect AWS, Azure, and GCP via Equinix Fabric](https://www.megaport.com/connectivity/)

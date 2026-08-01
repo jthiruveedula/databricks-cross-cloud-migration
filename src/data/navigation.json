@@ -45,7 +45,8 @@
         { "title": "Row and column-level security", "slug": "governance/row-column-security" },
         { "title": "External locations and volumes", "slug": "governance/external-locations-and-volumes" },
         { "title": "Legacy Hive transition", "slug": "governance/legacy-hive-transition" },
-        { "title": "UCX-assisted migration", "slug": "governance/ucx-strategy" }
+        { "title": "UCX-assisted migration", "slug": "governance/ucx-strategy" },
+        { "title": "Disaster recovery", "slug": "governance/disaster-recovery" }
       ]
     },
     {
@@ -87,7 +88,8 @@
         { "title": "SQL queries", "slug": "analytics/sql-queries" },
         { "title": "Dashboards", "slug": "analytics/dashboards" },
         { "title": "Alerts", "slug": "analytics/alerts" },
-        { "title": "Notebooks and repos", "slug": "analytics/notebooks-and-repos" }
+        { "title": "Notebooks and repos", "slug": "analytics/notebooks-and-repos" },
+        { "title": "BI tool reconnection", "slug": "analytics/bi-tool-reconnection" }
       ]
     },
     {
@@ -106,6 +108,7 @@
       "items": [
         { "title": "Wave planning", "slug": "execution/wave-planning" },
         { "title": "Pilot", "slug": "execution/pilot" },
+        { "title": "Large-scale data transfer", "slug": "execution/large-scale-data-transfer" },
         { "title": "Bulk migration", "slug": "execution/bulk-migration" },
         { "title": "Cutover", "slug": "execution/cutover" },
         { "title": "Rollback", "slug": "execution/rollback" },

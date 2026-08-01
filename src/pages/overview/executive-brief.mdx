@@ -42,6 +42,10 @@ Seven phases, every migration. Duration and cost scale with workspace count, use
 2. **Identity done late** — the longest pole. Start it in Foundation, not Cutover.
 3. **Legacy Hive metastore debt** — every workspace-local table adds UCX-assisted upgrade work inside the migration.
 
+## Commercial continuity — a finance surprise, not a technical one
+
+A cloud-to-cloud move is also a marketplace change: Databricks is transacted through each cloud's own marketplace (AWS Marketplace, Azure Marketplace, GCP Marketplace), and cloud-native committed-spend discounts do not follow the workload. An Azure Databricks reservation (DBCU prepurchase) does not carry over to an AWS Databricks contract — that balance is stranded unless renegotiated. Databricks Commit Units are the portable piece (usable across clouds under the same Databricks account); marketplace-specific reservations are not. Engage the Databricks account team and cloud procurement early enough that this re-papering doesn't land as a budget surprise the same week as cutover.
+
 ## Readiness checklist
 
 Run this before you approve the program baseline.
