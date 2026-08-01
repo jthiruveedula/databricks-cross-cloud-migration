@@ -4,12 +4,15 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/build-search-index.mjs",
     "dev": "astro dev",
     "start": "astro dev",
+    "prebuild": "node scripts/build-search-index.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "test": "vitest run",
-    "astro": "astro"
+    "astro": "astro",
+    "build:search-index": "node scripts/build-search-index.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^7.0.3",
@@ -19,6 +22,7 @@
     "framer-motion": "^12.42.2",
     "gsap": "^3.15.0",
     "lucide-react": "^0.400.0",
+    "minisearch": "^7.2.0",
     "next-themes": "^0.4.6",
     "prism-react-renderer": "^2.4.1",
     "react": "^18.3.1",

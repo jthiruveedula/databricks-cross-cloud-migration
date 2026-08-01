@@ -1,28 +1,55 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X } from 'lucide-react';
-import nav from '../data/navigation.json';
+import { Search, X, FileText } from 'lucide-react';
+import MiniSearch from 'minisearch';
+import searchIndex from '../data/search-index.json';
 import { withBase } from '../lib/paths';
 
-interface Hit {
-  title: string;
+interface Entry {
+  id: number;
   slug: string;
+  pageTitle: string;
   section: string;
+  heading: string | null;
+  headingSlug: string | null;
+  text: string;
+}
+
+// Full-text search across every page's actual content, not just page titles -- the
+// previous implementation only matched navigation.json titles, so a real term that only
+// appears in body text (e.g. "delta", "PrivateLink", "metastore") returned nothing even
+// though dozens of pages mention it. Index is generated at build/dev time by
+// scripts/build-search-index.mjs from every src/pages/**/*.mdx section.
+const miniSearch = new MiniSearch<Entry>({
+  fields: ['pageTitle', 'heading', 'text'],
+  storeFields: ['slug', 'pageTitle', 'section', 'heading', 'headingSlug', 'text'],
+  searchOptions: {
+    boost: { pageTitle: 3, heading: 2 },
+    fuzzy: 0.2,
+    prefix: true,
+  },
+});
+miniSearch.addAll(searchIndex as Entry[]);
+
+function excerpt(text: string, query: string): string {
+  const idx = text.toLowerCase().indexOf(query.toLowerCase().split(/\s+/)[0]);
+  if (idx < 0) return text.slice(0, 120) + (text.length > 120 ? '…' : '');
+  const start = Math.max(0, idx - 40);
+  const end = Math.min(text.length, idx + 100);
+  return (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '');
 }
 
 export default function SearchOverlay() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
 
-  const hits = useMemo<Hit[]>(() => {
-    const q = query.toLowerCase();
-    if (!q) return [];
-    return nav.sections.flatMap((section) =>
-      section.items
-        .filter((item) => item.title.toLowerCase().includes(q) || section.title.toLowerCase().includes(q))
-        .map((item) => ({ title: item.title, slug: withBase(`/${item.slug}`), section: section.title }))
-    );
+  const hits = useMemo(() => {
+    if (!query.trim()) return [];
+    return miniSearch.search(query).slice(0, 8) as unknown as (Entry & { score: number })[];
   }, [query]);
+
+  useEffect(() => setActiveIndex(0), [query]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -39,6 +66,17 @@ export default function SearchOverlay() {
   useEffect(() => {
     if (!open) setQuery('');
   }, [open]);
+
+  function hrefFor(hit: Entry) {
+    const base = withBase(`/${hit.slug}`);
+    return hit.headingSlug ? `${base}#${hit.headingSlug}` : base;
+  }
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIndex((i) => Math.min(i + 1, hits.length - 1)); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIndex((i) => Math.max(i - 1, 0)); }
+    if (e.key === 'Enter' && hits[activeIndex]) { window.location.href = hrefFor(hits[activeIndex]); }
+  }
 
   return (
     <>
@@ -83,6 +121,7 @@ export default function SearchOverlay() {
                   autoFocus
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={onKeyDown}
                   placeholder="Search migration runbook..."
                   className="flex-1 bg-transparent text-[var(--ink)] outline-none placeholder:text-[var(--ink-subtle)]"
                 />
@@ -90,29 +129,44 @@ export default function SearchOverlay() {
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <div className="max-h-80 overflow-y-auto">
+              <div className="max-h-96 overflow-y-auto">
                 {hits.length === 0 ? (
                   <div className="px-4 py-6 text-center text-sm text-[var(--ink-subtle)]">
-                    {query ? 'No results found.' : 'Start typing to search pages.'}
+                    {query ? 'No results found.' : 'Start typing to search page titles and content.'}
                   </div>
                 ) : (
                   <ul>
                     {hits.map((hit, i) => (
-                      <motion.li
-                        key={i}
-                        initial={{ opacity: 0, x: -4 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.02 }}
-                      >
+                      <li key={hit.id}>
                         <a
-                          href={hit.slug}
-                          className="block px-4 py-3 transition-colors hover:bg-[var(--surface-hover)]"
-                          onClick={() => setOpen(false)}
+                          href={hrefFor(hit)}
+                          onMouseEnter={() => setActiveIndex(i)}
+                          className={`flex items-start gap-3 px-4 py-3 text-sm transition-colors ${
+                            i === activeIndex ? 'bg-[var(--accent-soft)]' : 'hover:bg-[var(--surface-hover)]'
+                          }`}
                         >
-                          <div className="text-sm font-medium text-[var(--ink)]">{hit.title}</div>
-                          <div className="text-xs text-[var(--ink-subtle)]">{hit.section}</div>
+                          <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--ink-subtle)]" />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-center gap-1.5">
+                              <span className="font-medium text-[var(--ink)]">{hit.pageTitle}</span>
+                              {hit.heading && (
+                                <>
+                                  <span className="text-[var(--ink-subtle)]">›</span>
+                                  <span className="text-[var(--ink-muted)]">{hit.heading}</span>
+                                </>
+                              )}
+                              {hit.section && (
+                                <span className="ml-auto rounded-full bg-[var(--surface)] px-2 py-0.5 text-xs text-[var(--ink-subtle)]">
+                                  {hit.section}
+                                </span>
+                              )}
+                            </span>
+                            <span className="mt-0.5 block truncate text-[var(--ink-subtle)]">
+                              {excerpt(hit.text, query)}
+                            </span>
+                          </span>
                         </a>
-                      </motion.li>
+                      </li>
                     ))}
                   </ul>
                 )}
