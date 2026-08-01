@@ -27,7 +27,7 @@
     "prism-react-renderer": "^2.4.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "rehype-mermaid": "^2.1.0",
+    "rehype-mermaid": "^3.0.0",
     "simple-icons": "^16.26.0",
     "tailwindcss": "^4.3.3"
   },
