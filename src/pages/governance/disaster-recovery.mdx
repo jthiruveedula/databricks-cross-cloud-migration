@@ -1,0 +1,76 @@
+---
+title: 'Disaster recovery'
+layout: ../../layouts/Layout.astro
+description: 'Design DR for the workspace and Unity Catalog metastore you just landed in the target cloud — a migration is not a DR strategy on its own.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# Disaster recovery
+
+A cross-cloud migration replaces the *primary* region and account, it does not by itself give the new estate a *secondary* one. Teams that spent a year moving to the target cloud routinely leave the target as a single region with no DR posture — the exact single-region exposure the source often had. Design DR for the landing zone, not just the move into it.
+
+<Callout client:visible variant="prerequisite" title="This is a landing-zone decision, not an afterthought">
+  Decide DR topology alongside [Unity Catalog strategy](/governance/unity-catalog-strategy) and target region selection — retrofitting a secondary region after cutover means redesigning networking, Private Link, and CMK configuration a second time.
+</Callout>
+
+## Unity Catalog metastores are regional — DR has to work around that
+
+A metastore is created per account and region and cannot move or span regions. DR options fall out of that one constraint:
+
+| Approach | What it is | Trade-off |
+|---|---|---|
+| **Databricks Managed Disaster Recovery** (AWS + Azure) | Databricks-operated secondary workspace + UC metastore in a second region, with continuous replication of UC metadata and managed table data, workspace assets (notebooks, jobs, warehouses, ACLs) | Managed failover reduces custom tooling, but the secondary workspace's network config, Private Link, and CMK setup must match primary from day one — not bolted on later |
+| Delta Sharing across metastores | Share tables from the primary metastore to a standby workspace/metastore in a second region; standby queries live or maintains a synced replica | Cheaper for read-mostly DR; the standby is not automatically promotable to primary without a runbook |
+| Customer-built dual-write / replication | Manually replicate catalogs, grants, and Delta tables to a second-region metastore via CDC or scheduled Deep Clone | Full control, full operational burden — the same replication discipline this site recommends for [dual-run during migration](/collaboration/cross-cloud-collaboration#keep-source-and-target-in-sync-dual-run) applies to steady-state DR too |
+
+<Callout client:visible variant="warning" title="Never dual-register the same table as external in two metastores">
+  Registering a shared table as an external table in more than one metastore causes schema/commit desync under concurrent writes — the same failure mode called out in [cross-cloud collaboration](/collaboration/cross-cloud-collaboration). Use Delta Sharing or a controlled replica for DR reads, never a second external-table registration of the primary's storage path.
+</Callout>
+
+## What has to match between primary and secondary
+
+- **Network configuration** — Private Link/PSC, VPC/VNet peering, and egress control must be provisioned in the secondary region before it can take real traffic, not stood up reactively during an incident.
+- **Customer-managed keys** — if primary uses CMK, the secondary workspace needs its own key material provisioned and tested, not a same-key assumption across regions.
+- **Identity and grants** — account-level groups and UC grants must be present in the secondary metastore; a DR failover that surfaces "table exists, no one can query it" is a governance gap discovered at the worst time.
+- **Job and pipeline definitions** — a promotable secondary needs the same jobs/DLT pipelines defined against the secondary metastore's catalogs, kept in sync via the same [CI/CD promotion](/pipelines/cicd-promotion) pipeline that deploys to primary.
+
+## Failover runbook shape
+
+1. Declare the incident and confirm primary is genuinely unavailable (not a transient blip) against a documented health-check threshold.
+2. Promote the secondary metastore/workspace to primary per the DR runbook — Managed DR automates this; a customer-built replica requires a scripted promotion (repoint DNS/connection strings, flip the standby to read-write, confirm grants).
+3. Repoint dependent systems — [BI tool connections](/analytics/bi-tool-reconnection), external orchestrators, and any hardcoded workspace URL — the same reconnection problem a migration cutover has, on an incident timeline instead of a planned one.
+4. Run the same [technical](/validation/technical-validation) and [data reconciliation](/validation/data-reconciliation) checks used during migration cutover before declaring the failover complete.
+5. Failback to the original primary once it's healthy, on a planned schedule — don't leave the promoted secondary as a permanent, undocumented new primary.
+
+## Validation
+
+- Run a failover drill against the secondary region on a schedule (quarterly is a reasonable default), not only after an incident forces one.
+- Confirm every dependent system's reconnection procedure (BI tools, orchestrators, CI/CD) is documented and has been exercised in the drill, not assumed to "just work."
+- Confirm the secondary's network, CMK, and identity configuration are verified in sync with primary as part of routine change management, not a one-time setup check.
+
+## Rollback
+
+DR design itself carries no migration rollback risk — it's additive infrastructure. If a drill reveals a broken failover path, fix it and re-drill; primary is never at risk during a DR drill against a genuinely isolated secondary.
+
+## Automation opportunity
+
+- Define the secondary workspace, metastore, and network config in the same Terraform module set used for the primary target foundation — see [Terraform patterns](/templates/terraform-patterns) — so drift between primary and secondary is caught in plan output, not in an incident.
+- Automate the failover drill itself as a scheduled job that promotes a scratch environment, runs reconciliation, and tears down — turning "DR works" into a continuously tested claim instead of a document.
+
+<Checklist client:visible title="Disaster recovery" items={[
+  { id: 'topology', label: 'DR topology (Managed DR, Delta Sharing, or custom replication) chosen alongside target region selection' },
+  { id: 'network-match', label: 'Secondary network config, Private Link/PSC, and CMK match primary' },
+  { id: 'identity-match', label: 'Account-level groups and UC grants present in secondary metastore' },
+  { id: 'no-dual-register', label: 'No table dual-registered as external in both metastores' },
+  { id: 'runbook', label: 'Failover runbook documented, including dependent-system reconnection' },
+  { id: 'drill', label: 'Failover drill run on a schedule, not only after a real incident' },
+]} />
+
+## Sources
+
+- Databricks — [Managed Disaster Recovery](https://docs.databricks.com/aws/en/admin/managed-disaster-recovery)
+- Microsoft Learn — [Disaster recovery for Azure Databricks](https://learn.microsoft.com/en-us/azure/databricks/admin/disaster-recovery)
+- Databricks — [Unity Catalog best practices](https://docs.databricks.com/aws/en/data-governance/unity-catalog/best-practices)

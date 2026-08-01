@@ -1,0 +1,81 @@
+---
+title: 'BI tool reconnection'
+layout: ../../layouts/Layout.astro
+description: 'Reconnect Power BI, Tableau, and Looker to the target workspace without breaking every downstream report at cutover.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+
+# BI tool reconnection
+
+[Dashboards](/analytics/dashboards) covers Databricks-native dashboards. Everything downstream of Databricks — Power BI datasets, Tableau extracts and live connections, Looker explores — points at the *source* workspace's hostname, HTTP path, and credential, and none of that migrates automatically. This is consistently underestimated: it is a business-user-facing outage the moment the source SQL warehouse goes read-only, not a technical migration detail.
+
+<Callout client:visible variant="warning" title="This breaks silently, not loudly">
+  A Power BI dataset with a scheduled refresh does not error at cutover — it keeps refreshing against the *source* workspace until that workspace is decommissioned, then fails with a generic connection error days or weeks later, disconnected from the migration timeline. Inventory every BI connection during [asset inventory](/discovery/asset-inventory); don't wait for the failure to find them.
+</Callout>
+
+## What actually breaks
+
+| Component | Why it breaks | Fix |
+|---|---|---|
+| Connection string (host + HTTP path) | Every BI tool embeds the source SQL warehouse's hostname and HTTP path directly in the dataset/workbook/model definition | Rebuild the connection against the target SQL warehouse's endpoint — there is no in-place hostname swap in most tools |
+| Personal access token stored in a dataset credential | PATs are workspace/user-scoped; the source PAT has no meaning against a target workspace, and PATs are increasingly deprecated in favor of OAuth | Re-authenticate with a service-principal-based OAuth credential in the target, not a re-issued PAT |
+| Gateway data source (on-premises/VNet gateway) | Gateway-registered data sources are configured once and reused by every published report; they don't follow a workspace migration automatically | Reconfigure the gateway data source explicitly — see the Power BI note below |
+| Row-level security tied to Unity Catalog identity | If RLS/CLS policies are enforced at the Databricks layer (see [row and column-level security](/governance/row-column-security)) rather than in the BI tool, they depend on the querying identity resolving correctly in the *target* metastore | Confirm the service principal or OAuth identity used by the BI connection is granted in target UC before cutover, not after |
+
+## Power BI — the current pattern (2025+)
+
+Databricks connections in Power BI now support **Client Credentials (M2M OAuth)**, and Databricks documentation labels PATs as legacy. Prefer M2M for anything on a schedule (a scheduled refresh has no user present to complete an interactive OAuth flow).
+
+<Callout client:visible variant="tip" title="M2M, not PAT, for scheduled refresh">
+  Desktop 2.143.878.0+ and the on-premises/VNet gateway (v3000.270.10+) support Databricks Client Credentials. Use a service principal + OAuth secret, not a re-issued PAT, for any dataset with a scheduled refresh against the target workspace.
+</Callout>
+
+<Callout client:visible variant="warning" title="Gateway M2M setup is currently manual">
+  The Power BI REST API does not fully support configuring M2M on a VNet gateway data source — this step has to be done by hand in the gateway UI during cutover. Budget explicit time for it in the [cutover](/execution/cutover) runbook; it is not scriptable end-to-end today.
+</Callout>
+
+## Tableau and Looker
+
+- **Tableau**: extracts and live connections both store the JDBC/ODBC connection string (host + HTTP path) plus credential in the data source definition. Simba driver 2.6.36+ (or current) supports both U2M (interactive) and M2M (service principal) OAuth — rebuild the connection with the target host/HTTP path and an M2M credential rather than patching the old one in place.
+- **Looker**: JDBC connections are defined once per Looker connection object and reused by every LookML model built on it — update the connection's host/HTTP path/credential centrally rather than per-explore, and re-run a representative set of explores to confirm query pushdown still resolves against target Unity Catalog objects.
+
+## Reconnection sequence
+
+1. During [asset inventory](/discovery/asset-inventory), enumerate every BI tool connection pointed at a source SQL warehouse or cluster — do not rely on the BI team self-reporting the list.
+2. Provision the equivalent service principal + OAuth (M2M) credential in the target workspace, granted against the target Unity Catalog objects the report actually queries.
+3. Stage the reconnection in a non-production copy of the report/dataset first; validate visual and numeric parity against the source-connected version.
+4. Cut over the connection at the same point the underlying SQL warehouse or table goes read-only on source — a BI tool still pointed at source after cutover is silently reading stale data, not failing loudly.
+5. Retire the source-side PAT/credential only after every known BI connection has been confirmed repointed.
+
+## Validation
+
+- Confirm every BI connection identified in discovery has been repointed — reconcile against the discovery inventory, not against "everything the BI team remembered."
+- Run a visual-parity check (numbers, row counts, chart shapes) between the source-connected and target-connected version of each report before retiring source access.
+- Confirm scheduled refreshes complete successfully against target at least once before cutover day, not for the first time on cutover day itself.
+
+## Rollback
+
+Keep the source-side connection credential valid (not yet retired) through the [hypercare](/execution/hypercare) window so a broken target connection can fail back to source without waiting on a new credential to be issued under pressure.
+
+## Automation opportunity
+
+- Script service-principal + OAuth credential provisioning in target UC as part of the same automation that grants table access per wave — see [grants and roles](/governance/grants-and-roles).
+- Where the BI tool exposes an API (Tableau REST API, Looker API), automate connection metadata updates in bulk rather than per-report manual edits; reserve manual reconfiguration for tools that genuinely require it (e.g. Power BI gateway M2M today).
+
+<Checklist client:visible title="BI tool reconnection" items={[
+  { id: 'inventory', label: 'Every BI connection to source Databricks enumerated during discovery' },
+  { id: 'credential', label: 'Service-principal OAuth (M2M) credential provisioned in target, not a re-issued PAT' },
+  { id: 'gateway', label: 'Power BI gateway M2M reconfiguration scheduled as a manual cutover-day step' },
+  { id: 'parity', label: 'Visual/numeric parity validated per report before source is retired' },
+  { id: 'refresh', label: 'Scheduled refresh confirmed successful against target before cutover day' },
+  { id: 'rollback-window', label: 'Source credential kept valid through hypercare for fail-back' },
+]} />
+
+## Sources
+
+- Databricks — [Connect Power BI to Databricks](https://docs.databricks.com/aws/en/partners/bi/power-bi/service)
+- Databricks — [JDBC/ODBC driver authentication](https://docs.databricks.com/aws/en/integrations/jdbc/authentication)
+- Databricks — [Personal access tokens (legacy)](https://docs.databricks.com/aws/en/dev-tools/auth/pat)
