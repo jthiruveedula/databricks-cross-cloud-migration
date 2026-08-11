@@ -1,0 +1,211 @@
+---
+title: 'What does not migrate'
+layout: ../../layouts/Layout.astro
+description: 'The assets a cross-cloud move destroys rather than moves — audit history, run history, notebook revisions, secret values, workspace ACLs — and the export that has to run before cutover, not after.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Accordion from '../../components/Accordion.tsx';
+
+# What does not migrate
+
+Ninety days after Northwind Retail's cutover, an auditor asked who had queried the finance catalog in the previous twelve months. The answer existed in `system.access.audit` in an Azure metastore that had been deleted six weeks earlier.
+
+Nothing failed during that migration. Reconciliation was clean, every dashboard worked, business sign-off was unanimous. The loss was invisible because the assets below do not throw errors when they go missing — they simply are not there the day someone needs them.
+
+<Callout client:visible variant="warning" title="Every item on this page has the same deadline: before the source is decommissioned">
+  These are one-way losses. Once the source workspace and metastore are gone, none of it is recoverable at any price. The export window is between "target is live" and "source is deleted" — and the pressure at that point is all in the direction of deleting the source, because it is still costing money. Put the exports in the cutover plan, not the hypercare backlog.
+</Callout>
+
+## The register
+
+| Asset | What is lost | Export before you lose it | When |
+|---|---|---|---|
+| Audit logs (`system.access.audit`) | Every access and admin event, up to 365 days | `CREATE TABLE ... DEEP CLONE` into a durable location, or Delta Sharing to the target | Before decommission |
+| Query history (`system.query.history`) | 365 days of query text, duration, and cost attribution | Same — clone to durable storage | Before decommission |
+| Table lineage (`system.access.table_lineage`) | 365 days of column-level lineage; the target starts empty | Clone; the target rebuilds lineage only from its own activity | Before decommission |
+| Billing usage (`system.billing.usage`) | The cost baseline you need to prove the migration saved money | Clone | Before decommission |
+| Job run history | 60 days, then automatically removed. Recreated jobs start at zero | Export via Jobs API to Delta | **Rolling — the 60-day window expires on its own** |
+| Cluster event logs, driver/executor logs | Startup failures, OOM history, autoscaling behaviour | Log delivery to cloud storage | Configure before, export at cutover |
+| Notebook revision history | Every version except the current one | Git-back the notebooks, or accept current-state only | Before workspace export |
+| Delta table history | Pre-migration versions and time travel | Pinned `DEEP CLONE ... VERSION AS OF` snapshots | Before cutover |
+| Secret values | Everything — secrets are write-only | Re-source from the system of record; you cannot read them back | N/A — re-create |
+| Workspace object ACLs | Notebook, folder, job, cluster, and pool permissions | Permissions API export per object | Before cutover |
+| Dashboard subscriptions and alert recipients | Who gets which email, on what schedule | Export dashboard/alert definitions including subscribers | Before cutover |
+| Delta Sharing recipient activation | Partner tokens; recipients need new activation links | Nothing to export — a partner communication task | Plan 2–4 weeks ahead |
+| Personal access tokens | All of them, plus anything using them | Inventory what authenticates with a PAT, before it breaks | Before cutover |
+| DBFS root | Not migratable as a unit | Drain to Volumes or external locations | Before cutover |
+
+---
+
+## The four that hurt most, worked
+
+### 1. Audit history — the compliance one
+
+<Callout client:visible variant="warning" title="System tables are per-metastore, and a metastore does not cross clouds">
+  `system.access.audit` lives in the source metastore. The target's system tables begin at the moment the target metastore was created. If your retention obligation is seven years and your system tables hold 365 days, you already needed an export process before the migration — but the migration is what turns a slow-burning gap into an immediate, permanent one.
+</Callout>
+
+Clone the system tables you are obliged to keep into storage you control, in the target cloud, before anything is deleted:
+
+<CodeBlock client:visible language="sql" filename="preserve-audit.sql" code={`-- Run in the SOURCE workspace, writing to a durable external location.
+CREATE TABLE IF NOT EXISTS archive.compliance.audit_azure_2026
+  DEEP CLONE system.access.audit;
+
+CREATE TABLE IF NOT EXISTS archive.compliance.query_history_azure_2026
+  DEEP CLONE system.query.history;
+
+CREATE TABLE IF NOT EXISTS archive.compliance.lineage_azure_2026
+  DEEP CLONE system.access.table_lineage;
+
+CREATE TABLE IF NOT EXISTS archive.compliance.billing_azure_2026
+  DEEP CLONE system.billing.usage;`} />
+
+Then verify the archive is readable *from the target*, before the source goes:
+
+<CodeBlock client:visible language="sql" code={`-- In the TARGET workspace, after sharing or re-registering the archive location.
+SELECT MIN(event_time), MAX(event_time), COUNT(*)
+FROM archive.compliance.audit_azure_2026;`} />
+
+An archive nobody has queried from the target is not an archive; it is an assumption.
+
+### 2. Job run history — the one with its own clock
+
+This is the only item that expires whether you migrate or not. Databricks retains job and pipeline run history for 60 days, then removes it automatically. A migration that runs longer than two months loses the earliest runs mid-project, and every recreated job in the target starts with an empty history — so SLA trend reporting, "has this job ever taken this long before", and capacity baselining all reset to zero on cutover day.
+
+<CodeBlock client:visible language="python" filename="export_run_history.py" code={`from databricks.sdk import WorkspaceClient
+
+w = WorkspaceClient()  # source workspace
+rows = []
+for job in w.jobs.list(expand_tasks=False):
+    for run in w.jobs.list_runs(job_id=job.job_id, expand_tasks=False):
+        rows.append({
+            "job_id": job.job_id,
+            "job_name": job.settings.name if job.settings else None,
+            "run_id": run.run_id,
+            "start_time": run.start_time,
+            "duration_ms": run.execution_duration,
+            "state": run.state.result_state.value if run.state and run.state.result_state else None,
+        })
+
+# Write to Delta so the target can query the pre-migration baseline.
+spark.createDataFrame(rows).write.mode("append").saveAsTable(
+    "archive.ops.job_runs_pre_migration"
+)`} />
+
+<Callout client:visible variant="tip" title="Run this on a schedule from the day discovery starts, not at cutover">
+  On a six-week migration, exporting at cutover already means the first two weeks of baseline are gone. Northwind scheduled this weekly from week one and used the result to prove the target's median job duration was within 4% of source — which is what business validation actually asked for, and could not have been answered otherwise.
+</Callout>
+
+### 3. Workspace object ACLs — the permissions nobody exported
+
+Unity Catalog grants and workspace object permissions are two different systems. `information_schema` covers the first and knows nothing about the second. Who can run a job, edit a notebook, restart a cluster, or attach to a pool is held per object in the Permissions API — and a workspace export does not include it.
+
+<CodeBlock client:visible language="python" filename="export_object_acls.py" code={`from databricks.sdk import WorkspaceClient
+import json
+
+w = WorkspaceClient()
+acls = {}
+
+for job in w.jobs.list():
+    acls[f"job/{job.job_id}"] = [
+        a.as_dict() for a in w.permissions.get("jobs", str(job.job_id)).access_control_list
+    ]
+
+for cluster in w.clusters.list():
+    acls[f"cluster/{cluster.cluster_id}"] = [
+        a.as_dict()
+        for a in w.permissions.get("clusters", cluster.cluster_id).access_control_list
+    ]
+
+# Notebooks and folders: walk /Users and /Shared, then permissions.get("notebooks", object_id)
+
+with open("workspace_acls.json", "w") as f:
+    json.dump(acls, f, indent=2)`} />
+
+The failure mode is specific and slow: everything works during hypercare because the migration team has admin, and then three weeks later a team discovers they can no longer restart their own cluster.
+
+### 4. Secret values — the one you cannot export at all
+
+Secret scopes can be listed. Secret *values* cannot be read back, by design, by anyone. There is no export.
+
+<CodeBlock client:visible language="bash" code={`# You can inventory what exists...
+databricks secrets list-scopes
+databricks secrets list-secrets --scope prod-etl
+
+# ...and that is all. The values come from your vault, your CI system, or the
+# service that issued them -- not from Databricks.`} />
+
+Which makes this a dependency-tracking exercise, not a data-movement one. Build the list of "what secret, used by which job, sourced from where" during discovery, while the people who created them are still available. See [secrets and KMS](/security/secrets-and-kms).
+
+---
+
+## The rest, briefly
+
+<Accordion client:visible items={[
+  {
+    title: 'Notebook revision history',
+    content: 'A workspace export captures the current state of every notebook. Revision history is not included, so "who changed this and when" for anything not in Git is gone. This is the strongest practical argument for Git-backed folders, and it is worth making before the migration rather than after: notebooks that live in a repo lose nothing at all here.'
+  },
+  {
+    title: 'Delta table history',
+    content: 'CLONE never copies source history. The target DESCRIBE HISTORY starts at its own CLONE operation and time travel to a pre-migration version fails once the source is gone. If a table genuinely needs pre-cutover time travel -- a regulatory restatement, a reproducible model training set -- take pinned DEEP CLONE ... VERSION AS OF snapshots before cutover. Covered in full under data reconciliation.'
+  },
+  {
+    title: 'Dashboard subscriptions and alert recipients',
+    content: 'The dashboard migrates; the list of people receiving it at 07:00 every Monday often does not. The failure is silent in the worst way -- nobody complains about an email they stopped receiving, they just quietly stop relying on the report. Export subscriber lists with the definitions and re-verify by asking recipients to confirm the first target-generated send.'
+  },
+  {
+    title: 'Delta Sharing recipient activation',
+    content: 'Recipient activation links and tokens are bound to the source metastore. Every external partner needs a new activation link, which means a communication and a scheduling exercise with organisations you do not control. Start it two to four weeks before cutover, not on the day.'
+  },
+  {
+    title: 'Cluster event logs and cost baselines',
+    content: 'Cluster event history, driver and executor logs, and pool warm-start behaviour are workspace-scoped. Without them you cannot answer "was this OOM happening before the migration too" during hypercare -- which is the single most common hypercare question. Configure log delivery to cloud storage on both sides so the comparison is possible.'
+  },
+  {
+    title: 'Personal access tokens',
+    content: 'Every PAT dies with the source workspace, along with anything authenticating with one -- an analyst\'s local script, a partner integration, a forgotten cron job on someone\'s VM. Inventory PAT usage during discovery. The ones that surface after cutover surface as an outage in something nobody knew existed.'
+  }
+]} />
+
+## Validation
+
+You cannot reconcile an absence, so the check is procedural rather than analytical:
+
+- Every row in the register above has a named owner and a decision: **exported**, or **accepted as lost, in writing**.
+- Each export has been read back **from the target**, not just written from the source.
+- The source decommission ticket has the export sign-off as a blocking dependency — see [decommissioning in wave planning](/execution/wave-planning).
+
+## Rollback
+
+There is none. That is the entire reason this page exists as a pre-cutover activity rather than a hypercare one. The only mitigation is to delay source decommissioning until every export is verified — which costs money for a few extra weeks, and is cheaper than the alternative by several orders of magnitude.
+
+## Automation opportunity
+
+- Schedule the system-table and job-run-history exports from the day discovery starts, so the baseline covers the whole project rather than its last day.
+- Add the object-ACL export to the same run and diff source against target during hypercare — the same pattern the [automation toolkit](/templates/automation-toolkit) uses for Unity Catalog grants.
+- Gate the source-decommission job on the export verification job succeeding, rather than on a calendar date.
+
+<Checklist client:visible title="Before the source is decommissioned" items={[
+  { id: 'audit', label: 'Audit, query history, lineage, and billing system tables cloned to durable storage' },
+  { id: 'readback', label: 'Every archive read back successfully FROM THE TARGET, not just written from the source' },
+  { id: 'runs', label: 'Job run history exported on a schedule since discovery, not just at cutover' },
+  { id: 'acls', label: 'Workspace object ACLs exported (jobs, clusters, pools, notebooks, folders)' },
+  { id: 'secrets', label: 'Secret inventory built with source-of-truth for each value — values cannot be exported' },
+  { id: 'notebooks', label: 'Notebooks needing revision history moved to Git-backed folders' },
+  { id: 'history', label: 'Tables needing pre-cutover time travel have pinned version snapshots' },
+  { id: 'subs', label: 'Dashboard subscribers and alert recipients exported and re-verified after first target send' },
+  { id: 'sharing', label: 'Delta Sharing recipients contacted and re-activated' },
+  { id: 'pats', label: 'PAT usage inventoried, including scripts and integrations outside the platform team' },
+  { id: 'signoff', label: 'Decommission ticket blocked on export sign-off, not on a calendar date' },
+]} />
+
+## Sources
+
+- Databricks — [System tables reference](https://docs.databricks.com/aws/en/admin/system-tables/) (365-day free retention for `access.audit`, `query.history`, `access.table_lineage`, `billing.usage`)
+- Databricks — [Monitor Lakeflow Jobs](https://docs.databricks.com/aws/en/jobs/monitor) (60-day run history retention; save results before they expire)
+- Databricks — [Audit log system table reference](https://docs.databricks.com/aws/en/admin/system-tables/audit-logs)
+- Databricks — [`CREATE TABLE ... CLONE`](https://docs.databricks.com/aws/en/sql/language-manual/delta-clone)
