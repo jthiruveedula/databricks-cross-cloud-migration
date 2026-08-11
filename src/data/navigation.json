@@ -110,6 +110,7 @@
         { "title": "Pilot", "slug": "execution/pilot" },
         { "title": "Large-scale data transfer", "slug": "execution/large-scale-data-transfer" },
         { "title": "Bulk migration", "slug": "execution/bulk-migration" },
+        { "title": "What does not migrate", "slug": "execution/what-does-not-migrate" },
         { "title": "Cutover", "slug": "execution/cutover" },
         { "title": "Rollback", "slug": "execution/rollback" },
         { "title": "Hypercare", "slug": "execution/hypercare" }
