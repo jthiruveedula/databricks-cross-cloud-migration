@@ -103,6 +103,11 @@ class DatabricksGateway(Gateway):
         self.executed: List[str] = []
         self._client = self._build_client(host, token, profile)
 
+    @property
+    def client(self) -> Any:
+        """The underlying SDK client, for callers that need APIs beyond SQL."""
+        return self._client
+
     @staticmethod
     def _build_client(host: str, token: Optional[str], profile: Optional[str]) -> Any:
         try:

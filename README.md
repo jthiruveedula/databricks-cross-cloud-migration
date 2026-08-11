@@ -16,6 +16,10 @@ Moving Databricks off one cloud and onto another means rebuilding, one deliberat
 
 Before committing to a physical migration, it's also worth asking whether the actual driver can be satisfied by governing data remotely instead — Unity Catalog federation (foreign catalogs, Delta Sharing, Lakehouse Federation) can provide governed cross-cloud access without moving data at all, and is sometimes the permanent answer rather than a migration stopgap.
 
+## Start here
+
+New to the runbook, or leading a migration? **[Start here — by role](https://jthiruveedula.github.io/databricks-cross-cloud-migration/overview/start-here-by-role)** gives the architect, the platform engineer, the project manager, and the domain owner each a first week, the decisions only they can make, and a reading path through the sections below that are actually theirs.
+
 ## Runbook structure
 
 | Phase | Covers |

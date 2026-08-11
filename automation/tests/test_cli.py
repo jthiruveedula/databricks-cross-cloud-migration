@@ -233,3 +233,61 @@ def test_row_filter_and_column_masks_are_surfaced_as_work(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "ROW_COLUMN_POLICY" in out
     assert "not copied by CLONE" in out
+
+
+WORKSPACE_FIXTURE = os.path.join(HERE, "fixtures", "workspace.json")
+
+
+def test_workspace_collect_from_fixture_writes_manifest_and_summary(tmp_path, capsys):
+    out = str(tmp_path / "workspace.json")
+    code = main(
+        [
+            "-c", write_config(tmp_path), "workspace",
+            "--fixture", WORKSPACE_FIXTURE, "-o", out,
+        ]
+    )
+    assert code == EXIT_OK
+    data = json.load(open(out, encoding="utf-8"))
+    assert len(data["assets"]["jobs"]) == 3
+    err = capsys.readouterr().err
+    assert "Usually owned by" in err  # the summary names a role per asset class
+    assert "object_acls" in err
+
+
+def test_workspace_csv_export_gives_one_file_per_asset_class(tmp_path):
+    csv_dir = str(tmp_path / "csv")
+    main(
+        [
+            "-c", write_config(tmp_path), "workspace",
+            "--fixture", WORKSPACE_FIXTURE, "-o", str(tmp_path / "w.json"),
+            "--csv-dir", csv_dir,
+        ]
+    )
+    files = sorted(os.listdir(csv_dir))
+    assert "jobs.csv" in files and "object_acls.csv" in files
+    header = open(os.path.join(csv_dir, "jobs.csv"), encoding="utf-8").readline()
+    assert "cluster_policy_ids" in header
+
+
+def test_crossrefs_exits_nonzero_on_blockers_and_names_them(tmp_path, capsys):
+    code = main(["-c", write_config(tmp_path), "crossrefs", "-w", WORKSPACE_FIXTURE])
+    assert code == EXIT_FINDINGS
+    out = capsys.readouterr().out
+    assert "POL-RETIRED-2023" in out
+    assert "dbfs:/mnt/legacy" in out
+    assert "instance-profile/legacy-etl-role" in out
+    assert "must move together" in out
+
+
+def test_crossrefs_csv_is_written_when_asked(tmp_path):
+    csv_path = str(tmp_path / "crossrefs.csv")
+    main(
+        [
+            "-c", write_config(tmp_path), "crossrefs",
+            "-w", WORKSPACE_FIXTURE, "--csv", csv_path,
+            "-o", str(tmp_path / "r.md"),
+        ]
+    )
+    lines = open(csv_path, encoding="utf-8").read().splitlines()
+    assert lines[0].startswith("severity,asset_class")
+    assert len(lines) > 5
