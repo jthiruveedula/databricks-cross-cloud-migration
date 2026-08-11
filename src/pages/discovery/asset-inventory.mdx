@@ -43,10 +43,12 @@ A Databricks estate contains dozens of asset types, each with different portabil
 
 ## Discovery queries
 
-<CodeBlock client:visible language="sql" filename="catalog-discovery.sql" code={`-- Catalogs, schemas, tables, and volumes
-SELECT catalog_name, schema_name, table_name, table_type, data_source_format, storage_location
+<CodeBlock client:visible language="sql" filename="catalog-discovery.sql" code={`-- Catalogs, schemas, tables, and volumes.
+-- Column names are table_catalog / table_schema / storage_path -- not
+-- catalog_name / schema_name / storage_location, which do not exist here.
+SELECT table_catalog, table_schema, table_name, table_type, data_source_format, storage_path
 FROM system.information_schema.tables
-WHERE table_schema NOT IN ('information_schema');
+WHERE table_schema <> 'information_schema';
 
 -- Grants at catalog level
 SELECT grantee, privilege_type, catalog_name
@@ -82,3 +84,8 @@ Asset inventory is read-only. If assets are missed, add them to the next wave or
   { id: 'jobs', label: 'Export all job and pipeline definitions' },
   { id: 'secrets', label: 'Inventory secret scopes and key references' },
 ]} />
+
+## Sources
+
+- Databricks — [`INFORMATION_SCHEMA.TABLES`](https://docs.databricks.com/aws/en/sql/language-manual/information-schema/tables) (`TABLE_CATALOG`, `TABLE_SCHEMA`, `STORAGE_PATH`)
+- Databricks — [Workspaces system table reference](https://docs.databricks.com/aws/en/admin/system-tables/workspaces) (`system.access.workspaces_latest`)
