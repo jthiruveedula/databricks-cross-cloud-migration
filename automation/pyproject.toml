@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dbxmig"
+version = "0.1.0"
+description = "Unity Catalog metastore migration toolkit for Databricks cross-cloud moves"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Jagadeesh Thiruveedula" }]
+keywords = ["databricks", "unity-catalog", "migration", "metastore", "cross-cloud"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Database",
+]
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+# The SDK is optional on purpose: planning, DDL generation, grant translation,
+# and reconciliation all run offline against a JSON inventory. Only `inventory`
+# against a live workspace and `apply --execute` need it.
+databricks = ["databricks-sdk>=0.30"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+dbxmig = "dbxmig.cli:main"
+
+[project.urls]
+Homepage = "https://jthiruveedula.github.io/databricks-cross-cloud-migration/"
+Source = "https://github.com/jthiruveedula/databricks-cross-cloud-migration"
+
+[tool.setuptools.packages.find]
+include = ["dbxmig*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+# No pyupgrade: the package targets Python 3.9 and uses typing.Optional and
+# str.format deliberately, so the codebase reads the same on every supported
+# interpreter.
+select = ["E", "F", "W", "I", "B"]
+ignore = ["B905"]

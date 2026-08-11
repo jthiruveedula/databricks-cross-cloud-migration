@@ -1,0 +1,18 @@
+{
+  "_comment": [
+    "Source account principal -> target account principal.",
+    "Unity Catalog grants reference account-level principals, and accounts do not",
+    "span clouds, so every grantee in the source grant export needs an entry here.",
+    "A principal that is deliberately not migrating goes in 'retired' -- that makes",
+    "'this group loses access' a recorded decision instead of a silent omission."
+  ],
+  "mapping": {
+    "data-readers": "data-readers",
+    "sales-eng": "sales-engineering",
+    "pii-readers": "pii-readers",
+    "platform-admins": "data-platform-admins",
+    "finance-eng": "finance-engineering",
+    "svc-etl-prod": "svc-etl-prod-gcp"
+  },
+  "retired": ["departed-contractor"]
+}

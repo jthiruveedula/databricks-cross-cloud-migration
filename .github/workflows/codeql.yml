@@ -17,7 +17,9 @@ jobs:
       security-events: write
     strategy:
       matrix:
-        language: ['javascript-typescript']
+        # 'python' covers the migration automation toolkit under automation/,
+        # which generates and executes SQL against a customer's metastore.
+        language: ['javascript-typescript', 'python']
     steps:
       - uses: actions/checkout@v7
 

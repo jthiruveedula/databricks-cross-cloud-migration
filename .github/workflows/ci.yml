@@ -26,6 +26,7 @@ jobs:
       contents: read
     outputs:
       site: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.site }}
+      automation: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.automation }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v3
@@ -40,6 +41,8 @@ jobs:
               - 'package-lock.json'
               - 'astro.config.mjs'
               - 'tsconfig.json'
+            automation:
+              - 'automation/**'
 
   test:
     runs-on: ubuntu-latest
@@ -53,6 +56,28 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+
+  # The dbxmig toolkit under automation/ generates and executes SQL against a
+  # customer's Unity Catalog metastore, so it is unit-tested and linted like
+  # application code -- not treated as sample snippets. The whole suite runs
+  # offline against a JSON fixture, with no cloud credentials.
+  automation:
+    needs: [changes]
+    if: needs.changes.outputs.automation == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: automation
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install -e '.[dev]'
+      - run: ruff check .
+      - run: pytest
 
   check:
     if: github.event_name == 'pull_request' && needs.changes.outputs.site == 'true'
