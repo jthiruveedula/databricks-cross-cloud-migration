@@ -89,6 +89,8 @@ Set wave-boundary thresholds once, before scoring any real workload, so the cuto
 
 ## Wave plan template
 
+A reference structure for recording your own wave plan — no tool on this site parses this file; it's a starting shape to fill in and adapt (a wiki page, a Confluence table, or an actual YAML file your team's tooling reads are all fine substitutes). Replace the `<WS_ID>`/`<TWS_ID>` placeholders with real workspace IDs, and the `criteria` entries with your actual entry/exit gates.
+
 <CodeBlock client:visible language="yaml" filename="wave-plan.yaml" code={`waves:
   - id: wave-0
     name: Pilot
