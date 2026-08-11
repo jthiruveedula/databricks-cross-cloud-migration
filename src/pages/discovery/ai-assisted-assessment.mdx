@@ -38,13 +38,13 @@ errors (e.g. system tables not enabled), say so explicitly in that section
 rather than omitting it.
 
 1. Workspace Summary -- run:
-   SELECT workspace_id, workspace_name, account_id, region
-   FROM system.information_schema.workspaces;
+   SELECT workspace_id, workspace_name, workspace_url, status
+   FROM system.access.workspaces_latest;
 
 2. Asset Inventory -- run, and report counts by table_type and data_source_format:
-   SELECT catalog_name, schema_name, table_name, table_type, data_source_format, storage_location
+   SELECT table_catalog, table_schema, table_name, table_type, data_source_format, storage_path
    FROM system.information_schema.tables
-   WHERE table_schema NOT IN ('information_schema');
+   WHERE table_schema <> 'information_schema';
 
 3. Dependency Hotspots -- run, then identify the 10 tables with the highest
    combined in-degree + out-degree (most upstream + downstream edges) --
