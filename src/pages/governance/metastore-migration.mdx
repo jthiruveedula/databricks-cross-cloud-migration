@@ -1,123 +1,422 @@
 ---
 title: 'Metastore migration'
 layout: ../../layouts/Layout.astro
-description: 'Move catalogs, schemas, tables, views, functions, and grants to the target metastore.'
+description: 'Rebuild a Unity Catalog metastore in the target cloud, in dependency order, worked end to end on a real estate.'
 ---
 
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Tabs from '../../components/Tabs.tsx';
+import Accordion from '../../components/Accordion.tsx';
 
 # Metastore migration
 
-Metastore migration moves the metadata layer—catalogs, schemas, tables, views, functions, volumes, and grants—from the source to the target. This is the foundation for all downstream data work.
+Everything downstream — pipelines, dashboards, models — resolves through the metastore. Get the object order wrong and the failure surfaces four steps later as a permission error on something unrelated.
 
-## Pre-migration prerequisites
+This page is worked as one continuous case rather than a list of techniques. Every command below runs against the same estate.
 
-- Target metastore exists and target workspace is attached.
-- Account-level groups and service principals are created in the target account.
-- Storage credentials and external locations are configured for target storage.
-- Source and target can access the required storage (directly or via cross-cloud replication).
+## The estate in this chapter
 
-<Callout client:visible variant="warning" title="A metastore is region-scoped -- you are always creating a new one, never moving the source">
-  Every one of the [cloud mapping](/cloud-mappings/cross-cloud-equivalency-matrix) pages assumes this but never states it: a Unity Catalog metastore is bound to one cloud account/subscription/project **and** one region, and a workspace can only attach to a metastore in its own region. Cross-cloud migration therefore always means standing up a **brand-new metastore** in the target cloud/region and attaching the target workspace to it — there is no "move" or "clone" operation for the metastore object itself. What actually migrates is the *content* (catalogs, schemas, tables, grants — the rest of this page) from the old metastore into the new one. Plan the new metastore's creation as its own first step, before any table-upgrade strategy below, and budget for the fact that source and target metastores coexist independently throughout the migration — they are never the same object at different points in time.
+Northwind Retail, Azure East US → GCP `us-central1`. One metastore, three catalogs, a 6-week window.
+
+| | Count | The part that bites |
+|---|---|---|
+| Managed Delta tables | 318 | Deep clone, but 74 TB of egress to schedule |
+| External Delta tables | 61 | Each needs a target `LOCATION`, not just a clone |
+| External CSV / Parquet | 14 | `CLONE` refuses these — CTAS, and history is gone |
+| Views | 96 | 23 read other views, nested up to 4 deep |
+| Materialized views | 12 | **Cannot be cloned at all** |
+| Streaming tables | 7 | **Cannot be cloned at all** |
+| Volumes | 38 | 6 external, 32 managed |
+| UDFs | 9 | 2 are Scala — no automated path |
+| Registered models | 4 | 61 versions of artifacts, not metadata |
+| Grants | 1,847 | Across 62 account groups, none of which exist in GCP yet |
+
+<Callout client:visible variant="warning" title="A metastore is region-scoped — you are always creating a new one, never moving the source">
+  A Unity Catalog metastore is bound to one cloud account/subscription/project **and** one region, and a workspace can only attach to a metastore in its own region. Cross-cloud migration therefore always means standing up a **brand-new metastore** in the target and attaching the target workspace to it — there is no "move" or "clone" operation for the metastore object itself. What migrates is the *content*. Source and target metastores coexist independently throughout; they are never the same object at two points in time.
 </Callout>
 
-## Table upgrade strategies
+## Inputs required
 
-### Foreign catalog (federate)
+- Target metastore created and target workspace attached — this is step zero, not part of the table work.
+- Account-level groups and service principals created in the target account, with a source→target name mapping written down.
+- Target IAM identity built (GCP service account here), and a storage credential wrapping it.
+- A path mapping from every source storage prefix to its target equivalent.
+- [Dependency mapping](/discovery/dependency-mapping) complete, so waves are dependency chains and not asset-type buckets.
 
-Register source storage as a foreign catalog in the target metastore. No data copy is required for the initial cutover.
+## The dependency order, and what each violation actually looks like
 
-<CodeBlock client:visible language="sql" code={`CREATE FOREIGN CATALOG <catalog_name>
-USING CONNECTION <connection_name>
-OPTIONS (host '<source_metastore_host>', port 443);`} />
+Objects have to be created in this order. The right-hand column is what you get if you skip ahead.
 
-<p className="text-xs text-[var(--ink-subtle)]">Requires Delta Sharing or a supported connection.</p>
+| # | Tier | Skip it and you see |
+|---|---|---|
+| 1 | Storage credential | External location creation fails — there is nothing to validate the path against |
+| 2 | External location | `CREATE CATALOG ... MANAGED LOCATION` is refused; the URL is not governed |
+| 3 | Catalog | `CREATE SCHEMA` fails on a catalog that does not exist |
+| 4 | Schema | Table creation fails |
+| 5 | Volume | Jobs that read from a Volume path fail at runtime, long after the migration "succeeded" |
+| 6 | Table | Views compile against nothing |
+| 7 | Constraints, tags, comments | Silent loss — nothing fails, the metadata is just absent |
+| 8 | View | A view on a view fails until its dependency exists |
+| 9 | Function | Column masks referencing the function cannot bind |
+| 10 | Registered model | — |
+| 11 | Row filters / column masks | **Data exposure**: the table is readable before its filter is bound |
+| 12 | Grants | A table grant before its schema grant returns a confusing permission error |
 
-### In-place upgrade
+<Callout client:visible variant="warning" title="Tier 11 is a security ordering, not a convenience one">
+  A cloned table exists and is queryable the moment the clone completes. Its row filter and column mask do **not** come with it. Between tier 6 and tier 11 the target table is unfiltered and unmasked. Either withhold the grants until the policies are bound (grants are tier 12 for exactly this reason), or migrate restricted tables in their own wave with the filter applied before anyone can see the catalog.
+</Callout>
 
-For foreign tables already registered, upgrade them to managed or external in the target metastore.
+Generate this order rather than maintaining it by hand:
 
-<CodeBlock client:visible language="sql" code={`ALTER TABLE <catalog>.<schema>.<table> SET MANAGED;
--- or
-ALTER TABLE <catalog>.<schema>.<table> SET EXTERNAL;`} />
+<CodeBlock client:visible language="bash" code={`dbxmig -c migration.yaml plan -i inventory.json
 
-<p className="text-xs text-[var(--ink-subtle)]">Not available in all scenarios; verify with Databricks documentation.</p>
+# 30     MANUAL           prod                    catalog:prod
+# 40     CREATE_OBJECT    prod.sales              schema:prod.sales
+# 60     DEEP_CLONE       prod.sales.orders       table:prod.sales.orders
+# 70     CREATE_VIEW      prod.sales.v_orders     view:prod.sales.v_orders
+# 70     CREATE_VIEW      prod.sales.v_revenue    view:prod.sales.v_revenue
+# 95     CREATE_OBJECT    prod                    grant:prod|data-readers|USE CATALOG`} />
 
-### Deep clone
+`v_revenue` reads `v_orders`, so it lands second — see [the automation toolkit](/templates/automation-toolkit) for how the ordering is derived.
 
-Copy a Delta table with history to target storage. Preserves transaction log and time travel.
+---
 
-<CodeBlock client:visible language="sql" code={`CREATE TABLE <target_catalog>.<schema>.<table>
-DEEP CLONE <source_catalog>.<schema>.<table>
-LOCATION 's3://<target-bucket>/<path>';`} />
+## Step 1 — Storage foundation
 
-### CTAS / INSERT OVERWRITE
+The one thing that genuinely cannot be automated. A GCP service account is not a translation of an Azure managed identity; it is a new principal you create, grant on the target bucket, and then wrap.
 
-Create table as select or insert overwrite for non-Delta sources or when history is not required. Choosing this over deep clone is a one-way door — validate the choice per table in [data reconciliation](/validation/data-reconciliation#delta-table-history-reconciliation), since a missing transaction log is invisible to row-count and checksum checks.
+<CodeBlock client:visible language="sql" filename="01-storage.sql" code={`-- Create the credential in the target metastore first.
+CREATE STORAGE CREDENTIAL nwr_uc_gcp
+  WITH DATABRICKS_GCP_SERVICE_ACCOUNT
+  COMMENT 'Databricks-generated SA, granted Storage Admin on nwr-prod-* buckets';
 
-<CodeBlock client:visible language="sql" code={`CREATE TABLE <target_catalog>.<schema>.<table>
-AS SELECT * FROM <source_catalog>.<schema>.<table>;`} />
+-- Then the locations that reference it.
+CREATE EXTERNAL LOCATION IF NOT EXISTS nwr_raw
+  URL 'gs://nwr-prod-raw/'
+  WITH (STORAGE CREDENTIAL nwr_uc_gcp);
 
+CREATE EXTERNAL LOCATION IF NOT EXISTS nwr_managed
+  URL 'gs://nwr-prod-managed/'
+  WITH (STORAGE CREDENTIAL nwr_uc_gcp);`} />
 
-## Migrating grants and ownership
+**Validate before moving on** — this test costs seconds and saves a day of misdiagnosed table failures:
 
-Grants are not portable across accounts because principals are account-scoped. Use a mapping table to replay grants:
+<CodeBlock client:visible language="python" code={`from databricks.sdk import WorkspaceClient
+w = WorkspaceClient()
+result = w.external_locations.validate(external_location_name="nwr_raw")
+print(result)  # every listed operation must report PASS, not just the first`} />
 
-<CodeBlock client:visible language="sql" filename="grant-export.sql" code={`-- Export source grants
-SELECT table_catalog, table_schema, table_name, grantee, privilege_type, is_grantable
+<Callout client:visible variant="tip" title="The most common day-1 failure is a bucket-side grant, not a Databricks-side one">
+  A storage credential that validates for `LIST` but fails for `WRITE` almost always means the service account has object-viewer rather than object-admin on the target bucket. The Databricks error names the location, not the missing IAM role, so check the bucket policy before re-creating anything in Unity Catalog.
+</Callout>
+
+---
+
+## Step 2 — Catalogs and schemas: decide where managed data lands
+
+The decision that is easiest to skip and most expensive to reverse. `MANAGED LOCATION` is set at creation; changing it afterwards means moving data.
+
+<Tabs client:visible tabs={[
+  {
+    label: 'Metastore default (do not)',
+    content: 'Create catalogs with no MANAGED LOCATION and every managed table in every domain lands in one bucket. Northwind tried this in the pilot: finance and sales data shared a prefix, so the storage-level access boundary the security team had asked for could not be expressed at all, and per-domain cost attribution was impossible. Reversing it after 40 tables had been cloned meant re-cloning all 40.'
+  },
+  {
+    label: 'Per-catalog (baseline)',
+    content: 'CREATE CATALOG prod MANAGED LOCATION \'gs://nwr-prod-managed/catalogs/prod\'. Each catalog gets its own prefix. Good default: one bucket path per catalog gives you cost attribution and a coarse storage boundary with no extra ceremony.'
+  },
+  {
+    label: 'Per-schema (regulated domains)',
+    content: 'Set MANAGED LOCATION on the schema as well, so finance data physically lands under its own prefix and can carry its own CMEK key and bucket policy. Northwind used this for two of eleven schemas — the ones in PCI scope. Do not apply it everywhere by reflex; it is more prefixes to manage.'
+  }
+]} />
+
+<CodeBlock client:visible language="sql" filename="02-containers.sql" code={`CREATE CATALOG IF NOT EXISTS prod
+  MANAGED LOCATION 'gs://nwr-prod-managed/catalogs/prod'
+  COMMENT 'Production catalog';
+
+-- PCI-scoped schema gets its own prefix and its own CMEK key on the bucket.
+CREATE SCHEMA IF NOT EXISTS prod.finance
+  MANAGED LOCATION 'gs://nwr-prod-managed-pci/catalogs/prod/finance'
+  COMMENT 'Finance domain';
+
+CREATE SCHEMA IF NOT EXISTS prod.sales COMMENT 'Sales domain';`} />
+
+**Also carry across, or lose silently:** catalog and schema comments, properties, tags, and — if the source used them — workspace bindings. A catalog created without its `ISOLATED` binding is visible to every workspace in the target account, which is a security regression that no test will catch.
+
+<CodeBlock client:visible language="python" code={`# Source catalog was ISOLATED. Reproduce the binding or it defaults to OPEN.
+w.workspace_bindings.update_bindings(
+    securable_type="catalog",
+    securable_name="prod",
+    add=[{"workspace_id": 1234567890123456, "binding_type": "BINDING_TYPE_READ_WRITE"}],
+)`} />
+
+---
+
+## Step 3 — Tables: one strategy per table, decided once
+
+Northwind's 393 data-bearing tables did not all take the same path. Pick per table using format and requirement, then record the decision — the choice between clone and CTAS is a one-way door for table history.
+
+| Table shape | Strategy | Why |
+|---|---|---|
+| Managed Delta, history needed | `DEEP CLONE` | Copies data and current log; target starts fresh at its own `CLONE` |
+| External Delta | `DEEP CLONE` + explicit `LOCATION` | Without the location it becomes managed and lands in the wrong prefix |
+| CSV / Parquet / JSON | `CTAS` | `CLONE` is Delta-only |
+| Huge, read-only, rarely queried | Delta Sharing, then clone later | Defers 74 TB of egress out of the cutover window |
+| Materialized view / streaming table | **Recreate the pipeline** | `CLONE` rejects them outright |
+
+### Deep clone — the 318-table default
+
+<CodeBlock client:visible language="sql" filename="03-clone.sql" code={`-- Managed source, managed target: no LOCATION, lands in the catalog's MANAGED LOCATION.
+CREATE TABLE IF NOT EXISTS prod.sales.orders
+  DEEP CLONE source_prod.sales.orders;
+
+-- External source: give it a target LOCATION or it silently becomes managed.
+CREATE TABLE IF NOT EXISTS prod.sales.customers
+  DEEP CLONE source_prod.sales.customers
+  LOCATION 'gs://nwr-prod-raw/sales/customers';`} />
+
+<Callout client:visible variant="warning" title="Deep clone copies data and the current log. It copies neither grants nor source history.">
+  `DESCRIBE HISTORY` on the target starts at its own `CLONE` operation. Time travel to a pre-migration version will fail once the source is decommissioned. If a table genuinely needs pre-cutover time travel, take pinned snapshots before you cut over — `DEEP CLONE ... VERSION AS OF <n>` — or keep the source readable for the retention period. Row counts matching does not mean history was preserved; that is a separate check. See [data reconciliation](/validation/data-reconciliation#delta-table-history-reconciliation).
+</Callout>
+
+### CTAS — the 14 non-Delta tables
+
+<CodeBlock client:visible language="sql" filename="03-ctas.sql" code={`CREATE TABLE IF NOT EXISTS prod.finance.ledger
+  PARTITIONED BY (posting_month)
+  AS SELECT * FROM source_prod.finance.ledger_csv;`} />
+
+Two things go wrong here and neither is loud. Partitioning is not inherited — state it explicitly or the target is one flat directory. And CSV type inference can widen a column: Northwind had an `amount` column land as `DOUBLE` on the target and `DECIMAL(18,2)` on the source, which reconciled clean on row count and failed a finance sign-off two weeks later. Cast explicitly for anything numeric.
+
+### The federation option — when you should not copy at all
+
+Before committing to 74 TB of egress, check whether the driver survives *not* moving the data. Two distinct mechanisms, often confused:
+
+<Accordion client:visible items={[
+  {
+    title: 'Delta Sharing — Unity Catalog to Unity Catalog, across clouds',
+    content: 'This is the cross-cloud path between two UC metastores. The source shares; the target mounts the share as a catalog and queries it in place. Northwind used this for 9 TB of cold audit tables that are queried twice a quarter — they were never physically migrated at all, and the cutover window shrank by a day. See cross-cloud collaboration for the full pattern.'
+  },
+  {
+    title: 'Lakehouse Federation — a foreign catalog over another workspace metastore',
+    content: 'Databricks-to-Databricks federation targets another workspace\'s Hive or AWS Glue metastore, not a Unity Catalog metastore in another cloud. It is the right tool for reading a legacy Hive estate during the transition, and the wrong tool for cross-cloud UC-to-UC — reach for Delta Sharing there.'
+  }
+]} />
+
+<CodeBlock client:visible language="sql" filename="03-federation.sql" code={`-- Lakehouse Federation to another workspace's Hive/Glue metastore.
+-- Note the shape: a CONNECTION first, then OPTIONS (catalog '...') -- not host/port.
+CREATE CONNECTION legacy_hive TYPE databricks
+  OPTIONS (
+    host '<workspace-hostname>',
+    httpPath '<sql-warehouse-http-path>',
+    personalAccessToken secret('migration', 'legacy_pat')
+  );
+
+CREATE FOREIGN CATALOG IF NOT EXISTS legacy
+  USING CONNECTION legacy_hive
+  OPTIONS (catalog 'hive_metastore');`} />
+
+### In-place conversion — only inside one metastore
+
+`ALTER TABLE ... SET MANAGED` converts an external Delta table to a managed one **within the same metastore**. It is not a cross-cloud move; it is what you run in the target *after* the data is there, to bring tables under managed-table optimization.
+
+<CodeBlock client:visible language="sql" code={`ALTER TABLE prod.sales.customers SET MANAGED;
+
+-- Rollback, within 14 days:
+ALTER TABLE prod.sales.customers UNSET MANAGED;`} />
+
+<Callout client:visible variant="warning" title="Check the preconditions before scripting this across a catalog">
+  Requires Databricks Runtime 17.3 LTS or above, or serverless compute. Delta format only, and you must own the table. Tables with `minReaderVersion=2`, `minWriterVersion=7`, and the `columnMapping` feature **fail conversion** — in a Northwind-sized estate that is not a rare edge case, so filter for it before you run a loop. Rollback is available for 14 days; after that, the external location's copy is gone.
+</Callout>
+
+---
+
+## Step 4 — The objects that are not tables
+
+This is where estates lose things quietly, because none of it fails loudly.
+
+### Views: order matters, and 23 of them are nested
+
+<CodeBlock client:visible language="sql" filename="04-views.sql" code={`-- Depth 1 first.
+CREATE OR REPLACE VIEW prod.sales.v_orders_enriched AS
+SELECT o.order_id, o.amount, c.region
+FROM prod.sales.orders o
+JOIN prod.sales.customers c ON o.customer_id = c.customer_id;
+
+-- Depth 2 second. Reversed, this fails with a table-not-found on v_orders_enriched.
+CREATE OR REPLACE VIEW prod.sales.v_regional_revenue AS
+SELECT region, SUM(amount) AS revenue
+FROM prod.sales.v_orders_enriched
+GROUP BY region;`} />
+
+Three view problems worth pre-empting:
+
+- **A view whose body hardcodes a source path.** `SELECT * FROM delta.\`abfss://...\`` compiles happily in the target and reads across the internet from the old cloud, forever, at egress rates. Grep every view body for source-cloud URIs before you create any of them.
+- **A view reading a catalog that is out of scope.** It will either fail to compile or — worse — bind to a same-named object in the target that means something different.
+- **Circular view definitions.** Rare, but they exist, and a naive migration loop spins on them.
+
+### Materialized views and streaming tables cannot be cloned
+
+<Callout client:visible variant="warning" title="19 of Northwind's objects have no DDL path at all">
+  Streaming tables and materialized views are not supported as source or target for `CLONE`. They are pipeline *outputs* — the migratable object is the Lakeflow/DLT pipeline definition, not the table. Recreate the pipeline in the target, point it at target storage, and let it refresh. Budget the refresh time: Northwind's 12 materialized views took 9 hours to rebuild, which had to sit inside the cutover window rather than before it.
+</Callout>
+
+### Everything else, and what it costs to forget
+
+| Object | Carried by clone? | What you do |
+|---|---|---|
+| Column comments | No | `COMMENT ON COLUMN` per column — the data dictionary the BI team relies on |
+| Table / column tags | No | `ALTER TABLE ... SET TAGS` — and tag-based ABAC policies key off these |
+| `CHECK` / `NOT NULL` constraints | No | Re-add explicitly; a dropped `NOT NULL` lets nulls into a column downstream code assumes is populated |
+| Primary / foreign keys | No | Informational in Databricks, but BI tools read them for relationship discovery |
+| Table properties | Partially | Replay business properties; **do not** replay `delta.minReaderVersion`, `minWriterVersion`, `delta.feature.*`, or `columnMapping` — they either fail or pin the target to an older protocol than its runtime |
+| Row filters / column masks | No | Bind after the masking functions exist — see the tier-11 warning above |
+| Volumes | No | Recreate, then copy contents with `gcloud storage rsync` or equivalent |
+| UDFs | No | Re-register. Scala UDFs have no automated path — Northwind rewrote both in SQL |
+| Registered models | No | Artifacts, not metadata. `mlflow.copy_model_version`, not DDL — see [model registry](/ml/model-registry) |
+| Connections, shares, recipients | No | Recreate by hand; **recipients need new activation links**, which means contacting each external partner |
+
+---
+
+## Step 5 — Grants and ownership
+
+1,847 grants, 62 groups, zero of which exist in the target account. Principals are account-scoped, so this is a translation, not a copy.
+
+There is no single "all grants" view — privileges live in one view per securable type, and a complete export unions them:
+
+<CodeBlock client:visible language="sql" filename="05-inventory-grants.sql" code={`-- Export the full source grant set. Do not reconstruct it from memory.
+SELECT 'CATALOG' AS object_type, catalog_name AS object_name, grantee, privilege_type
+FROM system.information_schema.catalog_privileges
+WHERE catalog_name = 'prod'
+UNION ALL
+SELECT 'SCHEMA', concat_ws('.', catalog_name, schema_name), grantee, privilege_type
+FROM system.information_schema.schema_privileges
+WHERE catalog_name = 'prod'
+UNION ALL
+SELECT 'TABLE', concat_ws('.', table_catalog, table_schema, table_name), grantee, privilege_type
 FROM system.information_schema.table_privileges
-WHERE table_schema NOT IN ('information_schema');`} />
+WHERE table_catalog = 'prod'
+UNION ALL
+SELECT 'FUNCTION', concat_ws('.', specific_catalog, specific_schema, specific_name),
+       grantee, privilege_type
+FROM system.information_schema.routine_privileges
+WHERE specific_catalog = 'prod';`} />
 
-<CodeBlock client:visible language="python" filename="replay-grants.py" code={`import pandas as pd
-from databricks.sdk import WorkspaceClient
+<Callout client:visible variant="warning" title="Run the grant export as a metastore admin, or you will export a subset and not know it">
+  `information_schema` **automatically filters** results to the objects the querying principal has privileges on. A data engineer running this export gets a clean-looking CSV containing only the grants they can already see, migrates it, and discovers the gaps when other teams start filing access tickets. Cross-check the exported grant count against the object count: 1,847 grants across 412 tables is plausible; 240 is not. (Note also that `MANAGE` on an object is not currently enough to see all of its grants here.)
+</Callout>
 
-grants = pd.read_csv("grants.csv")
+<CodeBlock client:visible language="bash" code={`# Translate, apply top-down, and refuse to guess at an unmapped principal.
+dbxmig -c migration.yaml grants -i inventory.json -o grants.sql
 
-w = WorkspaceClient(host="<TARGET_HOST>", token="<TOKEN>")
+# GRANT USE CATALOG ON CATALOG \`prod\` TO \`data-readers\`;
+# GRANT USE SCHEMA ON SCHEMA \`prod\`.\`sales\` TO \`data-readers\`;
+# GRANT SELECT ON TABLE \`prod\`.\`sales\`.\`orders\` TO \`data-readers\`;
+# -- SKIPPED SELECT on prod.finance.ledger to departed-contractor: principal retired`} />
 
-for _, row in grants.iterrows():
-    target_grantee = principal_map[row["grantee"]]  # Map source to target principal
-    sql = f"""GRANT {row['privilege_type']} ON TABLE {row['table_catalog']}.{row['table_schema']}.{row['table_name']} TO \`{target_grantee}\`"""
-    w.statement_execution.execute_statement(sql, warehouse_id="<WAREHOUSE_ID>")
-`} />
+<Callout client:visible variant="warning" title="Ownership is not a grant, and no GRANT statement restores it">
+  Whoever runs the migration owns every object they create. Northwind finished a wave with all 1,847 grants applied and every object owned by one platform service principal — meaning no domain team could alter their own tables, and `MANAGE` on the entire estate sat on a single credential. Replay ownership as its own pass: `ALTER TABLE ... SET OWNER TO \`sales-engineering\``.
+</Callout>
 
-## Handling non-table objects
+Two more traps: a legacy Hive export uses `USAGE`, which is `USE SCHEMA` in Unity Catalog and fails verbatim. And a departed contractor's grant should be *recorded as retired*, not silently dropped — the difference between a decision and an oversight is whether anyone can answer "why did this group lose access" six months later.
 
-- **Views:** Recreate views after base tables are migrated. Views with cross-catalog references must be rewritten.
-- **Functions:** Re-register functions in the target. Python UDFs may require dependency updates.
-- **Models:** ML models registered in UC must be re-registered or referenced via model artifacts.
-- **Volumes:** Copy files using cloud-native tools or Databricks `COPY INTO` / `cp` commands.
+---
+
+## Step 6 — The gap between bulk load and cutover
+
+Northwind's bulk clone took 11 days. The source did not stop during those 11 days.
+
+| Day | What happens |
+|---|---|
+| 1–11 | Bulk clone of 318 tables, running against a live source |
+| 12 | Reconcile. Every mutable table now shows a row-count delta — this is expected, not a failure |
+| 13 | Incremental re-clone of the ~90 tables that changed |
+| 14, 02:00 | **Freeze**: source jobs paused, writers disabled |
+| 14, 02:30 | Final incremental pass on the delta since day 13 |
+| 14, 04:00 | Reconcile again — this pass must be clean |
+| 14, 05:00 | Bind row filters, apply grants, transfer ownership |
+| 14, 06:00 | Materialized views and streaming tables rebuild (9 hours) |
+| 14, 15:00 | Business validation, then redirect readers |
+
+<CodeBlock client:visible language="sql" code={`-- Incremental re-clone: DEEP CLONE onto an existing target is incremental,
+-- copying only files the target does not already have.
+CREATE OR REPLACE TABLE prod.sales.orders
+  DEEP CLONE source_prod.sales.orders;`} />
+
+<Callout client:visible variant="tip" title="Reconciling before the freeze is a rehearsal, not a gate">
+  The day-12 reconciliation exists to find *structural* problems — a missing table, a widened column type, a table still pointing at source storage. Row-count deltas on mutable tables at that point are noise. Only the post-freeze pass is a go/no-go.
+</Callout>
+
+---
+
+## Making the run restartable
+
+A migration of this size will be interrupted — a token expires, a warehouse restarts, someone's session drops on hour nine. Two properties make that survivable, and both have to be designed in before the first statement runs:
+
+- **Every statement is idempotent.** `CREATE ... IF NOT EXISTS`, `CREATE OR REPLACE VIEW`. Re-running the script from the top is safe.
+- **Every outcome is journalled.** Record what succeeded so a restart skips it. Recovery is then the same command again, not a bespoke catch-up script written under pressure. The journal doubles as the audit record of who ran what against which target.
+
+<CodeBlock client:visible language="bash" code={`dbxmig -c migration.yaml apply -i inventory.json --execute
+# ... interrupted at statement 214 of 903 ...
+
+dbxmig -c migration.yaml apply -i inventory.json --execute
+# executed 689 statement(s); 214 already done; 0 failed`} />
 
 ## Validation
 
-- Compare catalog, schema, table, and view counts between source and target.
-- Run row-count and checksum reconciliation on migrated tables.
-- Verify grants for a representative set of users and service principals.
+Run all four. The first three are cheap and catch different failures:
+
+<CodeBlock client:visible language="sql" filename="validate.sql" code={`-- 1. Object counts, per type. Catches an entire schema that never ran.
+SELECT table_type, COUNT(*) FROM system.information_schema.tables
+WHERE table_catalog = 'prod' GROUP BY table_type;
+
+-- 2. Nothing still points at source-cloud storage. The column is storage_path.
+SELECT table_name, storage_path FROM system.information_schema.tables
+WHERE table_catalog = 'prod' AND storage_path LIKE 'abfss://%';
+
+-- 3. Clone provenance: newest operation must be CLONE, not CTAS or a raw sync.
+DESCRIBE HISTORY prod.sales.orders;`} />
+
+4. Have the owning team run their real dashboard with their own non-admin credentials. An admin token proves nothing about a regular user's grants.
+
+None of these checks can detect an absence you never planned for — the lineage, audit trail, and table history attached to this metastore are destroyed by the move rather than migrated by it. Export them before the source is decommissioned: [what does not migrate](/execution/what-does-not-migrate).
 
 ## Rollback
 
-If metadata migration fails before cutover:
+Metadata migration before cutover is genuinely low-risk to roll back, and that is the reason to do all of it before the freeze:
 
-- Drop incomplete target objects.
-- Re-export source metadata.
-- Fix the mapping or credential issue and re-run.
+- Drop the incomplete target objects — the source is untouched and remains authoritative.
+- Fix the mapping, credential, or path rule that failed.
+- Re-run. Idempotent statements plus the journal mean a re-run is not a fresh start.
 
-The source remains authoritative until the final cutover.
+Grants are additive and fixed forward, never rolled back. `SET MANAGED` conversions have their own 14-day `UNSET MANAGED` window, which is separate from your migration rollback plan and shorter than most hypercare periods — note the date.
 
 ## Automation opportunity
 
-- Use UCX for large-scale Unity Catalog upgrades and migration readiness assessment.
-- Generate DDL and GRANT replay scripts from the information schema.
-- Run grants reconciliation as part of a CI pipeline.
+Everything on this page except the storage credential is derivable from an inventory export. The [automation toolkit](/templates/automation-toolkit) implements it: `gaps` reports what has no automated path before you start, `ddl` emits the ordered SQL as a reviewable file, `grants` translates principals and replays ownership, `apply` runs it resumably, and `reconcile` proves the result. Use [UCX](/governance/ucx-strategy) for the legacy Hive assessment upstream of all of it.
 
 <Checklist client:visible title="Metastore migration" items={[
-  { id: 'ddl', label: 'Export catalog/schema DDL from source' },
-  { id: 'create', label: 'Create catalogs and schemas in target' },
-  { id: 'tables', label: 'Migrate tables using chosen strategy' },
-  { id: 'views', label: 'Recreate views and verify dependencies' },
-  { id: 'grants', label: 'Replay grants with mapped principals' },
-  { id: 'reconcile', label: 'Reconcile metadata and data counts' },
+  { id: 'metastore', label: 'Target metastore created, target workspace attached, region confirmed' },
+  { id: 'credential', label: 'Storage credential created and validated for read AND write' },
+  { id: 'managed-loc', label: 'MANAGED LOCATION decided per catalog (and per schema where regulated)' },
+  { id: 'bindings', label: 'Workspace bindings reproduced — ISOLATED catalogs did not default to OPEN' },
+  { id: 'strategy', label: 'Per-table strategy recorded: clone, CTAS, share, or recreate' },
+  { id: 'nonclonable', label: 'Materialized views and streaming tables scheduled as pipeline rebuilds, with refresh time budgeted' },
+  { id: 'metadata', label: 'Comments, tags, constraints, and properties replayed — protocol properties excluded' },
+  { id: 'paths', label: 'No view body, function, or table location still references source-cloud storage' },
+  { id: 'policies', label: 'Row filters and column masks bound BEFORE grants are applied' },
+  { id: 'grants', label: 'Grants replayed top-down with mapped principals; unmapped ones resolved, not skipped' },
+  { id: 'ownership', label: 'Ownership transferred off the migrating identity' },
+  { id: 'incremental', label: 'Post-freeze incremental pass run and reconciled clean' },
 ]} />
+
+## Sources
+
+- Databricks — [`CREATE TABLE ... CLONE`](https://docs.databricks.com/aws/en/sql/language-manual/delta-clone) (streaming tables and materialized views unsupported as source or target)
+- Databricks — [Convert an external Delta table to a managed Unity Catalog table](https://docs.databricks.com/aws/en/tables/convert-external-managed) (`SET MANAGED` / `UNSET MANAGED`, DBR 17.3 LTS+, 14-day rollback, `columnMapping` restriction)
+- Databricks — [Run federated queries on another Databricks workspace](https://docs.databricks.com/aws/en/query-federation/databricks) (`CREATE CONNECTION` + `OPTIONS (catalog '...')`)
+- Databricks — [Manage and work with foreign catalogs](https://docs.databricks.com/aws/en/query-federation/foreign-catalogs)
+- Databricks — [`INFORMATION_SCHEMA.TABLES`](https://docs.databricks.com/aws/en/sql/language-manual/information-schema/tables) (`STORAGE_PATH`, not `storage_location`)
+- Databricks — [`TABLE_PRIVILEGES`](https://docs.databricks.com/aws/en/sql/language-manual/information-schema/table_privileges) and [Information schema](https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-information-schema) (automatic filtering by the caller's privileges)
