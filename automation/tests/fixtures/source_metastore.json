@@ -1,0 +1,207 @@
+{
+  "metastore_id": "11111111-2222-3333-4444-555555555555",
+  "metastore_name": "prod-eastus",
+  "cloud": "azure",
+  "region": "eastus",
+  "captured_at": "2026-08-11T09:00:00+00:00",
+  "storage_credentials": [
+    { "name": "prod_uc_credential", "cloud": "azure", "comment": "Managed identity for UC" }
+  ],
+  "external_locations": [
+    {
+      "name": "prod_raw",
+      "url": "abfss://raw@prodstorage.dfs.core.windows.net/",
+      "credential_name": "prod_uc_credential"
+    },
+    {
+      "name": "prod_archive",
+      "url": "abfss://archive@legacystorage.dfs.core.windows.net/",
+      "credential_name": "prod_uc_credential",
+      "comment": "Deliberately unmapped in the example config: exercises the gap report"
+    }
+  ],
+  "catalogs": [
+    {
+      "name": "prod",
+      "comment": "Production catalog",
+      "owner": "platform-admins",
+      "storage_root": "abfss://raw@prodstorage.dfs.core.windows.net/catalogs/prod",
+      "isolation_mode": "ISOLATED"
+    }
+  ],
+  "schemas": [
+    { "catalog": "prod", "name": "sales", "comment": "Sales domain", "owner": "sales-eng" },
+    { "catalog": "prod", "name": "finance", "comment": "Finance domain", "owner": "finance-eng" }
+  ],
+  "tables": [
+    {
+      "catalog": "prod",
+      "schema": "sales",
+      "name": "orders",
+      "table_type": "MANAGED",
+      "data_source_format": "DELTA",
+      "comment": "One row per order",
+      "owner": "sales-eng",
+      "columns": [
+        { "name": "order_id", "type_text": "BIGINT", "nullable": false, "position": 0, "comment": "Surrogate key" },
+        { "name": "customer_id", "type_text": "BIGINT", "nullable": false, "position": 1 },
+        { "name": "order_ts", "type_text": "TIMESTAMP", "nullable": false, "position": 2 },
+        { "name": "amount", "type_text": "DECIMAL(18,2)", "nullable": true, "position": 3 }
+      ],
+      "partition_columns": ["order_ts"],
+      "constraints": [
+        { "name": "pk_orders", "kind": "PRIMARY_KEY", "definition": "order_id" },
+        { "name": "chk_amount", "kind": "CHECK", "definition": "amount >= 0" }
+      ],
+      "properties": {
+        "delta.minReaderVersion": "2",
+        "delta.minWriterVersion": "7",
+        "business_owner": "sales"
+      },
+      "tags": { "classification": "internal" },
+      "size_bytes": 812340000
+    },
+    {
+      "catalog": "prod",
+      "schema": "sales",
+      "name": "customers",
+      "table_type": "EXTERNAL",
+      "data_source_format": "DELTA",
+      "storage_location": "abfss://raw@prodstorage.dfs.core.windows.net/sales/customers",
+      "owner": "sales-eng",
+      "columns": [
+        { "name": "customer_id", "type_text": "BIGINT", "nullable": false, "position": 0 },
+        { "name": "email", "type_text": "STRING", "nullable": true, "position": 1 },
+        { "name": "region", "type_text": "STRING", "nullable": true, "position": 2 }
+      ],
+      "column_masks": { "email": "prod.sales.mask_email" },
+      "row_filter": "prod.sales.region_filter"
+    },
+    {
+      "catalog": "prod",
+      "schema": "finance",
+      "name": "ledger_csv",
+      "table_type": "EXTERNAL",
+      "data_source_format": "CSV",
+      "storage_location": "abfss://archive@legacystorage.dfs.core.windows.net/finance/ledger",
+      "owner": "finance-eng",
+      "columns": [
+        { "name": "entry_id", "type_text": "STRING", "nullable": false, "position": 0 },
+        { "name": "amount", "type_text": "DOUBLE", "nullable": true, "position": 1 }
+      ]
+    },
+    {
+      "catalog": "prod",
+      "schema": "sales",
+      "name": "v_orders_enriched",
+      "table_type": "VIEW",
+      "owner": "sales-eng",
+      "view_definition": "SELECT o.order_id, o.amount, c.region FROM prod.sales.orders o JOIN prod.sales.customers c ON o.customer_id = c.customer_id",
+      "depends_on": ["prod.sales.orders", "prod.sales.customers"],
+      "columns": [
+        { "name": "order_id", "type_text": "BIGINT", "nullable": false, "position": 0 },
+        { "name": "amount", "type_text": "DECIMAL(18,2)", "nullable": true, "position": 1 },
+        { "name": "region", "type_text": "STRING", "nullable": true, "position": 2 }
+      ]
+    },
+    {
+      "catalog": "prod",
+      "schema": "sales",
+      "name": "v_regional_revenue",
+      "table_type": "VIEW",
+      "owner": "sales-eng",
+      "view_definition": "SELECT region, SUM(amount) AS revenue FROM prod.sales.v_orders_enriched GROUP BY region",
+      "depends_on": ["prod.sales.v_orders_enriched"],
+      "columns": [
+        { "name": "region", "type_text": "STRING", "nullable": true, "position": 0 },
+        { "name": "revenue", "type_text": "DECIMAL(28,2)", "nullable": true, "position": 1 }
+      ]
+    },
+    {
+      "catalog": "prod",
+      "schema": "finance",
+      "name": "v_external_feed",
+      "table_type": "VIEW",
+      "owner": "finance-eng",
+      "view_definition": "SELECT * FROM prod.finance.ledger_csv UNION ALL SELECT * FROM other_metastore.finance.adjustments",
+      "depends_on": ["prod.finance.ledger_csv", "other_metastore.finance.adjustments"],
+      "columns": [
+        { "name": "entry_id", "type_text": "STRING", "nullable": false, "position": 0 },
+        { "name": "amount", "type_text": "DOUBLE", "nullable": true, "position": 1 }
+      ]
+    },
+    {
+      "catalog": "prod",
+      "schema": "sales",
+      "name": "mv_daily_sales",
+      "table_type": "MATERIALIZED_VIEW",
+      "owner": "sales-eng",
+      "view_definition": "SELECT date(order_ts) AS d, SUM(amount) AS total FROM prod.sales.orders GROUP BY 1",
+      "depends_on": ["prod.sales.orders"],
+      "columns": [
+        { "name": "d", "type_text": "DATE", "nullable": true, "position": 0 },
+        { "name": "total", "type_text": "DECIMAL(28,2)", "nullable": true, "position": 1 }
+      ]
+    },
+    {
+      "catalog": "prod",
+      "schema": "sales",
+      "name": "st_order_events",
+      "table_type": "STREAMING_TABLE",
+      "owner": "sales-eng",
+      "view_definition": "CREATE STREAMING TABLE st_order_events AS SELECT * FROM STREAM read_files('abfss://raw@prodstorage.dfs.core.windows.net/events/orders')",
+      "depends_on": [],
+      "columns": [
+        { "name": "event_id", "type_text": "STRING", "nullable": false, "position": 0 }
+      ]
+    }
+  ],
+  "volumes": [
+    {
+      "catalog": "prod",
+      "schema": "sales",
+      "name": "landing",
+      "volume_type": "EXTERNAL",
+      "storage_location": "abfss://raw@prodstorage.dfs.core.windows.net/volumes/landing"
+    },
+    { "catalog": "prod", "schema": "finance", "name": "reports", "volume_type": "MANAGED" }
+  ],
+  "functions": [
+    {
+      "catalog": "prod",
+      "schema": "sales",
+      "name": "mask_email",
+      "language": "SQL",
+      "owner": "sales-eng",
+      "routine_definition": "(e STRING) RETURNS STRING RETURN CASE WHEN is_account_group_member('pii-readers') THEN e ELSE '***' END"
+    },
+    {
+      "catalog": "prod",
+      "schema": "finance",
+      "name": "fx_convert",
+      "language": "SCALA",
+      "routine_definition": null
+    }
+  ],
+  "models": [
+    { "catalog": "prod", "schema": "sales", "name": "churn_model", "version_count": 7 }
+  ],
+  "grants": [
+    { "object_type": "CATALOG", "full_name": "prod", "principal": "data-readers", "privilege": "USE CATALOG" },
+    { "object_type": "SCHEMA", "full_name": "prod.sales", "principal": "data-readers", "privilege": "USAGE" },
+    { "object_type": "TABLE", "full_name": "prod.sales.orders", "principal": "data-readers", "privilege": "SELECT" },
+    { "object_type": "TABLE", "full_name": "prod.sales.orders", "principal": "sales-eng", "privilege": "MODIFY" },
+    { "object_type": "TABLE", "full_name": "prod.sales.customers", "principal": "pii-readers", "privilege": "SELECT" },
+    { "object_type": "TABLE", "full_name": "prod.finance.ledger_csv", "principal": "departed-contractor", "privilege": "SELECT" },
+    { "object_type": "CATALOG", "full_name": "prod", "principal": "platform-admins", "privilege": "CREATE_EXTERNAL_LOCATION" }
+  ],
+  "connections": [
+    { "name": "snowflake_prod", "connection_type": "SNOWFLAKE" }
+  ],
+  "shares": [
+    { "name": "partner_share", "recipients": ["acme_analytics"] }
+  ],
+  "recipients": [
+    { "name": "acme_analytics", "authentication_type": "TOKEN" }
+  ]
+}
