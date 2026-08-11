@@ -1,0 +1,205 @@
+{
+  "workspace_id": "1234567890123456",
+  "workspace_host": "https://adb-1234567890123456.7.azuredatabricks.net",
+  "captured_at": "2026-08-11T09:00:00+00:00",
+  "assets": {
+    "jobs": [
+      {
+        "job_id": "8801",
+        "name": "sales-daily-load",
+        "creator": "priya@northwind.example",
+        "run_as": "svc-etl-prod",
+        "task_count": 3,
+        "schedule": "0 0 2 * * ?",
+        "paused": false,
+        "cluster_policy_ids": ["POL-STANDARD-ETL"],
+        "warehouse_ids": [],
+        "notebook_paths": ["/Repos/data-eng/sales/load_orders"],
+        "tags": { "domain": "sales", "cost_center": "CC-4410" }
+      },
+      {
+        "job_id": "8802",
+        "name": "finance-ledger-export",
+        "creator": "sam@northwind.example",
+        "run_as": "svc-etl-prod",
+        "task_count": 1,
+        "schedule": "0 0 5 * * ?",
+        "paused": false,
+        "cluster_policy_ids": ["POL-RETIRED-2023"],
+        "warehouse_ids": ["WH-FINANCE-01"],
+        "notebook_paths": ["/Shared/finance/ledger_export"],
+        "tags": {}
+      },
+      {
+        "job_id": "8803",
+        "name": "legacy-mount-crawler",
+        "creator": "sam@northwind.example",
+        "run_as": "svc-etl-prod",
+        "task_count": 1,
+        "schedule": "",
+        "paused": true,
+        "cluster_policy_ids": [],
+        "warehouse_ids": [],
+        "notebook_paths": ["/Shared/legacy/crawl"],
+        "tags": { "note": "reads dbfs:/mnt/legacy/archive nightly" }
+      }
+    ],
+    "pipelines": [
+      {
+        "pipeline_id": "PIPE-001",
+        "name": "orders-bronze-silver",
+        "state": "RUNNING",
+        "catalog": "prod",
+        "target": "sales",
+        "storage": "abfss://raw@prodstorage.dfs.core.windows.net/pipelines/orders",
+        "serverless": false,
+        "continuous": true
+      }
+    ],
+    "clusters": [
+      {
+        "cluster_id": "0811-shared-01",
+        "name": "shared-analytics",
+        "creator": "priya@northwind.example",
+        "spark_version": "15.4.x-scala2.12",
+        "node_type_id": "Standard_DS4_v2",
+        "driver_node_type_id": "Standard_DS4_v2",
+        "num_workers": 0,
+        "autoscale_max": 8,
+        "data_security_mode": "USER_ISOLATION",
+        "policy_id": "POL-STANDARD-ETL",
+        "instance_pool_id": "POOL-WARM-01",
+        "instance_profile_arn": "",
+        "init_scripts": ["abfss://raw@prodstorage.dfs.core.windows.net/init/observability.sh"],
+        "spark_conf": {
+          "spark.hadoop.fs.azure.account.key": "{{secrets/prod-etl/adls_account_key}}"
+        },
+        "custom_tags": { "domain": "shared" }
+      },
+      {
+        "cluster_id": "0811-legacy-02",
+        "name": "legacy-etl",
+        "creator": "sam@northwind.example",
+        "spark_version": "11.3.x-scala2.12",
+        "node_type_id": "Standard_DS3_v2",
+        "driver_node_type_id": "Standard_DS3_v2",
+        "num_workers": 4,
+        "autoscale_max": 0,
+        "data_security_mode": "NONE",
+        "policy_id": "",
+        "instance_pool_id": "",
+        "instance_profile_arn": "arn:aws:iam::123456789012:instance-profile/legacy-etl-role",
+        "init_scripts": ["dbfs:/mnt/legacy/init/bootstrap.sh"],
+        "spark_conf": {},
+        "custom_tags": {}
+      }
+    ],
+    "cluster_policies": [
+      {
+        "policy_id": "POL-STANDARD-ETL",
+        "name": "Standard ETL",
+        "definition": "{\"node_type_id\":{\"type\":\"allowlist\",\"values\":[\"Standard_DS4_v2\"]}}",
+        "max_clusters_per_user": 5
+      }
+    ],
+    "instance_pools": [
+      {
+        "instance_pool_id": "POOL-WARM-01",
+        "name": "warm-ds4",
+        "node_type_id": "Standard_DS4_v2",
+        "min_idle_instances": 2,
+        "max_capacity": 20
+      }
+    ],
+    "sql_warehouses": [
+      {
+        "warehouse_id": "WH-FINANCE-01",
+        "name": "finance-bi",
+        "cluster_size": "Medium",
+        "warehouse_type": "PRO",
+        "enable_serverless": true,
+        "min_clusters": 1,
+        "max_clusters": 4,
+        "auto_stop_mins": 10,
+        "channel": "CHANNEL_NAME_CURRENT"
+      }
+    ],
+    "dashboards": [
+      {
+        "dashboard_id": "DASH-REV-01",
+        "name": "Regional revenue",
+        "warehouse_id": "WH-FINANCE-01",
+        "path": "/Shared/dashboards/regional-revenue",
+        "lifecycle_state": "ACTIVE"
+      }
+    ],
+    "queries": [
+      {
+        "query_id": "Q-REV-01",
+        "name": "revenue by region",
+        "warehouse_id": "WH-FINANCE-01",
+        "owner": "sam@northwind.example",
+        "query_text": "SELECT region, SUM(amount) FROM prod.sales.v_regional_revenue GROUP BY region"
+      },
+      {
+        "query_id": "Q-RAW-02",
+        "name": "raw file peek",
+        "warehouse_id": "WH-MISSING-99",
+        "owner": "sam@northwind.example",
+        "query_text": "SELECT * FROM csv.`abfss://archive@legacystorage.dfs.core.windows.net/finance/ledger`"
+      }
+    ],
+    "alerts": [
+      {
+        "alert_id": "AL-01",
+        "name": "revenue drop",
+        "query_id": "Q-REV-01",
+        "owner": "sam@northwind.example"
+      }
+    ],
+    "secret_scopes": [
+      {
+        "scope": "prod-etl",
+        "backend_type": "DATABRICKS",
+        "key_names": ["adls_account_key", "partner_api_token"],
+        "key_count": 2
+      }
+    ],
+    "repos": [
+      {
+        "repo_id": "REPO-01",
+        "path": "/Repos/data-eng/sales",
+        "url": "https://github.com/northwind/sales-pipelines",
+        "provider": "gitHub",
+        "branch": "main"
+      }
+    ],
+    "groups": [
+      { "group_id": "G-01", "display_name": "sales-eng", "member_count": 12, "meta_resource_type": "WorkspaceGroup" },
+      { "group_id": "G-02", "display_name": "data-readers", "member_count": 140, "meta_resource_type": "Group" }
+    ],
+    "service_principals": [
+      { "application_id": "11111111-2222-3333-4444-555555555555", "display_name": "svc-etl-prod", "active": true }
+    ],
+    "object_acls": [
+      { "object_type": "jobs", "object_id": "8801", "object_name": "sales-daily-load", "principal": "sales-eng", "permission_level": "CAN_MANAGE" },
+      { "object_type": "clusters", "object_id": "0811-shared-01", "object_name": "shared-analytics", "principal": "data-readers", "permission_level": "CAN_RESTART" }
+    ]
+  },
+  "results": [
+    { "asset_class": "jobs", "collected": 3, "ok": true, "reason": "" },
+    { "asset_class": "pipelines", "collected": 1, "ok": true, "reason": "" },
+    { "asset_class": "clusters", "collected": 2, "ok": true, "reason": "" },
+    { "asset_class": "cluster_policies", "collected": 1, "ok": true, "reason": "" },
+    { "asset_class": "instance_pools", "collected": 1, "ok": true, "reason": "" },
+    { "asset_class": "sql_warehouses", "collected": 1, "ok": true, "reason": "" },
+    { "asset_class": "dashboards", "collected": 1, "ok": true, "reason": "" },
+    { "asset_class": "queries", "collected": 2, "ok": true, "reason": "" },
+    { "asset_class": "alerts", "collected": 1, "ok": true, "reason": "" },
+    { "asset_class": "secret_scopes", "collected": 1, "ok": true, "reason": "" },
+    { "asset_class": "repos", "collected": 1, "ok": true, "reason": "" },
+    { "asset_class": "groups", "collected": 2, "ok": true, "reason": "" },
+    { "asset_class": "service_principals", "collected": 1, "ok": true, "reason": "" },
+    { "asset_class": "object_acls", "collected": 2, "ok": true, "reason": "" }
+  ]
+}

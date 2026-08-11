@@ -11,11 +11,13 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence
 
+from .crossrefs import CrossRefReport, coverage_gaps, wave_hints
 from .depgraph import Plan
 from .grants import GrantDiff, GrantTranslation
 from .models import Inventory
 from .reconcile import ReconciliationReport
 from .rewrite import Rewriter
+from .workspace import ASSET_CLASSES, WorkspaceInventory, owner_hint
 
 
 def _table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
@@ -192,6 +194,82 @@ def full_report(
     if reconciliation is not None:
         parts.append(reconciliation_summary(reconciliation))
     return "\n".join(parts)
+
+
+def workspace_summary(inventory: WorkspaceInventory) -> str:
+    """Per-asset-class counts, owner, and collection status.
+
+    The owner column is there because the question that stalls discovery is
+    never "what is the API" -- it is "who is chasing the dashboards".
+    """
+    rows: List[List[str]] = []
+    for asset_class in ASSET_CLASSES:
+        result = next((r for r in inventory.results if r.asset_class == asset_class), None)
+        if result is None:
+            status = "not collected"
+        elif not result.ok:
+            status = "FAILED: " + result.reason
+        elif result.collected == 0:
+            status = "empty -- confirm"
+        else:
+            status = "ok"
+        rows.append(
+            [asset_class, str(len(inventory.rows(asset_class))), owner_hint(asset_class), status]
+        )
+    return "\n".join(
+        [
+            "## Workspace inventory",
+            "",
+            "Captured: {0}  ".format(inventory.captured_at or "unknown"),
+            "Workspace: {0}".format(inventory.workspace_host or "unknown"),
+            "",
+            _table(["Asset class", "Count", "Usually owned by", "Status"], rows),
+        ]
+    )
+
+
+def crossref_summary(inventory: WorkspaceInventory, report: CrossRefReport) -> str:
+    """What each asset depends on, what breaks, and what must move together."""
+    blocker_rows = [
+        [f.asset_class, f.asset_name or f.asset_id, f.kind, f.reference, f.breaks]
+        for f in report.blockers
+    ]
+    attention_rows = [
+        [f.asset_class, f.asset_name or f.asset_id, f.kind, f.reference, f.breaks]
+        for f in report.findings
+        if f.severity == "attention"
+    ]
+    kind_rows = [[k, str(v)] for k, v in sorted(report.by_kind().items())]
+    hints = wave_hints(report)
+
+    sections = [
+        "## Cross-references",
+        "",
+        "{0} reference(s) found across {1} asset(s). {2} blocker(s).".format(
+            len(report.findings), len(report.by_asset()), len(report.blockers)
+        ),
+        "",
+        _table(["Reference kind", "Count"], kind_rows),
+        "### Blockers — fix before scheduling a wave",
+        "",
+        _table(["Asset class", "Asset", "Kind", "Reference", "What breaks"], blocker_rows),
+        "### Needs attention — carry into the wave plan",
+        "",
+        _table(["Asset class", "Asset", "Kind", "Reference", "Note"], attention_rows),
+        "### Shared references — these assets must move together",
+        "",
+        _table(["Shared dependency"], [[h] for h in hints]),
+    ]
+    gaps = coverage_gaps(inventory)
+    if gaps:
+        sections.extend(
+            [
+                "### Coverage gaps",
+                "",
+                _table(["Asset class"], [[g] for g in gaps]),
+            ]
+        )
+    return "\n".join(sections)
 
 
 def counts_delta(source: Inventory, target: Inventory) -> Dict[str, int]:

@@ -1,91 +1,216 @@
 ---
 title: 'Asset inventory'
 layout: ../../layouts/Layout.astro
-description: 'Catalog every migratable Databricks asset type and its migration approach.'
+description: 'Collect every migratable Databricks asset — the exact command per asset class, the fields worth keeping, who owns collecting it, and how long it takes.'
 ---
 
 import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
+import Accordion from '../../components/Accordion.tsx';
 
 # Asset inventory
 
-A Databricks estate contains dozens of asset types, each with different portability, migration method, and validation needs. This page provides a master catalog. Domain-specific guides later in the runbook expand on each area.
+You have been told to "inventory the Databricks estate." This page is the five days that follow: what to run, what to keep, who to chase, and how to know when you are actually done.
 
-## Asset catalog
+Worked on the same estate as the rest of the runbook — Northwind Retail, Azure East US → GCP, 3 workspaces, ~1,900 assets.
 
-| Asset | Why it matters | Discovery | Export / migrate | Validate |
-|-------|---------------|-----------|------------------|----------|
-| Workspaces | User access point | Accounts API | Recreate in target | Login, API, SCIM |
-| Unity Catalog metastores | Governance boundary | Account API | Create in target region | Attachment, grants |
-| Catalogs / schemas / tables | Data organization | Information schema | DDL export, clone, CTAS | Row counts, schema, partitions |
-| External locations | Storage mapping | `SHOW EXTERNAL LOCATIONS` | Recreate with target storage | Path access, grants |
-| Storage credentials | Cloud identity for UC | Account API | Recreate with target IAM | Test credential |
-| Volumes | Non-tabular data | Information schema | Copy via cloud tools or DBFS | File count, checksum |
-| DBFS root / mounts | Legacy storage | `dbutils.fs.mounts()` | Migrate to volumes / external locations | Path resolution |
-| Notebooks | Code assets | Workspace API / Repos | Export `.dbc` or Git sync | Execute smoke tests |
-| Repos / Git folders | Version control | Workspace API | Re-clone from Git | Sync status |
-| Jobs / Workflows | Orchestration | Jobs API | Export/import JSON or recreate | Run success, SLA |
-| Delta Live Tables | Streaming pipelines | Pipelines API | Recreate pipeline definition | Data output parity |
-| SQL warehouses | Query compute | SQL API | Recreate with matching config | Query latency, concurrency |
-| Clusters | Interactive compute | Clusters API | Recreate with mapped node types | Startup, libraries |
-| Cluster policies | Cost and compliance | Policies API | Recreate | Policy enforcement |
-| Pools | Warm compute | Instance Pools API | Recreate | Pre-warmed nodes |
-| Instance profiles / managed identities / service accounts | Cloud access | Cloud IAM APIs | Map to target IAM model | Functional access tests |
-| Secret scopes | Credentials | Secret scopes API | Migrate to target secret backend | Secret resolution |
-| MLflow experiments | ML lineage | MLflow API | Export/import or re-register | Artifact parity |
-| Model registry | Model governance | MLflow Registry API | Copy models and transitions | Serving validation |
-| Dashboards / queries / alerts | BI layer | Lakeview / SQL API | Export definitions | Visual parity |
-| Permissions / grants | Access control | Information schema / Grants API | Replay grants with mapped principals | Permission tests |
-| Init scripts | Bootstrap logic | DBFS / workspace files | Copy to target storage | Cluster startup |
-| Libraries | Dependencies | Cluster API / DBFS | Reinstall from Maven/PyPI or internal repo | Import checks |
-| Partner integrations | External tools | Admin console | Reconfigure with target endpoints | Integration smoke tests |
+## The five-day shape
 
-## Discovery queries
+| Day | You produce | Owner |
+|---|---|---|
+| 1 | Workspace list + account/region/metastore map | Platform engineer |
+| 1 | **Metastore inventory** — catalogs, schemas, tables, grants | Platform engineer |
+| 2 | **Workspace inventory** — jobs, clusters, dashboards, secrets, ACLs | Platform engineer |
+| 3 | **Cross-references** — what each asset needs, and what breaks | Architect |
+| 3–4 | Owner assigned to every asset; retire/defer decisions taken | Project manager |
+| 5 | Sign-off: every asset class has a count, an owner, and a decision | Migration lead |
 
-<CodeBlock client:visible language="sql" filename="catalog-discovery.sql" code={`-- Catalogs, schemas, tables, and volumes.
--- Column names are table_catalog / table_schema / storage_path -- not
--- catalog_name / schema_name / storage_location, which do not exist here.
-SELECT table_catalog, table_schema, table_name, table_type, data_source_format, storage_path
-FROM system.information_schema.tables
-WHERE table_schema <> 'information_schema';
+<Callout client:visible variant="warning" title="Day 3 is the one people skip, and it is the one that matters">
+  Days 1–2 produce counts. A count tells you nothing about sequencing. Day 3 turns "you have 412 jobs" into "these 9 jobs share a cluster policy that no longer exists, and these 3 dashboards share a warehouse with a job in another domain, so they cannot be in different waves." That output is what [wave planning](/execution/wave-planning) actually consumes.
+</Callout>
 
--- Grants at catalog level
-SELECT grantee, privilege_type, catalog_name
-FROM system.information_schema.catalog_privileges;
+## Two planes, two collections
 
--- External locations
-SHOW EXTERNAL LOCATIONS;`} />
+A Databricks estate splits cleanly, and conflating the two is the most common reason an inventory is 60% complete and believed to be finished.
 
-## Pitfalls
+| | Metastore plane | Workspace plane |
+|---|---|---|
+| **Contains** | Catalogs, schemas, tables, views, volumes, functions, models, UC grants | Jobs, pipelines, clusters, policies, pools, warehouses, dashboards, queries, alerts, secret scopes, repos, principals, **object ACLs** |
+| **Scoped to** | Metastore — regional, spans workspaces | Each workspace, separately |
+| **Permissions live in** | `information_schema` / UC grants | Permissions API — a separate system |
+| **Collect with** | `dbxmig inventory` | `dbxmig workspace` |
 
-- **Hardcoded paths:** Tables, notebooks, and jobs often contain `dbfs:/mnt/...` or cloud-specific paths.
-- **Implicit dependencies:** A job may depend on a cluster policy, an init script, and a secret scope that are owned by different teams.
-- **Stale assets:** Old experiments, deleted tables, and obsolete dashboards still consume grants and storage.
+<Callout client:visible variant="warning" title="Unity Catalog grants are not the whole permission story">
+  Nothing in `information_schema` knows who may restart a cluster, edit a job, or attach to a pool. That is workspace object ACLs, a different API, and it is not included in a workspace export. Teams routinely migrate every UC grant correctly and then find out weeks later that they cannot operate their own workloads.
+</Callout>
+
+## Run it
+
+<CodeBlock client:visible language="bash" filename="days-1-3.sh" code={`export DBX_SOURCE_TOKEN=...      # a metastore-admin token -- see the warning below
+
+# Metastore plane
+dbxmig -c migration.yaml inventory -o metastore.json
+
+# Workspace plane, once per workspace, plus one CSV per asset class
+dbxmig -c migration.yaml workspace -o workspace-prod.json --csv-dir inventory-csv/
+
+# Day 3: what each asset depends on, and what breaks
+dbxmig -c migration.yaml crossrefs -w workspace-prod.json --csv crossrefs.csv -o crossrefs.md`} />
+
+The `workspace` command prints a status table as it goes. Read the right-hand column, not the counts:
+
+<CodeBlock client:visible language="markdown" code={`| Asset class        | Count | Usually owned by                     | Status           |
+|--------------------|-------|--------------------------------------|------------------|
+| jobs               | 412   | Platform engineer + owning data team | ok               |
+| pipelines          | 23    | Data engineering                     | ok               |
+| clusters           | 87    | Platform engineer                    | ok               |
+| cluster_policies   | 0     | Platform engineer + FinOps           | empty -- confirm |
+| instance_pools     | 4     | Platform engineer                    | ok               |
+| sql_warehouses     | 11    | Analytics engineering                | ok               |
+| dashboards         | 156   | BI / analytics owner                 | ok               |
+| secret_scopes      | 0     | Security engineer                    | FAILED: 403      |
+| object_acls        | 1094  | Platform engineer + security         | ok               |`} />
+
+Two of those rows are the whole reason the column exists. `cluster_policies: 0` might be true. `secret_scopes: FAILED: 403` is a permissions problem wearing the same clothes as an empty estate — written to JSON, both are `[]`.
+
+<Callout client:visible variant="tip" title="Collect as a metastore admin, or you will silently under-collect">
+  `information_schema` **automatically filters** to the objects the querying principal can see. A data engineer's export looks clean and complete and is a subset. Sanity-check the ratio before trusting it: ~1,850 grants across ~400 tables is plausible; 240 is not.
+</Callout>
+
+## What to keep per asset class, and why
+
+Not "everything the API returns." Each field below is either an identifier needed to recreate the object, or a dependency that decides which wave it belongs to. Everything else is noise in a spreadsheet someone has to read.
+
+<Accordion client:visible items={[
+  {
+    title: 'Workspaces — the map everything else hangs off',
+    content: 'Keep: workspace ID, URL, cloud/region, account ID, pricing tier, metastore ID, VNet/VPC and subnet IDs, private connectivity mode, enabled features. Why: region decides target options and data residency; pricing tier decides whether UC and private connectivity are available at all; the metastore ID tells you which workspaces share a governance boundary. Source: Accounts API, or system.access.workspaces_latest. Watch for: workspaces created outside the central account, and personal sandboxes holding production data.'
+  },
+  {
+    title: 'Jobs — keep the dependencies, not the whole definition',
+    content: 'Keep: job ID, name, creator, run-as identity, task count, schedule, paused state, cluster policy IDs, warehouse IDs, notebook paths, tags. Why: the run-as identity is a principal that must exist in the target account; policy and warehouse IDs are hard dependencies whose IDs change; notebook paths tell you whether the code is in a repo or loose in the workspace. Watch for: jobs paused for six months that nobody will admit to owning. They are retire candidates, and asking now costs less than migrating them.'
+  },
+  {
+    title: 'Clusters — the richest source of migration blockers',
+    content: 'Keep: cluster ID, name, spark version, node type and driver node type, autoscale bounds, data security mode, policy ID, instance pool ID, instance profile ARN, init script paths, spark conf, custom tags. Why: node types do not exist across clouds; an instance profile ARN has no target equivalent at all; init scripts on DBFS have to be relocated; spark conf is where hardcoded storage keys and secret references hide. Watch for: data_security_mode of NONE — that cluster cannot use Unity Catalog, so its workloads need rework rather than migration.'
+  },
+  {
+    title: 'Secret scopes — names only, never values',
+    content: 'Keep: scope name, backend type, key names, key count. Why: this is a dependency map, not a data export. Databricks secrets are write-only and no one can read a value back. What you need is "which scope, which key, used by which job, sourced from where", built while the people who created them are still reachable. Watch for: Key Vault-backed scopes — a cloud resource that does not cross clouds and needs a target equivalent designed, not copied.'
+  },
+  {
+    title: 'Object ACLs — the permission system nobody exports',
+    content: 'Keep: object type, object ID, object name, principal, permission level. Collected for jobs, clusters, pools, warehouses, pipelines, and policies. Why: this decides who can operate the platform after cutover, and it is invisible to every Unity-Catalog-centric inventory. Watch for: permissions granted to individual users rather than groups — each one is a migration decision and a person to contact.'
+  },
+  {
+    title: 'Groups and service principals — the workspace-local trap',
+    content: 'Keep: display name, member count, and crucially the resource type (WorkspaceGroup vs Group). Why: workspace-local groups must become account-level groups before Unity Catalog grants behave correctly. A migration that replays grants without resolving this produces grants referencing principals that cannot hold them. Watch for: service principals with no named owner — usually the ones running the most important jobs.'
+  },
+  {
+    title: 'Dashboards, queries, alerts — what business users notice first',
+    content: 'Keep: ID, name, owner, warehouse ID, query text, and for alerts the query ID they depend on. Why: warehouse IDs change in the target so every reference needs rewriting, and query text is where hardcoded three-part names and storage paths hide. Watch for: subscription and recipient lists. They are not part of the definition export and are lost silently — nobody complains about an email they stopped receiving.'
+  }
+]} />
+
+## Day 3: cross-references — the output that plans the migration
+
+`dbxmig crossrefs` reads the workspace inventory and extracts every reference from an asset to something it needs.
+
+<CodeBlock client:visible language="markdown" code={`### Blockers -- fix before scheduling a wave
+
+| Asset class | Asset                 | Kind           | Reference                          | What breaks                                    |
+|-------------|-----------------------|----------------|------------------------------------|------------------------------------------------|
+| jobs        | finance-ledger-export | cluster_policy | POL-RETIRED-2023                   | references a policy absent from the inventory  |
+| jobs        | legacy-mount-crawler  | dbfs_mount     | dbfs:/mnt/legacy/archive           | DBFS mounts do not migrate                     |
+| clusters    | legacy-etl            | cloud_identity | arn:aws:iam::...:instance-profile/ | no equivalent in the target cloud              |
+| queries     | raw file peek         | storage_uri    | abfss://archive@legacystorage/...  | resolves to source-cloud storage in the target |
+
+### Shared references -- these assets must move together
+
+| Shared dependency                                                                              |
+|------------------------------------------------------------------------------------------------|
+| sql_warehouse=WH-FINANCE-01 is shared by 3: dashboards:Regional revenue,                        |
+|   jobs:finance-ledger-export, queries:revenue by region                                          |
+| cluster_policy=POL-STANDARD-ETL is shared by 2: clusters:shared-analytics, jobs:sales-daily-load |`} />
+
+That second table is the wave plan writing itself. A dashboard, a job, and a query sharing one warehouse cannot go in three different waves without two of them depending on something a later wave owns.
+
+It finds — deterministically, no model involved — storage URIs with no path rule, DBFS mounts, `dbutils.secrets.get` and `{{secrets/scope/key}}` references, AWS instance profiles, hardcoded workspace URLs, and cluster policy / warehouse / pool IDs that do not resolve.
+
+## The master asset catalog
+
+Reference for everything, including the classes the toolkit does not collect.
+
+| Asset | Portability | Discover with | Migrate by | Validate with |
+|-------|---|-----------|------------------|----------|
+| Workspaces | Rebuild | Accounts API | Recreate in target | Login, API, SCIM |
+| UC metastores | **Cannot move** | Account API | Create new in target region | Attachment, grants |
+| Catalogs / schemas / tables | Content copies | `dbxmig inventory` | Clone, CTAS, or share | Row counts, schema, provenance |
+| External locations | Rebuild | `dbxmig inventory` | Recreate on target storage | Validate read **and** write |
+| Storage credentials | **Cannot move** | Account API | New target cloud identity | Credential validation |
+| Volumes | Rebuild + copy | `dbxmig inventory` | Recreate, then sync contents | File count, checksum |
+| DBFS root / mounts | **Cannot move** | `dbutils.fs.mounts()` | Retire into Volumes | Path resolution |
+| Notebooks | Copies | Workspace API / Repos | Git sync preferred | Execute smoke tests |
+| Repos / Git folders | Copies | `dbxmig workspace` | Re-clone from Git | Sync status |
+| Jobs / Workflows | Rebuild | `dbxmig workspace` | Recreate via Asset Bundles | Run success, SLA |
+| DLT / Lakeflow pipelines | Rebuild | `dbxmig workspace` | Recreate definition, let it refresh | Data output parity |
+| SQL warehouses | Rebuild | `dbxmig workspace` | Recreate; **IDs change** | Query latency, concurrency |
+| Clusters | Rebuild | `dbxmig workspace` | Recreate with mapped node types | Startup, libraries |
+| Cluster policies | Rebuild | `dbxmig workspace` | Recreate before any job | Policy enforcement |
+| Instance pools | Rebuild | `dbxmig workspace` | Recreate before clusters | Pre-warmed nodes |
+| Cloud IAM identities | **Cannot move** | Cloud IAM APIs | Design target model | Functional access tests |
+| Secret scopes | Names only | `dbxmig workspace` | Recreate; **re-source values** | Secret resolution |
+| MLflow experiments | Copies | MLflow API | Export/import | Artifact parity |
+| Registered models | Artifacts | `dbxmig inventory` | `copy_model_version` | Serving validation |
+| Dashboards / queries / alerts | Rebuild | `dbxmig workspace` | Recreate; rewire warehouse IDs | Visual parity |
+| UC grants | Replay | `dbxmig inventory` | Replay with mapped principals | Non-admin user test |
+| Object ACLs | Replay | `dbxmig workspace` | Replay via Permissions API | Team operates its own workloads |
+| Init scripts | Copies | `dbxmig workspace` | Move off DBFS to Volumes | Cluster startup |
+| Libraries | Rebuild | Cluster API | Reinstall from Maven/PyPI | Import checks |
+| Partner integrations | Rebuild | Admin console — **manual** | Reconfigure endpoints | Integration smoke tests |
+
+## Pitfalls that cost a wave
+
+- **Hardcoded paths.** `dbfs:/mnt/...` and `abfss://...` inside notebooks, job parameters, spark conf, and view bodies. The crossrefs scan finds them in collected assets; notebook *bodies* need a separate grep of the exported workspace.
+- **Implicit dependencies.** A job depending on a cluster policy, an init script, and a secret scope owned by three different teams — exactly what the shared-references table surfaces.
+- **Stale assets.** Old experiments, deleted tables, obsolete dashboards. They still hold grants and still cost storage, and every one migrated is migrated for nothing. Northwind retired 22% of its dashboards at this step.
+- **Believing an empty result.** Worth repeating: `0` and `403` are indistinguishable once written to JSON.
 
 ## Validation
 
-- Ensure every asset has a `migration_status`: move, recreate, retire, or defer.
-- Cross-check high-risk assets (secrets, IAM roles) with security before migration.
+Discovery is done when all four are true:
+
+1. Every asset class has a count **and** a status of `ok` — no `FAILED`, and every `empty` explicitly confirmed.
+2. Every asset has an owner and one of four decisions: **move, recreate, retire, defer.**
+3. Every crossrefs blocker has a named owner and a plan.
+4. The counts have been shown to each domain team and they recognise their own estate. The most reliable gap-finder in existence is a data owner asking "where's the X pipeline?"
 
 ## Rollback
 
-Asset inventory is read-only. If assets are missed, add them to the next wave or extend discovery.
+Inventory is read-only; there is nothing to roll back. But an inventory that is wrong invalidates the wave plan built on it, so re-run it weekly through discovery — estates change while you catalogue them.
 
 ## Automation opportunity
 
-- Use UCX to scan legacy Hive and DBFS usage.
-- Use the Databricks CLI to export workspace objects and job definitions in bulk.
+- Everything above is `dbxmig inventory`, `dbxmig workspace`, and `dbxmig crossrefs` — see the [automation toolkit](/templates/automation-toolkit).
+- Schedule the collection weekly from day one, so drift is visible and the [job-run-history baseline](/execution/what-does-not-migrate) covers the whole project rather than its last week.
+- Tag source assets with `migration-wave` and `owner` so the tagging, not a spreadsheet, is the source of truth.
 
 <Checklist client:visible title="Asset inventory" items={[
-  { id: 'tables', label: 'Inventory all catalogs, schemas, tables, and views' },
-  { id: 'grants', label: 'Export grants and ownership for all objects' },
-  { id: 'compute', label: 'Inventory clusters, warehouses, pools, and policies' },
-  { id: 'jobs', label: 'Export all job and pipeline definitions' },
-  { id: 'secrets', label: 'Inventory secret scopes and key references' },
+  { id: 'workspaces', label: 'Workspace list mapped to accounts, regions, and metastores' },
+  { id: 'metastore', label: 'Metastore plane collected as a metastore admin (grant count sanity-checked)' },
+  { id: 'workspace-plane', label: 'Workspace plane collected per workspace, including object ACLs' },
+  { id: 'status', label: 'Every asset class status is ok — no FAILED, every empty confirmed' },
+  { id: 'crossrefs', label: 'Cross-reference scan run; every blocker has a named owner' },
+  { id: 'shared', label: 'Shared references extracted and handed to wave planning' },
+  { id: 'groups', label: 'Workspace-local groups identified for conversion to account groups' },
+  { id: 'secrets', label: 'Secret scopes and key names inventoried with a source-of-truth per value' },
+  { id: 'decisions', label: 'Every asset has an owner and a move/recreate/retire/defer decision' },
+  { id: 'review', label: 'Counts reviewed with each domain team, who recognise their own estate' },
 ]} />
 
 ## Sources
 
 - Databricks — [`INFORMATION_SCHEMA.TABLES`](https://docs.databricks.com/aws/en/sql/language-manual/information-schema/tables) (`TABLE_CATALOG`, `TABLE_SCHEMA`, `STORAGE_PATH`)
+- Databricks — [Information schema](https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-information-schema) (results are automatically filtered by the caller's privileges)
 - Databricks — [Workspaces system table reference](https://docs.databricks.com/aws/en/admin/system-tables/workspaces) (`system.access.workspaces_latest`)
