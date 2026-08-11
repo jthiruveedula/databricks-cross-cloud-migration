@@ -133,6 +133,7 @@
         { "title": "RACI", "slug": "templates/raci" },
         { "title": "Risk register", "slug": "templates/risk-register" },
         { "title": "Sample scripts", "slug": "templates/sample-scripts" },
+        { "title": "Automation toolkit", "slug": "templates/automation-toolkit" },
         { "title": "Terraform patterns", "slug": "templates/terraform-patterns" }
       ]
     },
