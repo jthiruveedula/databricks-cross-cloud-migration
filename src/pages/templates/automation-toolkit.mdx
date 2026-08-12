@@ -1,0 +1,211 @@
+---
+title: 'Automation toolkit'
+layout: ../../layouts/Layout.astro
+description: 'dbxmig — a runnable, tested toolkit that inventories a Unity Catalog metastore, orders it by dependency, emits reviewable DDL, replays grants, and reconciles the result.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Accordion from '../../components/Accordion.tsx';
+
+# Automation toolkit
+
+Every page in this runbook ends with an *Automation opportunity* section. `dbxmig` is those sections implemented: an installable Python package in [`automation/`](https://github.com/jthiruveedula/databricks-cross-cloud-migration/tree/main/automation) that does the mechanical parts of a [metastore migration](/governance/metastore-migration) and — the part that matters more — tells you what it cannot do before you start.
+
+<Callout client:visible variant="tip" title="Run the whole thing right now, with no cloud account">
+  The repository ships a fixture metastore built around the awkward cases. Everything below executes offline against it, so you can see the output shape before deciding whether the toolkit is worth pointing at your estate.
+</Callout>
+
+<CodeBlock client:visible language="bash" code={`git clone https://github.com/jthiruveedula/databricks-cross-cloud-migration
+cd databricks-cross-cloud-migration/automation
+python -m venv .venv && source .venv/bin/activate
+pip install -e '.[dev]'
+
+dbxmig -c examples/migration.fixture.yaml gaps -i tests/fixtures/source_metastore.json`} />
+
+## The output that earns its keep
+
+`gaps` runs before anything is created. On the fixture estate it returns this — and this is the entire point of the toolkit:
+
+<CodeBlock client:visible language="markdown" code={`### Blocked steps
+
+| Object type        | Object                     | Why                                                                    |
+|--------------------|----------------------------|------------------------------------------------------------------------|
+| STORAGE_CREDENTIAL | prod_uc_credential         | Cloud identity cannot be copied across clouds -- create the target IAM  |
+|                    |                            | role / managed identity / service account first, then the credential   |
+| TABLE              | prod.finance.ledger_csv    | EXTERNAL table has no target LOCATION -- add a path rule or an explicit |
+|                    |                            | target location before running                                          |
+| MATERIALIZED_VIEW  | prod.sales.mv_daily_sales  | MATERIALIZED_VIEW cannot be CLONEd -- recreate the Lakeflow/DLT         |
+|                    |                            | pipeline that produces it and let it refresh in the target             |
+| STREAMING_TABLE    | prod.sales.st_order_events | STREAMING_TABLE cannot be CLONEd -- (as above)                          |
+| VIEW               | prod.finance.v_external_feed | reads objects outside the migration scope:                            |
+|                    |                            | other_metastore.finance.adjustments                                     |
+| FUNCTION           | prod.finance.fx_convert    | unsupported function language: SCALA                                    |
+| REGISTERED_MODEL   | prod.sales.churn_model     | model versions are artifacts, not metadata -- copy them with the        |
+|                    |                            | MLflow client and re-register; a DDL replay cannot move them            |
+| ROW_COLUMN_POLICY  | prod.sales.customers       | row filter / column masks are not copied by CLONE and must be re-bound  |
+
+### Storage paths with no rule
+
+| Object type       | Object                  | Unmapped URI                                                       |
+|-------------------|-------------------------|--------------------------------------------------------------------|
+| TABLE             | prod.finance.ledger_csv | abfss://archive@legacystorage.dfs.core.windows.net/finance/ledger  |
+| EXTERNAL_LOCATION | prod_archive            | abfss://archive@legacystorage.dfs.core.windows.net/                |
+
+### Metastore-level objects the toolkit does not create
+
+| Object type | Name           | Action                             |
+|-------------|----------------|------------------------------------|
+| CONNECTION  | snowflake_prod | recreate by hand                   |
+| SHARE       | partner_share  | recreate and re-invite recipients  |
+| RECIPIENT   | acme_analytics | new activation link required       |`} />
+
+`gaps` exits non-zero when anything is listed, which makes it usable as a gate in the migration pipeline rather than a report someone reads once.
+
+## The nine commands, in the order you run them
+
+| Command | Does | Needs a workspace |
+|---|---|---|
+| `validate` | Rejects a broken config before anything runs | no |
+| `inventory` | Exports the source metastore to JSON | yes (source) |
+| `plan` | Orders every object by dependency into executable steps | no |
+| `gaps` | Everything with no automated path — **read this first** | no |
+| `ddl` | Emits idempotent target SQL, in dependency order | no |
+| `grants` | Emits translated `GRANT` and `SET OWNER` statements | no |
+| `bundle` | Generates Declarative Automation Bundle YAML for jobs and pipelines, with every workspace-scoped id turned into a variable | no |
+| `apply` | Executes, resumably — dry-run unless `--execute` | yes (target) |
+| `reconcile` | Compares target against source, exits non-zero on a blocker | no |
+| `report` | Rolls inventory, plan, gaps, and reconciliation into one markdown file | no |
+
+<CodeBlock client:visible language="bash" filename="a full run" code={`export DBX_SOURCE_TOKEN=...        # tokens live in the environment, never in the config
+
+dbxmig -c migration.yaml validate
+dbxmig -c migration.yaml inventory -o inventory.json
+dbxmig -c migration.yaml gaps      -i inventory.json -o gaps.md       # fix these first
+dbxmig -c migration.yaml ddl       -i inventory.json -o target.sql    # review as a diff
+dbxmig -c migration.yaml grants    -i inventory.json -o grants.sql
+dbxmig -c migration.yaml apply     -i inventory.json                  # dry run, prints SQL
+dbxmig -c migration.yaml apply     -i inventory.json --execute
+dbxmig -c migration.yaml inventory -o target-inventory.json           # now against the target
+dbxmig -c migration.yaml reconcile -i inventory.json -t target-inventory.json`} />
+
+<Callout client:visible variant="tip" title="Only two of the nine need credentials">
+  Planning, DDL generation, grant translation, and reconciliation all run against a JSON inventory. That means the entire migration can be generated, reviewed, and signed off before anyone holds a token for the target account — which is usually the long pole in a regulated environment, not the technical work.
+</Callout>
+
+## One config file is the whole contract
+
+Nothing environment-specific is passed on the command line, so the same command produces the same result on anyone's machine and the config is what gets code-reviewed.
+
+<CodeBlock client:visible language="yaml" filename="migration.yaml" code={`source:
+  host: https://adb-1234567890123456.7.azuredatabricks.net
+  warehouse_id: abc123def456
+  token_env: DBX_SOURCE_TOKEN        # read from the environment, never stored here
+  cloud: azure
+  catalogs: [prod]
+
+target:
+  host: https://1234567890123456.7.gcp.databricks.com
+  warehouse_id: fed789cba321
+  token_env: DBX_TARGET_TOKEN
+  cloud: gcp
+
+catalog_map:
+  prod: prod_gcp
+
+# Longest prefix wins regardless of declaration order, so a specific rule always
+# beats a general one. Anything NOT covered here is reported by \`gaps\`.
+path_rules:
+  - from: abfss://raw@prodstorage.dfs.core.windows.net/
+    to: gs://nwr-prod-raw/
+  - from: dbfs:/mnt/legacy/
+    to: /Volumes/prod_gcp/sales/legacy/
+    note: Legacy mount retired into a Volume, not remapped to another mount.
+
+managed_locations:
+  prod_gcp: gs://nwr-prod-managed/catalogs/prod
+  prod_gcp.finance: gs://nwr-prod-managed-pci/catalogs/prod/finance
+
+principal_map_file: principal_map.json
+
+llm:
+  enabled: false                     # off unless you turn it on
+
+state_file: .dbxmig/journal.jsonl`} />
+
+`validate` catches the config mistakes that would otherwise surface as a half-finished migration: a catalog rename pointing outside the declared scope, two catalogs colliding on one target name, a no-op path rule, LLM enabled with no endpoint.
+
+## Six behaviours worth knowing before you trust it
+
+<Accordion client:visible items={[
+  {
+    title: 'Object order is computed, not maintained by hand',
+    content: 'Storage credential, external location, catalog, schema, volume, table, constraint, view, function, model, row/column policy, grant. Views are topologically sorted among themselves, so a view built on another view is emitted second and a circular definition is reported rather than looped on. The plan is deterministic: two runs on the same inventory produce byte-identical output, which is what makes the generated SQL diffable across re-runs.'
+  },
+  {
+    title: 'Nothing is ever skipped silently',
+    content: 'An object with no automated path becomes a blocked step, and a blocked step appears in four places: the plan, the gap report, the generated SQL as a "-- BLOCKED" comment where the statement would have been, and the exit code. There is no path through the toolkit where an object quietly fails to appear in the target. This is deliberate — the failure mode of every hand-rolled migration script is the object nobody noticed was missing.'
+  },
+  {
+    title: 'Generated SQL is written, not executed',
+    content: 'ddl and grants produce files. A migration you can read as a diff before anyone runs it is one a security reviewer can sign off, and a failed run can be re-driven from the same file. Every statement is idempotent (CREATE ... IF NOT EXISTS, CREATE OR REPLACE VIEW), so re-running from the top is safe.'
+  },
+  {
+    title: 'Runs resume where they stopped',
+    content: 'apply journals every statement outcome to JSONL. Re-running after an interruption skips what already succeeded: "executed 689 statement(s); 214 already done; 0 failed". Recovery is the same command again, not a bespoke catch-up script written at 3am. The journal is also the audit record of who ran what against which target, and when.'
+  },
+  {
+    title: 'An unmapped principal is fatal, not skipped',
+    content: 'Principals are account-scoped, so every grantee needs an explicit target. In strict mode an unmapped principal aborts translation rather than dropping the grant — dropping it would produce a target that looks migrated and quietly denies access to whoever held it. A principal that is genuinely not migrating goes in a "retired" list, which turns "this group loses access" into a recorded decision. Ownership is replayed as its own pass, because no GRANT statement reproduces an object owner.'
+  },
+  {
+    title: 'The LLM, if you enable it at all, is on a short leash',
+    content: 'The deterministic rewriter runs first and handles nearly everything. A model is consulted only for objects it could not finish, only when explicitly configured with an endpoint, and only after string literals are redacted so customer values are not what gets sent. Every output then passes a mechanical gate — one statement, correct object name, no residual source URIs, no references outside an allow-list — and output that fails is discarded rather than patched up. Model id and prompt version are recorded with each result. The default backend translates nothing and escalates to a human.'
+  }
+]} />
+
+## What it refuses to do, and why
+
+Reported as manual work rather than pretended. Each of these is a genuine limit, not a missing feature:
+
+| Not automated | Because |
+|---|---|
+| Storage credentials | Cloud identity does not translate — the target IAM role, managed identity, or service account is built first |
+| Registered model versions | Artifacts, not metadata; `mlflow.copy_model_version`, not DDL |
+| Materialized views, streaming tables | `CLONE` rejects them as source or target; the pipeline is the migratable object |
+| Row filters, column masks | Not copied by `CLONE`; re-bound after the masking functions exist |
+| Connections, shares, recipients | Recreated by hand, and recipients need new activation links |
+| Anything outside the metastore | Jobs, clusters, dashboards, secrets, audit history — see the rest of this runbook |
+
+## Which pages it implements
+
+| Runbook page | What the toolkit does for it |
+|---|---|
+| [Metastore migration](/governance/metastore-migration) | The whole chapter — ordering, DDL, blocked-object reporting |
+| [Grants and roles](/governance/grants-and-roles) | Principal translation, top-down replay, ownership, source-vs-target diff |
+| [Asset inventory](/discovery/asset-inventory) | `inventory` produces the machine-readable version of that catalog |
+| [Dependency mapping](/discovery/dependency-mapping) | View dependency edges, from lineage with a parse fallback |
+| [Data reconciliation](/validation/data-reconciliation) | Object counts, schema drift, clone provenance, residual source paths |
+| [AI-assisted migration](/accelerators/ai-assisted-migration) | The deterministic-core / gated-LLM-edge pattern, implemented |
+
+## Testing and status
+
+<CodeBlock client:visible language="bash" code={`pytest        # 123 tests, no credentials, no network
+ruff check .`} />
+
+Both run in CI on every pull request that touches `automation/`, and the Python is scanned by CodeQL alongside the site code — this generates and executes SQL against a customer's metastore, so it is treated as application code rather than sample snippets.
+
+<Callout client:visible variant="warning" title="Reference implementation, not a Databricks product">
+  Validate every generated statement against your own environment and the current Databricks documentation before running it in production. Run `apply --execute` against a non-production target workspace first. MIT licensed — fork it and adapt the rules to your estate.
+</Callout>
+
+<Checklist client:visible title="Before pointing it at production" items={[
+  { id: 'fixture', label: 'Ran the full sequence against the bundled fixture and read the gap report' },
+  { id: 'config', label: 'Config validates, with tokens in environment variables rather than the file' },
+  { id: 'paths', label: 'Every source storage prefix has a path rule — gaps reports no unmapped URIs' },
+  { id: 'principals', label: 'Principal map complete; deliberate non-migrations listed as retired' },
+  { id: 'gaps', label: 'Every blocked object has a named owner and a manual plan' },
+  { id: 'review', label: 'Generated DDL and grant files reviewed by someone who did not generate them' },
+  { id: 'nonprod', label: 'apply --execute rehearsed against a non-production target' },
+]} />

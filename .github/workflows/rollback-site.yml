@@ -1,0 +1,161 @@
+name: Rollback site to a previous release
+
+# Re-deploys a previously published release tag to GitHub Pages without
+# cutting a new release -- for when the currently-live release has an issue
+# and the fastest fix is "go back to what was live before", not "ship a new
+# release that reverts it". Re-publishing an old GitHub Release doesn't fire
+# a new `release: published` event, so this is a separate, explicit workflow
+# rather than something deploy-site.yml can already do.
+#
+# Mirrors deploy-site.yml's notify job: a final summary table naming the
+# rolled-back-to tag on success, or the failed stage and tag on failure --
+# so the outcome is visible from the Actions run without opening step logs.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to redeploy (e.g. v1.3.0) — must already exist under Releases"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  verify-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.check.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: check
+        name: Confirm the tag exists
+        run: |
+          if git rev-parse "refs/tags/${{ inputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Tag '${{ inputs.tag }}' does not exist in this repo. Check https://github.com/${{ github.repository }}/tags." >&2
+            exit 1
+          fi
+
+  build:
+    needs: verify-tag
+    runs-on: ubuntu-latest
+    outputs:
+      failed_stage: ${{ steps.record_stage.outputs.failed_stage }}
+    steps:
+      - id: checkout
+        uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+      - id: setup_node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - id: install
+        name: Install dependencies
+        run: npm ci
+      - id: astro_build
+        name: Build
+        run: npm run build
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+      - id: record_stage
+        name: Record which stage failed (if any)
+        if: always()
+        run: |
+          failed_stage=""
+          declare -A LABELS=(
+            [checkout]="Checkout tag"
+            [setup_node]="Set up Node"
+            [install]="Install dependencies"
+            [astro_build]="Build"
+          )
+          declare -A OUTCOMES=(
+            [checkout]="${{ steps.checkout.outcome }}"
+            [setup_node]="${{ steps.setup_node.outcome }}"
+            [install]="${{ steps.install.outcome }}"
+            [astro_build]="${{ steps.astro_build.outcome }}"
+          )
+          for id in checkout setup_node install astro_build; do
+            if [ "${OUTCOMES[$id]}" = "failure" ]; then
+              failed_stage="${LABELS[$id]}"
+              break
+            fi
+          done
+          echo "failed_stage=$failed_stage" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: build
+    if: needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
+  notify:
+    needs: [verify-tag, build, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post rollback summary
+        run: |
+          TAG="${{ inputs.tag }}"
+          TAG_EXISTS="${{ needs.verify-tag.result }}"
+          BUILD_RESULT="${{ needs.build.result }}"
+          DEPLOY_RESULT="${{ needs.deploy.result }}"
+          FAILED_STAGE="${{ needs.build.outputs.failed_stage }}"
+          PAGE_URL="${{ needs.deploy.outputs.page_url }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          if [ "$TAG_EXISTS" = "success" ] && [ "$BUILD_RESULT" = "success" ] && [ "$DEPLOY_RESULT" = "success" ]; then
+            {
+              echo "### ⏪ Rolled back to \`$TAG\`"
+              echo ""
+              echo "Live site now serves the build from this release tag."
+              echo ""
+              echo "| | |"
+              echo "|---|---|"
+              echo "| Rolled back to | \`$TAG\` |"
+              echo "| Live URL | ${PAGE_URL:-https://jthiruveedula.github.io/databricks-cross-cloud-migration/} |"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            STAGE_LABEL="${FAILED_STAGE:-deploy step}"
+            if [ "$TAG_EXISTS" != "success" ]; then
+              STAGE_LABEL="Tag verification (tag does not exist)"
+            elif [ "$BUILD_RESULT" != "success" ] && [ -z "$FAILED_STAGE" ]; then
+              STAGE_LABEL="build job (cancelled or infra error before a stage recorded)"
+            fi
+            {
+              echo "### ❌ Rollback failed — site NOT changed"
+              echo ""
+              echo "| | |"
+              echo "|---|---|"
+              echo "| Requested tag | \`$TAG\` |"
+              echo "| Failed stage | **$STAGE_LABEL** |"
+              echo "| Tag verification | $TAG_EXISTS |"
+              echo "| Build job | ${BUILD_RESULT:-skipped} |"
+              echo "| Deploy job | ${DEPLOY_RESULT:-skipped (build did not succeed)} |"
+              echo "| Logs | [View this run]($RUN_URL) |"
+              echo ""
+              echo "The currently live release is unchanged — this workflow only replaces it on a successful rollback."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

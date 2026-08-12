@@ -13,6 +13,10 @@ import Tabs from '../../components/Tabs.tsx';
 
 Network security cannot be exported and imported — every construct (private connectivity, egress control, DNS) is rebuilt natively against the target cloud's networking primitives. See the [cross-cloud equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix#networking) for the construct-level mapping; this page covers the security posture to preserve while rebuilding it.
 
+<Callout client:visible variant="warning" title="This page covers the classic compute plane only">
+  Serverless compute does not run in your VNet or VPC, so none of the controls below govern it. Its egress is controlled by an account-level network connectivity configuration instead — and serverless is on by default in new workspaces, which means a target workspace can be running workloads outside every control on this page while the network is still being built. See [serverless networking and egress](/security/serverless-networking).
+</Callout>
+
 <Callout client:visible variant="prerequisite" title="Match posture, not just topology">
   The goal isn't "a VPC exists in the target cloud" — it's that the target network enforces the *same security posture* as source: no public IPs on compute, private control-plane connectivity, and explicit (not default-allow) egress.
 </Callout>

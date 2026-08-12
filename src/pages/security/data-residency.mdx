@@ -1,0 +1,136 @@
+---
+title: 'Data residency and classification'
+layout: ../../layouts/Layout.astro
+description: 'The constraint that can invalidate a migration direction rather than add work to it — where data may legally live, and how to find out before the plan is built.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Accordion from '../../components/Accordion.tsx';
+
+# Data residency and classification
+
+Every other problem in this runbook is solved by effort. This one is not.
+
+A residency constraint discovered in week two is a design input. The same constraint discovered in week fourteen means the target region is wrong, the metastore is in the wrong place, and the data that has already moved should not have. There is no amount of engineering that recovers that.
+
+<Callout client:visible variant="decision" title="Ask this before the target region is chosen — it is question zero, not a compliance sign-off at the end">
+  "Which of our data has a legal or contractual restriction on where it may be stored or processed?" If nobody can answer within a day, that is the finding. Take it to legal and data protection in week one, not to a pre-cutover review board in month four.
+</Callout>
+
+## Why a cross-cloud move is different from a cross-region one
+
+Teams that have done regional migrations assume residency is a familiar problem. Three things change when the *cloud* changes.
+
+| | Cross-region | Cross-cloud |
+|---|---|---|
+| Legal entity holding the data | Same provider | **Different provider, different contracts and sub-processors** |
+| Data processing agreement | Already covers it | **May need renegotiating or re-signing** |
+| Customer commitments | Usually silent on provider | **Contracts sometimes name the provider explicitly** |
+| Certifications in scope | Same programme | **Must be re-verified for the target region** |
+| Where processing happens | Your region | **Serverless runs in a Databricks-managed network** |
+
+That last row is the one most often missed, and it is the one this runbook's [serverless networking](/security/serverless-networking) page implies without stating: for serverless compute, the *processing* location is a property of the Databricks region, not of your VNet. If a control depends on "processing happens inside our network", serverless changes that answer and it must be checked explicitly.
+
+<Callout client:visible variant="warning" title="A named-provider clause is a hard stop, and it lives in contracts nobody on the migration team has read">
+  Enterprise customer agreements sometimes name the cloud provider, or prohibit named ones. Nobody discovers this from a Databricks console — it comes from commercial contracts, held by legal or sales operations. Ask the question early enough that the answer can still change the target, because if it arrives late it invalidates the direction rather than adding a task.
+</Callout>
+
+## What to classify, and how far to go
+
+Do not attempt to classify an entire estate. Classify enough to find the constrained subset, then treat the rest as unconstrained by exception.
+
+<Accordion client:visible items={[
+  {
+    title: 'Start from what already knows the answer',
+    content: 'Most estates already carry classification somewhere: Unity Catalog tags applied for other reasons, a data catalog outside Databricks, a records-retention schedule, or a DPIA register held by the privacy team. Harvest those before generating anything new. The catalog tags are queryable directly -- system.information_schema.table_tags and column_tags -- and are usually the fastest route to a first list.'
+  },
+  {
+    title: 'Then narrow by where the risk concentrates',
+    content: 'Personal data of individuals in a jurisdiction with transfer restrictions; regulated categories such as health, payment, or government data; anything under a contractual residency clause; and anything already inside a certification boundary. Four questions, not a full taxonomy. A table nobody can place in one of those buckets is almost always unconstrained, and treating it that way is a defensible position provided the reasoning is written down.'
+  },
+  {
+    title: 'Use AI to draft the classification, never to decide it',
+    content: 'An LLM reading column names and comments will produce a plausible first-pass classification quickly, and this runbook is otherwise enthusiastic about that pattern -- see AI-assisted assessment. Here the output is a candidate list for a human to confirm, because the failure mode is not a broken query, it is a regulator being told something untrue. Have the data protection owner sign the final list.'
+  }
+]} />
+
+<CodeBlock client:visible language="sql" filename="classification-starting-point.sql" code={`-- Existing tags: the fastest route to a first list
+SELECT catalog_name, schema_name, table_name, tag_name, tag_value
+FROM system.information_schema.table_tags
+WHERE lower(tag_name) IN ('classification', 'pii', 'sensitivity', 'data_domain');
+
+SELECT catalog_name, schema_name, table_name, column_name, tag_name, tag_value
+FROM system.information_schema.column_tags
+WHERE lower(tag_name) IN ('pii', 'phi', 'pci', 'classification');
+
+-- Where masking already exists, someone has already decided this is sensitive
+SELECT * FROM system.information_schema.column_masks;
+SELECT * FROM system.information_schema.row_filters;`} />
+
+That last pair is the highest-yield query on this page. **An existing column mask or row filter is a classification decision someone already made and documented in the platform** — and each one is also a migration task, since [neither survives a clone](/governance/metastore-migration).
+
+## Four outcomes, and what each means for the plan
+
+Once the constrained subset is known, every table lands in one of four places. Decide this in design, not at cutover.
+
+| Outcome | Meaning | Consequence |
+|---|---|---|
+| **Unconstrained** | Migrate normally | The default, and most of the estate |
+| **Region-constrained** | Must stay in a jurisdiction | Target region is now fixed, not chosen |
+| **Provider-constrained** | Cannot move to the target cloud | **Stays put** — govern it remotely instead |
+| **Cannot move at all** | Legal, contractual, or consent barrier | Out of scope; the workload that reads it may be too |
+
+<Callout client:visible variant="tip" title="Provider-constrained data is the case remote governance was designed for">
+  A subset that cannot move is not a blocked migration. Unity Catalog federation and Delta Sharing let the target govern and query it where it sits, permanently. This is the point where [remote governance vs. migration](/overview/remote-governance-and-when-not-to-migrate) stops being a strategy discussion and becomes the answer to a specific constraint — and it means a residency finding rarely has to stop the whole programme.
+</Callout>
+
+## The constraints that survive the move
+
+Residency is not only about where the bytes land.
+
+- **Metastore region.** A Unity Catalog metastore is regional. If constrained data must live in one jurisdiction and the rest of the estate in another, that is two metastores, and cross-metastore access is Delta Sharing rather than a normal grant. This is an architecture consequence, decided in design.
+- **Encryption keys.** A customer-managed key in the source cloud's KMS does not travel. The target needs its own key, in the right region, under the right control — and "who may access the key" is often the actual regulatory control, not where the data sits.
+- **Backups and DR.** A DR copy in a second region is a second residency question, and it is routinely forgotten because the DR design is written by a different team. Check the [disaster recovery](/governance/disaster-recovery) target region against the same constraint list.
+- **The audit trail.** Records proving compliance are themselves often subject to retention and residency rules — and they are destroyed by decommissioning unless exported. See [what does not migrate](/execution/what-does-not-migrate).
+- **Support and operations access.** Who can see the data during an incident, and from where, is part of some certification boundaries. A follow-the-sun support model that was compliant in one cloud's arrangement needs re-checking.
+
+## Validation
+
+- The constrained subset is enumerated, and the data protection owner has **signed the list** — not reviewed it.
+- Every target region is confirmed as permitted for the classification of data landing there.
+- Provider-constrained data has a remote-governance design, not a migration task.
+- Encryption key location and key-access control confirmed for the target.
+- The DR region checked against the same constraints as the primary.
+- Audit-log export destination is itself compliant with the retention and residency rules that apply to it.
+- Serverless processing location reviewed explicitly against any "processing stays in our network" control.
+
+## Rollback
+
+Data moved across a border in breach of a constraint cannot be un-moved — deleting the target copy does not undo the transfer that already happened. This is the only failure in the runbook where the remedy is disclosure rather than remediation, and it is the reason residency is a week-one question rather than a pre-cutover checkbox.
+
+## Automation opportunity
+
+- Harvest existing tags, column masks, and row filters into the classification worksheet rather than starting from a blank sheet — `dbxmig inventory` already captures masks and filters per table, see the [automation toolkit](/templates/automation-toolkit).
+- Gate the migration plan on classification: a table with no classification decision should fail discovery sign-off the same way an uncollected asset class does.
+- Re-run the tag query through hypercare. New tables appear in the target, and a classification process that only ran once at discovery is out of date the week after cutover.
+
+<Checklist client:visible title="Data residency and classification" items={[
+  { id: 'question-zero', label: 'Residency question asked in week one, before the target region was chosen' },
+  { id: 'contracts', label: 'Customer contracts checked for named-provider or residency clauses' },
+  { id: 'harvest', label: 'Existing tags, column masks, and row filters harvested as the classification starting point' },
+  { id: 'subset', label: 'Constrained subset enumerated and SIGNED by the data protection owner' },
+  { id: 'outcome', label: 'Every constrained table assigned one of the four outcomes' },
+  { id: 'remote', label: 'Provider-constrained data has a remote-governance design, not a migration task' },
+  { id: 'metastore', label: 'Metastore topology reflects the residency split, if there is one' },
+  { id: 'keys', label: 'Encryption key location AND key-access control confirmed for the target' },
+  { id: 'dr', label: 'DR region checked against the same constraint list as the primary' },
+  { id: 'audit', label: 'Audit-log export destination compliant with its own retention and residency rules' },
+  { id: 'serverless', label: 'Serverless processing location reviewed against in-network processing controls' },
+  { id: 'hypercare', label: 'Classification re-run during hypercare to catch tables created after discovery' },
+]} />
+
+<Callout client:visible variant="warning" title="This page is an engineering checklist, not legal advice">
+  It describes where to look and what to decide. Whether a specific transfer is lawful is a question for your legal and data protection functions, working from your contracts and jurisdictions. Their answer is the input; this page is what you do with it.
+</Callout>

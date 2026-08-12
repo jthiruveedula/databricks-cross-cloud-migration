@@ -20,6 +20,7 @@ Applies to any migration with more than a handful of dependency-chain clusters. 
 ## Inputs required
 
 - Completed [dependency mapping](/discovery/dependency-mapping) clusters (not a flat asset list).
+- The **shared-references** table from `dbxmig crossrefs` (see [asset inventory](/discovery/asset-inventory)) — assets sharing a cluster policy, SQL warehouse, secret scope, or storage prefix cannot be split across waves, and this is the list of them.
 - [Risk assessment](/discovery/risk-assessment) scores per cluster.
 - Confirmed owner/team availability from [workspace inventory](/discovery/workspace-inventory).
 
@@ -55,7 +56,7 @@ Applies to any migration with more than a handful of dependency-chain clusters. 
   },
   {
     title: 'Wave 4: Decommission',
-    content: 'Retire source workspaces, metastores, and infrastructure after hypercare.'
+    content: 'Retire source workspaces, metastores, and infrastructure after hypercare -- in the order that keeps rollback available until it genuinely is not needed. This is the only irreversible phase of the migration and it takes months, not weeks; see decommissioning the source.'
   }
 ]} />
 
@@ -88,6 +89,8 @@ Score each dependency-chain cluster (not each individual asset — see [dependen
 Set wave-boundary thresholds once, before scoring any real workload, so the cutoffs can't be quietly adjusted to fit a preferred sequencing: for example, score < 2.0 → Wave 1, 2.0–3.5 → Wave 2, > 3.5 → Wave 3.
 
 ## Wave plan template
+
+A reference structure for recording your own wave plan — no tool on this site parses this file; it's a starting shape to fill in and adapt (a wiki page, a Confluence table, or an actual YAML file your team's tooling reads are all fine substitutes). Replace the `<WS_ID>`/`<TWS_ID>` placeholders with real workspace IDs, and the `criteria` entries with your actual entry/exit gates.
 
 <CodeBlock client:visible language="yaml" filename="wave-plan.yaml" code={`waves:
   - id: wave-0

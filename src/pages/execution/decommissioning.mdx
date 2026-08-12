@@ -1,0 +1,176 @@
+---
+title: 'Decommissioning the source'
+layout: ../../layouts/Layout.astro
+description: 'Retire the source workspaces, metastore, and cloud infrastructure — in the order that keeps rollback available until it is genuinely not needed, and blocks deletion on export sign-off.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Accordion from '../../components/Accordion.tsx';
+
+# Decommissioning the source
+
+The last phase, the one with the least attention and the only irreversible step in the entire migration.
+
+[Wave planning](/execution/wave-planning) calls this "Wave 4: Decommission" in one line. This is that line, expanded — because by the time you reach it the migration is declared a success, the team has moved on, and the only remaining pressure is finance asking why two platforms are still being paid for.
+
+<Callout client:visible variant="warning" title="Deleting the source is the only step in this runbook with no rollback">
+  Every other failure is fixable: a wrong grant is re-issued, a bad clone is re-run, a failed cutover reverts to source. Deleting the source metastore and its storage ends that. Everything on [what does not migrate](/execution/what-does-not-migrate) becomes permanently unrecoverable at that moment, and the cost pressure at that point runs entirely in the direction of deleting it.
+</Callout>
+
+## Northwind's timeline, and why it is longer than anyone budgeted
+
+| Week after cutover | State | Monthly cost |
+|---|---|---|
+| 0 | Cutover complete, target live | Both platforms, ~2× |
+| 1–2 | Hypercare. Source **running**, rollback available | ~2× |
+| 3 | Source jobs paused, users redirected, **still readable** | ~1.4× |
+| 4 | Exports verified from the target | ~1.4× |
+| 5 | Workspaces deleted, metastore deleted | ~1.05× |
+| 6–17 | Storage retained, lifecycle-tiered to archive | ~1.05× |
+| 18 | Storage deleted. Migration over | 1× |
+
+Four months from cutover to a single bill. Everyone budgets four weeks. Say the real number out loud at planning time, or the schedule pressure lands on the export step, which is the one step that must not be rushed. The full double-running model, including the egress and re-computation costs that are always underestimated, is on [cost and tagging continuity](/execution/cost-and-tagging-continuity).
+
+## The order, and what each step forecloses
+
+Each step removes a rollback option. Do them in this order, and never skip ahead because a later step is cheaper.
+
+| # | Step | Rollback after this |
+|---|---|---|
+| 1 | Pause source jobs and pipelines | Full — un-pause and you are back |
+| 2 | Revoke write, keep read | Full for reads; writes need re-granting |
+| 3 | Verify every export **from the target** | Full |
+| 4 | Freeze: revoke all non-admin access | Recoverable within the freeze window |
+| 5 | Delete workspaces | Workspace objects gone; **data and metastore survive** |
+| 6 | Delete the metastore | Catalog structure and grants gone forever |
+| 7 | Retain storage on a lifecycle policy | Data still recoverable |
+| 8 | Delete storage | **Nothing is recoverable** |
+| 9 | Tear down network, IAM, keys | Audit trail of the old estate gone |
+
+<Callout client:visible variant="tip" title="Steps 5 and 6 are separate on purpose, and step 7 is the cheap insurance">
+  Deleting a workspace does not delete the metastore or the data. Deleting the metastore does not delete the storage. Keeping the storage for a quarter after everything else is gone costs a rounding error against the migration budget and is the only thing standing between you and "we need the 2025 ledger for an audit."
+</Callout>
+
+## Step 3 is the gate — everything else is mechanical
+
+<CodeBlock client:visible language="sql" filename="verify-from-target.sql" code={`-- Run these in the TARGET workspace, not the source. An archive nobody has
+-- queried from the target is an assumption, not an archive.
+SELECT MIN(event_time) AS earliest, MAX(event_time) AS latest, COUNT(*) AS events
+FROM archive.compliance.audit_azure_2026;
+
+SELECT COUNT(DISTINCT job_id) AS jobs, MIN(start_time) AS earliest
+FROM archive.ops.job_runs_pre_migration;
+
+-- Object ACLs: the permission system that is not in information_schema.
+SELECT object_type, COUNT(*) FROM archive.ops.workspace_acls GROUP BY object_type;`} />
+
+Two failure modes this catches, both real:
+
+- **The export ran but wrote somewhere the target cannot read.** An archive in the source cloud's storage, governed by the source metastore, is deleted along with it.
+- **The export ran early and stopped.** A weekly job that silently failed in week 2 leaves an archive that ends in week 2. `MAX(event_time)` is the check.
+
+## Deleting, per cloud
+
+<Accordion client:visible items={[
+  {
+    title: 'Databricks objects — workspaces then metastore',
+    content: 'Delete workspaces first (account console or Accounts API), then the metastore. A metastore with workspaces still attached will refuse to delete, and force-deleting it is not a shortcut you want — it detaches workspaces from governance rather than tidying up. Confirm the metastore ID you are deleting against your inventory: on a multi-metastore account this is the single most dangerous command in the migration.'
+  },
+  {
+    title: 'Azure — resource groups are a trap and a tool',
+    content: 'The managed resource group holding the workspace is deleted with the workspace. Storage accounts, Key Vaults, and the VNet usually live in your own resource groups and survive. Apply a delete lock to the storage account during the retention window so a tidy-up script cannot remove it, and check for Key Vault soft-delete and purge protection -- a purged vault takes secrets with it, and those secrets may be the only copy of something the target still needs.'
+  },
+  {
+    title: 'AWS — the IAM role is the last thing to go',
+    content: 'S3 buckets outlive the workspace. Move them to Glacier Deep Archive rather than deleting, enable a lifecycle expiry at the end of the retention window, and keep the cross-account IAM role until you have confirmed nothing in the target still assumes it. Deleting the role first turns a recoverable archive into an unreadable one.'
+  },
+  {
+    title: 'GCP — projects delete slowly, which helps',
+    content: 'A project scheduled for deletion has a ~30-day recovery window, which is a useful accidental safety net. GCS buckets are project-scoped, so deleting the project deletes the data -- if the archive lives in the same project as the workspace, move it out first. Check for org-policy or lien constraints before scheduling.'
+  }
+]} />
+
+<CodeBlock client:visible language="bash" filename="retain-then-expire.sh" code={`# Retain rather than delete. Tier down, expire on a date you chose deliberately.
+
+# AWS
+aws s3api put-bucket-lifecycle-configuration --bucket nwr-legacy-prod \\
+  --lifecycle-configuration file://archive-then-expire.json
+
+# Azure -- lock first, so a cleanup script cannot remove it during retention
+az lock create --name migration-retention --lock-type CanNotDelete \\
+  --resource-group nwr-prod --resource-name nwrprodstorage \\
+  --resource-type Microsoft.Storage/storageAccounts
+
+# GCP
+gcloud storage buckets update gs://nwr-legacy-prod \\
+  --lifecycle-file=archive-then-expire.json`} />
+
+## What people forget to decommission
+
+The workspace is obvious. These are not, and each one is either a live cost or a live credential after the platform is gone.
+
+| Leftover | Why it lingers | Why it matters |
+|---|---|---|
+| Personal access tokens | Nobody has a list | Valid credentials against a dying workspace |
+| Service principals / IAM roles | Owned by the platform team, used by others | Standing access to storage that still exists |
+| External orchestrator connections | Airflow, ADF, and Composer live outside Databricks | Failing DAGs against a deleted endpoint, alerting someone at 3am |
+| BI tool connections | Power BI, Tableau, and Looker keep cached credentials | Users see stale data and do not report it |
+| Partner integrations | Configured once, years ago | Often the last thing still writing to source storage |
+| Monitoring and alerting | Datadog, Splunk, and cloud-native monitors | Pages for a platform that no longer exists |
+| CI/CD pipelines and secrets | Deploy targets still pointing at source | A deploy silently resurrects activity in the source |
+| Budget alerts and cost tags | Nobody owns FinOps config | Cost reporting quietly misattributes for a year |
+
+<Callout client:visible variant="warning" title="Check for writers before you check for readers">
+  Readers complain. Writers do not. A partner integration still pushing files into source storage produces data that exists nowhere in the target and that nobody notices until an auditor or a customer asks. Before step 4, look at the source's last-write timestamps per container — anything written after cutover is an unmigrated writer, and it is a finding, not a curiosity.
+</Callout>
+
+<CodeBlock client:visible language="sql" filename="find-writers.sql" code={`-- Run against the SOURCE, after cutover: who is still doing anything?
+SELECT user_identity.email AS principal,
+       action_name,
+       COUNT(*) AS events,
+       MAX(event_time) AS last_seen
+FROM system.access.audit
+WHERE event_time > TIMESTAMP '2026-08-14 06:00:00'   -- your cutover moment
+GROUP BY 1, 2
+ORDER BY last_seen DESC;`} />
+
+Every row is a person, job, or integration that did not get the message. Northwind found eleven, three of which were writing.
+
+## Validation
+
+- Every row of the export register in [what does not migrate](/execution/what-does-not-migrate) is exported **and** read back from the target.
+- The source audit log shows no writes after cutover, and every post-cutover reader has been contacted.
+- Every PAT, service principal, and IAM role attached to the source is inventoried with a decision: revoke, migrate, or already unused.
+- Storage retention has an owner and an expiry date approved by whoever owns the data-retention policy — not by the migration team.
+- Finance has confirmed the source has stopped billing after the deletion date.
+
+## Rollback
+
+Reversible up to step 4, then progressively not. There is no rollback at all after step 8, which is the reason for the sequencing and the retention window.
+
+If something is discovered missing during the retention window, storage is still there and the metastore is not — so recovery means reading files directly from retained storage and re-registering them, not restoring a catalog. Make sure someone has actually rehearsed that before it is the only option.
+
+## Automation opportunity
+
+- **Gate the deletion job on the export-verification job succeeding**, not on a calendar date. This is the single highest-value automation on the page: it makes the irreversible step conditional on evidence rather than on a schedule.
+- Run [`dbxmig workspace`](/templates/automation-toolkit) against the source once more immediately before deletion, and diff it against the target inventory — anything present in source and absent in target is either a deliberate retirement or something about to be lost.
+- Script the leftover sweep — tokens, service principals, integration configs — rather than working from memory.
+
+<Checklist client:visible title="Source decommissioning" items={[
+  { id: 'hypercare', label: 'Hypercare exited with no open severity-1 or severity-2 issues' },
+  { id: 'paused', label: 'Source jobs and pipelines paused; writes revoked, reads retained' },
+  { id: 'writers', label: 'Post-cutover audit log checked for writers — every one resolved' },
+  { id: 'exports', label: 'Every export verified BY READING IT FROM THE TARGET' },
+  { id: 'final-diff', label: 'Final source-vs-target inventory diff reviewed; every difference deliberate' },
+  { id: 'tokens', label: 'PATs, service principals, and IAM roles inventoried and decided' },
+  { id: 'external', label: 'Orchestrators, BI tools, partner integrations, and CI/CD repointed or retired' },
+  { id: 'monitoring', label: 'Monitoring, alerting, and budget alerts removed or retargeted' },
+  { id: 'workspaces', label: 'Workspaces deleted' },
+  { id: 'metastore', label: 'Metastore deleted — ID verified against the inventory first' },
+  { id: 'retention', label: 'Storage retained under a lifecycle policy with an owner and an approved expiry date' },
+  { id: 'lock', label: 'Delete lock applied so a cleanup script cannot remove the archive early' },
+  { id: 'billing', label: 'Finance confirms the source has stopped billing' },
+  { id: 'signoff', label: 'Deletion executed only after export sign-off — not on a calendar date' },
+]} />

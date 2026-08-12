@@ -11,6 +11,10 @@ import CodeBlock from '../../components/CodeBlock.tsx';
 
 These snippets are starting points. Replace placeholders with your actual account IDs, workspace URLs, bucket names, and principal names.
 
+<Callout client:visible variant="tip" title="For the metastore itself, use the toolkit rather than these snippets">
+  The bulk-clone and grant-replay snippets below are illustrative — they have no dependency ordering, no resume, and no reporting of the objects that cannot be migrated at all. The [automation toolkit](/templates/automation-toolkit) does those same jobs properly and is tested. Use these snippets for one-off tasks and as a starting point for something the toolkit does not cover.
+</Callout>
+
 ## Export all job definitions
 
 <CodeBlock client:visible language="bash" code={`#!/bin/bash
