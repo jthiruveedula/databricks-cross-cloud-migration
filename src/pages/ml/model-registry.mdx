@@ -1,7 +1,7 @@
 ---
 title: 'Model registry'
 layout: ../../layouts/Layout.astro
-description: 'Migrate registered models, versions, stage transitions, and serving references to Unity Catalog in the target workspace.'
+description: 'Migrate registered models and versions into Unity Catalog — where stages do not exist, signatures are mandatory, and version numbers do not carry across.'
 ---
 
 import Callout from '../../components/Callout.tsx';
@@ -10,7 +10,13 @@ import Checklist from '../../components/Checklist.tsx';
 
 # Model registry
 
-Registered models carry more than the model artifact itself — version history, stage transitions (staging/production), and every downstream job or serving endpoint that references a specific model version. [MLflow](/ml/mlflow) covers experiment/run history; this page covers what happens once a run graduates to a registered, deployable model.
+Registered models carry more than the model artifact itself — version history, promotion state, and every downstream job or serving endpoint that references a specific model version. [MLflow](/ml/mlflow) covers experiment/run history; this page covers what happens once a run graduates to a registered, deployable model.
+
+<Callout client:visible variant="warning" title="Stages do not exist in Unity Catalog — this is a redesign, not a translation">
+  The Workspace Model Registry's four fixed stages (None/Staging/Production/Archived) are **not supported** for models in Unity Catalog. They are replaced by **aliases** — up to 10 custom, reassignable named pointers — plus tags for labelling, with the three-level namespace itself expressing environment.
+
+  So `transition_model_version_stage()` has nothing to call in the target, and any promotion workflow, CI job, or dashboard keyed on `current_stage` needs rewriting rather than repointing. Decide the alias scheme during design: teams commonly map Production to a `champion` alias and Staging to `challenger`, but the naming is yours and the code that reads it has to change either way.
+</Callout>
 
 <Callout client:visible variant="prerequisite" title="Unity Catalog-based registry, not the legacy workspace registry">
   If source models live in the legacy workspace model registry, migrate to Unity Catalog's model registry in the target rather than reproducing the legacy pattern — it's the only registry model that gives you cross-workspace governance and lineage going forward, and you'd otherwise face this exact migration problem again next time.
@@ -21,8 +27,9 @@ Registered models carry more than the model artifact itself — version history,
 | Asset | Migration approach |
 |---|---|
 | Model versions | Re-register each version in target from its source artifact, preserving version order |
-| Stage/alias assignments (Production, Staging) | Re-apply explicitly — do not assume version numbers line up between source and target |
-| Model signature and input example | Carried automatically if you re-log via `mlflow.pyfunc.log_model` with the original signature |
+| Promotion state | **Translate stages to aliases** — the concept changes, and version numbers do not line up between source and target |
+| Model signature | **Required in Unity Catalog.** A legacy model logged without one fails registration outright — see below |
+| Input example | Carried if you re-log via `mlflow.pyfunc.log_model` with the original signature and example |
 | Description and tags | Copy explicitly; these are metadata, not part of the artifact |
 | Consumers (jobs, serving endpoints referencing a specific version/alias) | Update every reference to the target model name/version — see the reference audit below |
 | Source-run lineage (`mlflow.source_run` / lineage tags) | Re-point to the *migrated* target run ID — see the lineage caveat below |
@@ -31,26 +38,66 @@ Registered models carry more than the model artifact itself — version history,
   A model version's lineage pointer (`source_run`/`run_id`) references the MLflow run that produced it. If you re-register the model in target without also migrating that run via [MLflow](/ml/mlflow), the pointer either breaks or silently references a run ID that doesn't exist in the target tracking server — "which experiment produced this model" becomes unanswerable. Migrate the source run first, then re-register the model version against the *migrated* run's new ID, not the original source run ID.
 </Callout>
 
-## Migration pattern
+## Two different problems — pick the right one first
+
+`copy_model_version()` is the tool Databricks recommends for moving model versions into Unity Catalog, and it is genuinely good: it takes a source `models:/name/version` URI and a three-level destination, and creates the destination model if it does not exist. It needs MLflow client 3.4.0 or above.
+
+<Callout client:visible variant="warning" title="It does not bridge two accounts, which is the case a cross-cloud migration is actually in">
+  `copy_model_version()` copies **within one registry** the client is connected to — the Workspace Model Registry to Unity Catalog inside the same account, or between workspaces sharing a metastore. A cross-cloud move has two accounts, two metastores, and no shared registry, so there is no single call that spans them.
+
+  For cross-cloud the pattern is unavoidably **download the artifacts from source, then re-log and register in target**, which is what the script below does. When [metastore migration](/governance/metastore-migration) says model versions are "artifacts, not metadata", this is what it means.
+</Callout>
+
+### Cross-cloud: download, re-log, re-alias
 
 <CodeBlock client:visible language="python" filename="migrate_model_versions.py" code={`import mlflow
 from mlflow import MlflowClient
 
-source_client = MlflowClient(tracking_uri=SOURCE_TRACKING_URI)
-mlflow.set_registry_uri(TARGET_REGISTRY_URI)
+source_client = MlflowClient(tracking_uri=SOURCE_TRACKING_URI, registry_uri=SOURCE_REGISTRY_URI)
 target_client = MlflowClient(tracking_uri=TARGET_TRACKING_URI, registry_uri=TARGET_REGISTRY_URI)
 
-model_name = "churn_model"
-target_client.create_registered_model(model_name)
+SOURCE_NAME = "churn_model"                       # 2-level, legacy workspace registry
+TARGET_NAME = "prod_gcp.ml.churn_model"           # 3-level, required by Unity Catalog
 
-for mv in source_client.search_model_versions(f"name='{model_name}'"):
+mlflow.set_registry_uri(TARGET_REGISTRY_URI)
+target_client.create_registered_model(TARGET_NAME)
+
+# Oldest first, so target version numbers ascend in the same order as source.
+# They will NOT be the same numbers -- record the mapping.
+versions = sorted(
+    source_client.search_model_versions(f"name='{SOURCE_NAME}'"),
+    key=lambda v: int(v.version),
+)
+
+version_map = {}
+for mv in versions:
     local_path = source_client.download_artifacts(mv.run_id, "model")
-    result = mlflow.register_model(f"file://{local_path}", model_name)
+    result = mlflow.register_model(f"file://{local_path}", TARGET_NAME)
+    version_map[mv.version] = result.version
 
-    # Re-apply the stage/alias this version had on source -- don't assume it carries over
+    for key, value in (mv.tags or {}).items():
+        target_client.set_model_version_tag(TARGET_NAME, result.version, key, value)
+    if mv.description:
+        target_client.update_model_version(TARGET_NAME, result.version, description=mv.description)
+
+    # Stages do not exist in Unity Catalog. Translate to an alias.
     if mv.current_stage == "Production":
-        target_client.transition_model_version_stage(model_name, result.version, "Production")
+        target_client.set_registered_model_alias(TARGET_NAME, "champion", result.version)
+    elif mv.current_stage == "Staging":
+        target_client.set_registered_model_alias(TARGET_NAME, "challenger", result.version)
+
+print(version_map)  # source version -> target version, needed by every consumer
 `} />
+
+<Callout client:visible variant="warning" title="A model without a signature will not register in Unity Catalog">
+  Unity Catalog requires a model signature. Any model logged years ago without one fails registration, and on a legacy estate that is not a rare case — it is a batch of models that all fail at once, late, when someone finally runs the migration script.
+
+  Find them during discovery rather than at cutover: check `mv.signature` on every source version and list the gaps. The proper fix is to re-log the model with a signature inferred from a sample input. The escape hatch, if you must move an unmodifiable artifact, is `MLFLOW_SKIP_SIGNATURE_CHECK_FOR_UC_REGISTRY_MIGRATION=true` — but it works **only with `copy_model_version()`** on MLflow 3.4.0+, which as noted above is not available across accounts. So for a cross-cloud move, re-logging with a signature is usually the only path, and that is a per-model piece of work to schedule.
+</Callout>
+
+<Callout client:visible variant="tip" title="Version numbers will not match, and everything downstream references them">
+  Target versions are assigned in registration order and start at 1. A model at source version 47 will not be version 47 in the target. Keep the `version_map` the script prints: it is what every job, serving endpoint, and notebook pinned to `models:/name/47` needs in order to be repointed. Pinning consumers to an **alias** instead of a version number is the fix that stops this recurring.
+</Callout>
 
 ## Auditing consumers before cutover
 
@@ -65,7 +112,8 @@ grep -rn "models:/" ./exported-notebooks/ ./exported-jobs/
 ## Validation
 
 - Load each migrated model version in target and run it against a fixed test input; compare predictions to the source model's output for the same input.
-- Confirm stage/alias assignments in target match the intended production model, not just "a version exists at some stage."
+- Confirm **alias** assignments in target point at the intended version — not just that "a version exists". There are no stages to check.
+- Confirm every source version had a signature, or was re-logged with one; a silent gap here means a model that never registered.
 - Verify every consumer found in the reference audit above resolves correctly against the target registry before cutover.
 
 ## Rollback
@@ -75,12 +123,21 @@ Keep the source model registry and its serving endpoints live through hypercare.
 ## Automation opportunity
 
 - Script the consumer reference audit as a repeatable check (grep across the [asset inventory](/discovery/asset-inventory) notebook/job export), not a one-time manual search.
-- Automate the stage/alias re-application step directly from a source-to-target mapping file so it's not manually re-typed per model.
+- Automate alias re-application from the source-to-target version map the migration script emits, so it is not re-typed per model.
+- Scan every source model version for a missing signature during discovery and report the list — this is the failure that arrives late and in bulk.
 
 <Checklist client:visible title="Model registry migration" items={[
   { id: 'uc-registry', label: 'Migrating to Unity Catalog model registry, not the legacy workspace registry' },
   { id: 'versions', label: 'All model versions re-registered in correct order' },
-  { id: 'stages', label: 'Stage/alias assignments explicitly re-applied, not assumed' },
+  { id: 'aliases', label: 'Stages translated to aliases — promotion workflows rewritten, not repointed' },
+  { id: 'signature', label: 'Every source version checked for a model signature during discovery' },
+  { id: 'versionmap', label: 'Source-to-target version map recorded and handed to consumer owners' },
   { id: 'consumers', label: 'Every consumer (job/pipeline/serving endpoint) referencing a model audited' },
   { id: 'predictions-match', label: 'Migrated model predictions validated against source for a fixed test input' },
 ]} />
+
+## Sources
+
+- Databricks — [Migrate model versions from Workspace Model Registry to Unity Catalog](https://docs.databricks.com/aws/en/machine-learning/manage-model-lifecycle/migrate-models) (`copy_model_version()`, MLflow client 3.4.0+, and the `MLFLOW_SKIP_SIGNATURE_CHECK_FOR_UC_REGISTRY_MIGRATION` escape hatch)
+- Databricks — [Manage model lifecycle in Unity Catalog](https://docs.databricks.com/aws/en/machine-learning/manage-model-lifecycle/) (stages are not supported; aliases and tags replace them, up to 10 reassignable aliases)
+- Databricks — [Upgrade ML workflows to target models in Unity Catalog](https://docs.databricks.com/aws/en/machine-learning/manage-model-lifecycle/upgrade-workflows)
