@@ -31,7 +31,7 @@ Nothing failed during that migration. Reconciliation was clean, every dashboard 
 | Cluster event logs, driver/executor logs | Startup failures, OOM history, autoscaling behaviour | Log delivery to cloud storage | Configure before, export at cutover |
 | Notebook revision history | Every version except the current one | Git-back the notebooks, or accept current-state only | Before workspace export |
 | Delta table history | Pre-migration versions and time travel | Pinned `DEEP CLONE ... VERSION AS OF` snapshots | Before cutover |
-| Secret values | Everything — secrets are write-only | Re-source from the system of record; you cannot read them back | N/A — re-create |
+| Secret values | Key Vault-backed scopes entirely; Databricks-backed are exportable but shouldn't be | Re-source from the system of record; rotate | Before cutover |
 | Workspace object ACLs | Notebook, folder, job, cluster, and pool permissions | Permissions API export per object | Before cutover |
 | Dashboard subscriptions and alert recipients | Who gets which email, on what schedule | Export dashboard/alert definitions including subscribers | Before cutover |
 | Delta Sharing recipient activation | Partner tokens; recipients need new activation links | Nothing to export — a partner communication task | Plan 2–4 weeks ahead |
@@ -127,18 +127,23 @@ with open("workspace_acls.json", "w") as f:
 
 The failure mode is specific and slow: everything works during hypercare because the migration team has admin, and then three weeks later a team discovers they can no longer restart their own cluster.
 
-### 4. Secret values — the one you cannot export at all
+### 4. Secret values — exportable, but usually the wrong thing to do
 
-Secret scopes can be listed. Secret *values* cannot be read back, by design, by anyone. There is no export.
+This one is more nuanced than "lost", and the nuance depends on the scope backend.
 
-<CodeBlock client:visible language="bash" code={`# You can inventory what exists...
-databricks secrets list-scopes
+<CodeBlock client:visible language="bash" code={`databricks secrets list-scopes
 databricks secrets list-secrets --scope prod-etl
 
-# ...and that is all. The values come from your vault, your CI system, or the
-# service that issued them -- not from Databricks.`} />
+# For a DATABRICKS-BACKED scope, a caller with READ can retrieve the value:
+databricks secrets get-secret prod-etl api-token`} />
 
-Which makes this a dependency-tracking exercise, not a data-movement one. Build the list of "what secret, used by which job, sourced from where" during discovery, while the people who created them are still available. See [secrets and KMS](/security/secrets-and-kms).
+**Databricks-backed scopes** do allow a caller with `READ` to fetch the value through the Secrets API, so a scripted export/import is technically possible. **Key Vault-backed scopes** are different — Databricks stores a pointer, not the value, and the backing vault is a cloud resource that does not cross clouds at all.
+
+<Callout client:visible variant="warning" title="Being able to export production secrets is not a reason to">
+  A bulk export decrypts every production credential into a file on somebody's machine, and many organisations prohibit exactly that. Prefer re-sourcing from the system of record that issued each secret, and treat migration as a rotation event. Use the export path deliberately, for the secrets that genuinely have no other source, with the handling controls you would apply to any credential dump.
+</Callout>
+
+Either way the useful artifact is the same: a list of *what secret, used by which job, sourced from where*, built during discovery while the people who created them are still reachable. See [secrets and KMS](/security/secrets-and-kms) for the full runbook.
 
 ---
 
@@ -194,7 +199,7 @@ There is none. That is the entire reason this page exists as a pre-cutover activ
   { id: 'readback', label: 'Every archive read back successfully FROM THE TARGET, not just written from the source' },
   { id: 'runs', label: 'Job run history exported on a schedule since discovery, not just at cutover' },
   { id: 'acls', label: 'Workspace object ACLs exported (jobs, clusters, pools, notebooks, folders)' },
-  { id: 'secrets', label: 'Secret inventory built with source-of-truth for each value — values cannot be exported' },
+  { id: 'secrets', label: 'Secret inventory built with a source-of-truth per value; rotation preferred over export' },
   { id: 'notebooks', label: 'Notebooks needing revision history moved to Git-backed folders' },
   { id: 'history', label: 'Tables needing pre-cutover time travel have pinned version snapshots' },
   { id: 'subs', label: 'Dashboard subscribers and alert recipients exported and re-verified after first target send' },
