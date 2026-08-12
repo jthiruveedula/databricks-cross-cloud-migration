@@ -21,9 +21,20 @@ Once a model is registered (see [model registry](/ml/model-registry)), serving i
 | Asset | Migration approach |
 |---|---|
 | Model Serving endpoint | Recreate in target referencing the migrated model from [model registry](/ml/model-registry) |
+| **Served version number** | **Resolve it fresh.** Target version numbers do not match source — see below |
 | Endpoint configuration (compute size, scale-to-zero, traffic splitting) | Recreate explicitly; don't assume defaults match source |
 | Caller authentication (tokens, service principals) | Issue new target-workspace credentials to every caller — do not attempt to reuse source tokens |
+| **Inference table config** (`auto_capture_config`) | Recreate pointed at a *target* catalog and schema; the accumulated payload history does not move |
 | Artifact store (model files, custom Python environments) | Migrate alongside the model version itself; verify custom dependencies install correctly on target |
+| **Endpoint egress** (calls to external APIs, feature lookups) | Serverless — governed by [NCC](/security/serverless-networking), not your VNet |
+
+## The version number is the trap
+
+<Callout client:visible variant="warning" title="Copying the source endpoint config points the target at the wrong model">
+  [Model registry](/ml/model-registry) establishes that target version numbers restart at 1 and will not match source. A serving endpoint config is where that bites hardest: `entity_version="3"` copied from the source endpoint is *valid* in the target and serves whatever version 3 happens to be there — which is a different model, silently, with no error.
+
+  Model registry's advice is to pin consumers to an **alias** rather than a version. Serving endpoints cannot take one directly — `entity_version` is a version number — so the pattern is to **resolve the alias to a version at deploy time** and pass the result. That keeps the deployment declarative about intent ("serve champion") while satisfying an API that wants a number.
+</Callout>
 
 ## Zero-downtime cutover pattern
 
@@ -34,30 +45,63 @@ Once a model is registered (see [model registry](/ml/model-registry)), serving i
 5. Keep the source endpoint warm and reachable through [hypercare](/execution/hypercare) as the rollback target.
 
 <CodeBlock client:visible language="python" filename="create_target_endpoint.py" code={`from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.serving import EndpointCoreConfigInput, ServedEntityInput
+from databricks.sdk.service.serving import (
+    AutoCaptureConfigInput,
+    EndpointCoreConfigInput,
+    ServedEntityInput,
+)
+from mlflow import MlflowClient
 
 w = WorkspaceClient(host=TARGET_HOST, token=TARGET_TOKEN)
+mlflow_client = MlflowClient(registry_uri=TARGET_REGISTRY_URI)
+
+MODEL = "prod_gcp.ml.churn_model"
+
+# Resolve the alias in the TARGET registry. Never carry the source version
+# number across -- it is valid in the target and points at a different model.
+version = mlflow_client.get_model_version_by_alias(MODEL, "champion").version
 
 w.serving_endpoints.create(
     name="churn-model-serving",
     config=EndpointCoreConfigInput(
         served_entities=[
             ServedEntityInput(
-                entity_name="target_catalog.models.churn_model",
-                entity_version="3",
+                entity_name=MODEL,
+                entity_version=version,
                 workload_size="Small",
                 scale_to_zero_enabled=True,
             )
-        ]
+        ],
+        # Inference tables land in a UC table named
+        # <catalog>.<schema>.<prefix>_payload -- point it at TARGET catalog.
+        auto_capture_config=AutoCaptureConfigInput(
+            catalog_name="prod_gcp",
+            schema_name="ml_monitoring",
+            table_name_prefix="churn",
+            enabled=True,
+        ),
     ),
 )
 `} />
+
+## Inference tables are monitoring history, and they stay behind
+
+If the source endpoint has `auto_capture_config` enabled, every request and response has been logged to a Unity Catalog table at `<catalog>.<schema>.<prefix>_payload`. Two separate things to handle:
+
+- **The config** must be recreated on the target endpoint pointed at a *target* catalog and schema. Copying it verbatim points the target endpoint at a catalog that does not exist there.
+- **The accumulated payload table** is history in the source metastore. It is a normal UC table, so it migrates like any other — but only if somebody puts it in scope. It usually is not, because nobody thinks of monitoring data as an asset until a model-drift investigation needs last quarter's requests. Add it to [what does not migrate](/execution/what-does-not-migrate) planning explicitly.
+
+<Callout client:visible variant="tip" title="Log delivery is best-effort, so do not reconcile the payload table row-for-row">
+  Inference table delivery is best effort, with logs expected within about an hour of a request. That makes an exact source-versus-target row count the wrong check during a dual-run window — a small shortfall is the delivery lag, not a lost request. Compare over a closed time window well behind the present instead.
+</Callout>
 
 ## Validation
 
 - Send the same test payload to both source and target endpoints and confirm equivalent predictions before moving any real traffic.
 - Load-test the target endpoint at expected production traffic levels — serving compute sizing rarely transfers 1:1 across clouds (see the node-type mapping caveats in [cluster migration](/compute/cluster-migration)).
 - Confirm custom model dependencies (conda/pip environment bundled with the model) actually install and run on target — a dependency that resolved fine on source can fail on a different base image in target.
+- **Confirm the endpoint is serving the version you think it is.** Resolve the target alias and compare it to the deployed `entity_version`; a stale or copied number produces a working endpoint serving the wrong model.
+- If the model calls anything outside Databricks — an external API, a feature lookup against a private store — test it from the *target* endpoint. Serverless egress is governed by an NCC, so a call that worked on source can hang rather than fail on target until a private endpoint rule exists.
 
 ## Rollback
 
@@ -71,7 +115,16 @@ Keep the source serving endpoint running and reachable throughout hypercare — 
 <Checklist client:visible title="Serving and artifacts migration" items={[
   { id: 'endpoint', label: 'Target serving endpoint created referencing the migrated model' },
   { id: 'auth', label: 'New target-workspace credentials issued to every caller' },
+  { id: 'version', label: 'Served version resolved from the TARGET alias, never copied from the source config' },
   { id: 'parity', label: 'Source and target endpoints validated to produce equivalent predictions' },
+  { id: 'inference-tables', label: 'auto_capture_config recreated against a target catalog; payload history scoped or accepted as lost' },
+  { id: 'egress', label: 'Outbound calls from the served model tested from the target endpoint' },
   { id: 'load-tested', label: 'Target endpoint load-tested at expected production traffic' },
   { id: 'canary', label: 'Traffic shifted incrementally, not via a single all-at-once cutover' },
 ]} />
+
+## Sources
+
+- Databricks — [Create custom model serving endpoints](https://docs.databricks.com/aws/en/machine-learning/model-serving/create-manage-serving-endpoints) (`entity_name` plus a numeric `entity_version`)
+- Databricks — [Inference tables for monitoring and debugging models](https://docs.databricks.com/aws/en/machine-learning/model-serving/inference-tables) and [Enable inference tables using the API](https://docs.databricks.com/aws/en/machine-learning/model-serving/enable-model-serving-inference-tables) (`auto_capture_config`; table created at `<catalog>.<schema>.<prefix>_payload`; delivery is best effort within about an hour)
+- Databricks — [Manage model lifecycle in Unity Catalog](https://docs.databricks.com/aws/en/machine-learning/manage-model-lifecycle/) (`get_model_version_by_alias`)
