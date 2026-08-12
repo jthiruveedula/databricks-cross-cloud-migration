@@ -26,6 +26,9 @@ import sys
 from typing import List, Optional, Sequence
 
 from . import __version__
+from .acls import build_acl_plan, replay_script
+from .acls import summary as acl_summary
+from .acls import to_rows as acl_rows
 from .bundle import generate_bundle
 from .config import ConfigError, MigrationConfig, load_config, load_principal_map
 from .crossrefs import coverage_gaps, merge, scan, scan_source_tree, to_rows
@@ -500,6 +503,21 @@ def cmd_bundle(config: MigrationConfig, args: argparse.Namespace) -> int:
     return EXIT_FINDINGS if result.needs_review() else EXIT_OK
 
 
+def cmd_acls(config: MigrationConfig, args: argparse.Namespace) -> int:
+    """Replay workspace object ACLs -- the permission system UC grants do not cover."""
+    inventory = _load_workspace(args.workspace)
+    plan = build_acl_plan(inventory, _principal_map(config), strict=args.strict)
+    if args.script:
+        _write(args.script, replay_script(plan))
+        print("wrote replay script to {0}".format(args.script), file=sys.stderr)
+    if args.csv:
+        with open(args.csv, "w", encoding="utf-8", newline="") as handle:
+            csv.writer(handle).writerows(acl_rows(plan))
+        print("wrote {0}".format(args.csv), file=sys.stderr)
+    _write(args.out, acl_summary(plan))
+    return EXIT_OK if plan.ok else EXIT_FINDINGS
+
+
 def cmd_apply(config: MigrationConfig, args: argparse.Namespace) -> int:
     inventory = _load_inventory(args.inventory)
     plan = _plan_from(config, inventory)
@@ -649,6 +667,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="keep original schedules instead of emitting every job PAUSED",
     )
     p.set_defaults(func=cmd_bundle)
+
+    p = sub.add_parser(
+        "acls", help="replay workspace object ACLs (jobs, clusters, pools, warehouses)"
+    )
+    p.add_argument("-w", "--workspace", default="workspace.json", help="workspace inventory JSON")
+    p.add_argument("-o", "--out", help="write the report here instead of stdout")
+    p.add_argument("--script", help="also write a runnable Python replay script here")
+    p.add_argument("--csv", help="also write the entries as CSV")
+    p.add_argument(
+        "--strict",
+        action="store_true",
+        help="fail instead of skipping when a principal has no mapping",
+    )
+    p.set_defaults(func=cmd_acls)
 
     p = sub.add_parser("plan", help="order the inventory into executable steps")
     add_common(p)

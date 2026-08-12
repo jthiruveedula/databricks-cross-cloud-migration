@@ -165,7 +165,7 @@ Reference for everything, including the classes the toolkit does not collect.
 | Registered models | Artifacts | `dbxmig inventory` | `copy_model_version` | Serving validation |
 | Dashboards / queries / alerts | Rebuild | `dbxmig workspace` | Recreate; rewire warehouse IDs | Visual parity |
 | UC grants | Replay | `dbxmig inventory` | Replay with mapped principals | Non-admin user test |
-| Object ACLs | Replay | `dbxmig workspace` | Replay via Permissions API | Team operates its own workloads |
+| Object ACLs | Replay | `dbxmig workspace` | `dbxmig acls` — resolved by name, since target ids differ | Team operates its own workloads |
 | Init scripts | Copies | `dbxmig workspace` | Move off DBFS to Volumes | Cluster startup |
 | Libraries | Rebuild | Cluster API | Reinstall from Maven/PyPI | Import checks |
 | Partner integrations | Rebuild | Admin console — **manual** | Reconfigure endpoints | Integration smoke tests |
