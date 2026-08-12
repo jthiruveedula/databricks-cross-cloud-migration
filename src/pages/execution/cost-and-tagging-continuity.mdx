@@ -1,0 +1,148 @@
+---
+title: 'Cost and tagging continuity'
+layout: ../../layouts/Layout.astro
+description: 'What a migration actually costs while both platforms run, and how to keep cost attribution working across the move so the savings can be proved.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Accordion from '../../components/Accordion.tsx';
+
+# Cost and tagging continuity
+
+Two questions get asked about migration cost, months apart, and most programmes cannot answer either.
+
+**During:** "why is the bill double?" **After:** "did this actually save anything?"
+
+The first is arithmetic nobody did up front. The second is unanswerable if cost attribution broke during the move — which it does by default, because the tags that carry it are workspace configuration and do not travel.
+
+<Callout client:visible variant="warning" title="The second question is the one that ends careers, and it is decided during discovery">
+  Proving a saving requires a *comparable* before and after. If the source tagged by `cost_center` and the target tags by `team`, or if the tag was applied by a cluster policy that was rebuilt slightly differently, then the two sides of the comparison are not the same measurement and no amount of later analysis fixes it. Freeze the tag schema before the first target workload runs.
+</Callout>
+
+## What it costs while both platforms run
+
+Northwind Retail, using the timeline from [decommissioning](/execution/decommissioning). The multiple is against steady-state target cost.
+
+| Phase | Weeks | Multiple | What is driving it |
+|---|---|---|---|
+| Discovery and design | 0–6 | 1.0× | Source only; no target compute yet |
+| Foundation and pilot | 7–10 | 1.15× | Target landing zone, small pilot compute |
+| Bulk migration | 11–16 | **1.6×** | Both platforms live, plus **egress and duplicate storage** |
+| Cutover + hypercare | 17–19 | 2.0× | Peak — everything runs twice, on purpose |
+| Wind-down | 20–22 | 1.4× | Source jobs paused; storage and licences remain |
+| Retention | 23–35 | 1.05× | Archived storage only |
+| Steady state | 36+ | 1.0× | Source gone |
+
+**Roughly 5–7 months of elevated cost for a six-week cutover.** The peak is not the expensive part; the tail is. A programme that budgets "two months of double running" is under by a factor of two or three, and the overrun lands exactly when the pressure to delete the source is highest — which is how the [export step](/execution/what-does-not-migrate) gets rushed.
+
+### The three costs that are always underestimated
+
+<Accordion client:visible items={[
+  {
+    title: 'Egress — one-time, large, and easy to model before you commit',
+    content: 'Moving 74 TB out of a cloud is a line item, not a rounding error, and it is charged by the source cloud at its published egress rate. Model it before choosing a strategy, because the answer sometimes changes the strategy: cold tables that are queried twice a quarter may be better served by Delta Sharing than by a copy, and that decision is worth more than any amount of later optimisation. Check whether your cloud offers a migration egress waiver -- several do for qualifying moves, and it is an ask that has to happen through the account team well before the transfer.'
+  },
+  {
+    title: 'Duplicate storage held for longer than planned',
+    content: 'You pay for both copies from the first bulk clone until the source storage is finally deleted -- in the table above, five months, not the two weeks of cutover. This is the single largest avoidable line item, and the lever is tiering rather than deleting: move retained source storage to archive class as soon as reads stop, which typically cuts it by an order of magnitude while keeping the recovery option the decommissioning page argues for.'
+  },
+  {
+    title: 'Re-computation nobody budgeted',
+    content: 'Materialized views and streaming tables rebuild from scratch. AI Search indexes re-embed their entire corpus. Both are real compute at real cost, both land inside the cutover window, and neither appears in a plan built by counting tables. If the estate has a dozen materialized views over large tables, this is a meaningful number -- price it during discovery.'
+  }
+]} />
+
+## Keeping attribution working across the move
+
+Cost attribution in Databricks is tag-based, and tags reach the billing record by three different routes. All three break differently in a migration.
+
+| Route | Applies to | How it breaks |
+|---|---|---|
+| Cluster / warehouse `custom_tags` | Classic compute | Rebuilt object, tag omitted or renamed |
+| Cluster policy enforcing tags | Anything created under the policy | Policy rebuilt without the enforcement clause |
+| **Serverless usage policy** | Serverless notebooks, jobs, pipelines, apps | Does not exist in the target until someone creates it |
+
+<Callout client:visible variant="warning" title="Serverless usage policies are the route most often missed entirely">
+  A serverless usage policy is a set of tags applied to serverless activity by the users assigned to it; those tags land in `system.billing.usage.custom_tags` and are how serverless spend gets attributed at all. Three properties matter for a migration: they are created by a **workspace admin**, changes apply **only to usage started afterwards** (so a late fix does not backfill), and when a notebook runs as part of a job **the job's policy wins**. Create them before the first serverless workload runs in the target, not after the first surprising bill.
+</Callout>
+
+### Verify attribution, do not assume it
+
+<CodeBlock client:visible language="sql" filename="attribution-check.sql" code={`-- Run in BOTH source and target. The shape of the answer must match.
+SELECT
+  custom_tags['cost_center'] AS cost_center,
+  sku_name,
+  SUM(usage_quantity)        AS dbus
+FROM system.billing.usage
+WHERE usage_date >= current_date() - INTERVAL 7 DAYS
+GROUP BY 1, 2
+ORDER BY dbus DESC;
+
+-- The number that matters: how much spend has no owner?
+SELECT
+  CASE WHEN custom_tags['cost_center'] IS NULL THEN 'UNATTRIBUTED' ELSE 'attributed' END AS state,
+  SUM(usage_quantity) AS dbus
+FROM system.billing.usage
+WHERE usage_date >= current_date() - INTERVAL 7 DAYS
+GROUP BY 1;`} />
+
+Run the second query against the source **during discovery** to get the baseline, and against the target during hypercare. If unattributed spend is 4% in source and 30% in target, attribution broke — and it broke in a way that no dashboard would have shown you, because the dashboard still renders.
+
+<Callout client:visible variant="tip" title="Take the baseline before you start, not when someone asks">
+  `system.billing.usage` carries 365 days of free retention and lives in the **source** metastore, so it is destroyed with everything else at decommissioning. Clone it into durable storage alongside the audit tables — see [what does not migrate](/execution/what-does-not-migrate). Without that snapshot, "did the migration save money" has no before.
+</Callout>
+
+## Practical sequence
+
+| When | Do | Why then |
+|---|---|---|
+| Discovery | Snapshot `system.billing.usage`; record the tag schema and the unattributed baseline | It disappears with the source |
+| Discovery | Model egress and duplicate-storage cost; check for a migration egress waiver | It can change the migration strategy |
+| Design | Freeze the tag schema; decide who owns each tag value | Comparability depends on it |
+| Foundation | Create cluster policies that **enforce** tags, and serverless usage policies, before any workload runs | Neither backfills |
+| Bulk migration | Track actual against the modelled multiple, weekly | The overrun is gradual, not sudden |
+| Cutover | Tag target objects at creation, not afterwards | Retro-tagging does not fix past billing rows |
+| Hypercare | Compare attributed vs unattributed against the baseline | The only test that catches silent breakage |
+| Wind-down | Tier retained storage to archive as soon as reads stop | Largest avoidable line item |
+| Decommission | Confirm with finance that source billing has stopped | Deleted resources can leave charges behind |
+
+## Validation
+
+- The unattributed-spend percentage in the target is within a point or two of the source baseline.
+- Every cost centre that existed in source appears in target billing with a comparable share.
+- The pre-migration `system.billing.usage` snapshot is readable **from the target**.
+- Serverless spend is attributed, not just classic compute — check them separately, since they attribute by different mechanisms.
+- Finance has confirmed source billing stopped after decommissioning.
+
+## Rollback
+
+Tagging is configuration and is fixable forward, with one exception that is not: **billing rows already written cannot be re-tagged.** A month of untagged target spend stays untagged permanently. That asymmetry is the entire argument for creating the policies before the first workload rather than after the first bill.
+
+## Automation opportunity
+
+- `dbxmig workspace` collects cluster policies, warehouses, and serverless usage policies with their tags, so a source-vs-target tag diff is a report rather than an audit — see the [automation toolkit](/templates/automation-toolkit).
+- Run the unattributed-spend query as a scheduled check through hypercare, alerting on drift from the baseline rather than on an absolute threshold.
+- Enforce tags in the cluster policy rather than documenting them in a wiki. A tag that is optional is a tag that is missing.
+
+<Checklist client:visible title="Cost and tagging continuity" items={[
+  { id: 'model', label: 'Double-running cost modelled across the full timeline, not just the cutover window' },
+  { id: 'egress', label: 'Egress priced; migration egress waiver asked about via the cloud account team' },
+  { id: 'recompute', label: 'Materialized view and AI Search rebuild compute priced into the cutover window' },
+  { id: 'baseline', label: 'system.billing.usage snapshotted and readable from the target' },
+  { id: 'unattributed', label: 'Source unattributed-spend baseline recorded as a percentage' },
+  { id: 'schema', label: 'Tag schema frozen before the first target workload runs' },
+  { id: 'policies', label: 'Cluster policies ENFORCE tags in the target, not just document them' },
+  { id: 'serverless', label: 'Serverless usage policies created before the first serverless workload' },
+  { id: 'tiering', label: 'Retained source storage tiered to archive as soon as reads stop' },
+  { id: 'compare', label: 'Attributed vs unattributed compared against baseline during hypercare' },
+  { id: 'finance', label: 'Finance confirms source billing has stopped' },
+]} />
+
+## Sources
+
+- Databricks — [Attribute usage with serverless usage policies](https://docs.databricks.com/aws/en/admin/usage/budget-policies) (tags land in `system.billing.usage.custom_tags`; changes apply only to new usage; a job's policy wins over a notebook's)
+- Databricks — [Use tags to attribute and track usage](https://docs.databricks.com/aws/en/admin/account-settings/usage-detail-tags)
+- Databricks — [Cost management tools](https://docs.databricks.com/aws/en/admin/usage/) and [Monitor the cost of serverless compute](https://docs.databricks.com/aws/en/admin/system-tables/serverless-billing)
+- Databricks — [System tables reference](https://docs.databricks.com/aws/en/admin/system-tables/) (365-day free retention on `billing.usage`)

@@ -85,7 +85,7 @@ Generate this order rather than maintaining it by hand:
 
 ## Step 1 — Storage foundation
 
-The one thing that genuinely cannot be automated. A GCP service account is not a translation of an Azure managed identity; it is a new principal you create, grant on the target bucket, and then wrap.
+The one thing that genuinely cannot be automated. A GCP service account is not a translation of an Azure managed identity; it is a new principal you create, grant on the target bucket, and then wrap. Worked command by command for all three clouds — including the AWS self-assuming-role dance and its chicken-and-egg external ID — on [target storage credentials](/security/target-storage-credentials).
 
 <CodeBlock client:visible language="sql" filename="01-storage.sql" code={`-- Create the credential in the target metastore first.
 CREATE STORAGE CREDENTIAL nwr_uc_gcp
@@ -168,6 +168,8 @@ Northwind's 393 data-bearing tables did not all take the same path. Pick per tab
 | Materialized view / streaming table | **Recreate the pipeline** | `CLONE` rejects them outright |
 
 ### Deep clone — the 318-table default
+
+For the storage-layer mechanics underneath this — transfer tooling per cloud pairing, and why raw-copying a live Delta table's files is dangerous — see [storage transfer runbooks](/execution/storage-transfer-runbooks).
 
 <CodeBlock client:visible language="sql" filename="03-clone.sql" code={`-- Managed source, managed target: no LOCATION, lands in the catalog's MANAGED LOCATION.
 CREATE TABLE IF NOT EXISTS prod.sales.orders

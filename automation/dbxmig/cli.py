@@ -19,13 +19,16 @@ migration is not something to start by accident.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import sys
 from typing import List, Optional, Sequence
 
 from . import __version__
+from .bundle import generate_bundle
 from .config import ConfigError, MigrationConfig, load_config, load_principal_map
+from .crossrefs import coverage_gaps, merge, scan, scan_source_tree, to_rows
 from .ddl import (
     create_catalog,
     create_external_location,
@@ -57,8 +60,21 @@ from .grants import PrincipalMap, translate_grants
 from .llm import Assistant, NullLlmClient
 from .models import Inventory
 from .reconcile import reconcile_inventories
-from .report import full_report, gap_report, plan_summary, reconciliation_summary
+from .report import (
+    crossref_summary,
+    full_report,
+    gap_report,
+    plan_summary,
+    reconciliation_summary,
+    workspace_summary,
+)
 from .state import STATUS_BLOCKED, STATUS_DONE, STATUS_FAILED, Journal
+from .workspace import (
+    ASSET_CLASSES,
+    WorkspaceInventory,
+    collect_workspace_inventory,
+    csv_rows,
+)
 
 EXIT_OK = 0
 EXIT_FINDINGS = 1
@@ -393,6 +409,97 @@ def _owner_statements(
     return statements, sorted(unmapped)
 
 
+def _load_workspace(path: str) -> WorkspaceInventory:
+    with open(path, "r", encoding="utf-8") as handle:
+        return WorkspaceInventory.from_dict(json.load(handle))
+
+
+def cmd_workspace(config: MigrationConfig, args: argparse.Namespace) -> int:
+    """Collect the workspace plane: everything that is not in the metastore."""
+    if args.fixture:
+        inventory = _load_workspace(args.fixture)
+    else:
+        gateway = _gateway(config, args)
+        if not isinstance(gateway, DatabricksGateway):
+            raise ConfigError("workspace collection needs a live workspace or --fixture")
+        inventory = collect_workspace_inventory(
+            gateway.client,
+            include_acls=not args.no_acls,
+            include_query_text=not args.no_query_text,
+            include_raw=args.raw,
+        )
+    _write(args.out, json.dumps(inventory.to_dict(), indent=2, sort_keys=True))
+
+    if args.csv_dir:
+        os.makedirs(args.csv_dir, exist_ok=True)
+        written = 0
+        for asset_class in ASSET_CLASSES:
+            rows = csv_rows(inventory, asset_class)
+            if not rows:
+                continue
+            path = os.path.join(args.csv_dir, asset_class + ".csv")
+            with open(path, "w", encoding="utf-8", newline="") as handle:
+                csv.writer(handle).writerows(rows)
+            written += 1
+        print("wrote {0} CSV file(s) to {1}".format(written, args.csv_dir), file=sys.stderr)
+
+    print(workspace_summary(inventory), file=sys.stderr)
+    gaps = coverage_gaps(inventory)
+    for gap in gaps:
+        print("coverage: " + gap, file=sys.stderr)
+    return EXIT_FINDINGS if inventory.failed_classes() else EXIT_OK
+
+
+def cmd_crossrefs(config: MigrationConfig, args: argparse.Namespace) -> int:
+    """Report what each workspace asset depends on, and what will break."""
+    inventory = _load_workspace(args.workspace)
+    report = scan(inventory, config.rewriter())
+    if args.source:
+        # Asset metadata cannot see a path hardcoded on line 88 of a notebook.
+        # Scanning the exported source closes that half, with a line number.
+        scopes = {str(r.get("scope", "")) for r in inventory.rows("secret_scopes")}
+        report = merge(report, scan_source_tree(args.source, config.rewriter(), scopes))
+    if args.csv:
+        with open(args.csv, "w", encoding="utf-8", newline="") as handle:
+            csv.writer(handle).writerows(to_rows(report))
+        print("wrote {0}".format(args.csv), file=sys.stderr)
+    _write(args.out, crossref_summary(inventory, report))
+    return EXIT_FINDINGS if report.blockers else EXIT_OK
+
+
+def cmd_bundle(config: MigrationConfig, args: argparse.Namespace) -> int:
+    """Emit Declarative Automation Bundle YAML from the workspace inventory."""
+    inventory = _load_workspace(args.workspace)
+    result = generate_bundle(
+        inventory,
+        bundle_name=args.name,
+        target_name=args.target_name,
+        target_host=config.target.host,
+        rewriter=config.rewriter(),
+        pause_schedules=not args.no_pause,
+    )
+    out_dir = args.out or "bundle"
+    for relative, content in sorted(result.files.items()):
+        path = os.path.join(out_dir, relative)
+        directory = os.path.dirname(path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(content)
+    counts = ", ".join(
+        "{0}={1}".format(k, v) for k, v in sorted(result.resource_counts.items())
+    )
+    print(
+        "wrote {0} file(s) to {1} ({2}); {3} variable(s); {4} item(s) need review".format(
+            len(result.files), out_dir, counts, len(result.variables), len(result.review)
+        ),
+        file=sys.stderr,
+    )
+    for _, reason in result.review:
+        print("review: " + reason, file=sys.stderr)
+    return EXIT_FINDINGS if result.needs_review() else EXIT_OK
+
+
 def cmd_apply(config: MigrationConfig, args: argparse.Namespace) -> int:
     inventory = _load_inventory(args.inventory)
     plan = _plan_from(config, inventory)
@@ -500,6 +607,48 @@ def build_parser() -> argparse.ArgumentParser:
     add_common(p, needs_inventory=False)
     p.add_argument("--fixture", help="read from a JSON fixture instead of a live workspace")
     p.set_defaults(func=cmd_inventory)
+
+    p = sub.add_parser(
+        "workspace", help="collect the workspace plane: jobs, clusters, dashboards, ACLs, ..."
+    )
+    p.add_argument("-o", "--out", help="write the JSON manifest here instead of stdout")
+    p.add_argument("--fixture", help="read from a JSON fixture instead of a live workspace")
+    p.add_argument("--csv-dir", help="also write one CSV per asset class into this directory")
+    p.add_argument("--no-acls", action="store_true", help="skip workspace object ACLs (faster)")
+    p.add_argument(
+        "--raw",
+        action="store_true",
+        help="keep full job/pipeline definitions -- required for `dbxmig bundle`",
+    )
+    p.add_argument("--no-query-text", action="store_true", help="omit SQL bodies from the manifest")
+    p.set_defaults(func=cmd_workspace)
+
+    p = sub.add_parser(
+        "crossrefs", help="what each workspace asset depends on, and what will break"
+    )
+    p.add_argument("-w", "--workspace", default="workspace.json", help="workspace inventory JSON")
+    p.add_argument(
+        "-s",
+        "--source",
+        help="also scan this directory of exported notebooks / repo source, with line numbers",
+    )
+    p.add_argument("-o", "--out", help="write the report here instead of stdout")
+    p.add_argument("--csv", help="also write the findings as CSV")
+    p.set_defaults(func=cmd_crossrefs)
+
+    p = sub.add_parser(
+        "bundle", help="generate Declarative Automation Bundle YAML from the workspace inventory"
+    )
+    p.add_argument("-w", "--workspace", default="workspace.json", help="workspace inventory JSON")
+    p.add_argument("-o", "--out", default="bundle", help="directory to write the bundle into")
+    p.add_argument("--name", default="migrated-estate", help="bundle name")
+    p.add_argument("--target-name", default="target", help="bundle target name")
+    p.add_argument(
+        "--no-pause",
+        action="store_true",
+        help="keep original schedules instead of emitting every job PAUSED",
+    )
+    p.set_defaults(func=cmd_bundle)
 
     p = sub.add_parser("plan", help="order the inventory into executable steps")
     add_common(p)

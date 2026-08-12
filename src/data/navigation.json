@@ -4,6 +4,7 @@
       "title": "Overview",
       "slug": "overview",
       "items": [
+        { "title": "Start here — by role", "slug": "overview/start-here-by-role" },
         { "title": "What is cross-cloud migration?", "slug": "overview/what-is-cross-cloud-migration" },
         { "title": "Migration archetypes", "slug": "overview/migration-archetypes" },
         { "title": "Decision framework", "slug": "overview/decision-framework" },
@@ -19,7 +20,8 @@
         { "title": "Asset inventory", "slug": "discovery/asset-inventory" },
         { "title": "Dependency mapping", "slug": "discovery/dependency-mapping" },
         { "title": "Risk assessment", "slug": "discovery/risk-assessment" },
-        { "title": "AI-assisted assessment", "slug": "discovery/ai-assisted-assessment" }
+        { "title": "AI-assisted assessment", "slug": "discovery/ai-assisted-assessment" },
+        { "title": "Newer platform surfaces", "slug": "discovery/newer-platform-surfaces" }
       ]
     },
     {
@@ -54,9 +56,12 @@
       "slug": "security",
       "items": [
         { "title": "IAM mapping", "slug": "security/iam-mapping" },
+        { "title": "Target storage credentials", "slug": "security/target-storage-credentials" },
         { "title": "Identity federation", "slug": "security/identity-federation" },
         { "title": "Secrets and KMS", "slug": "security/secrets-and-kms" },
         { "title": "Network security", "slug": "security/network-security" },
+        { "title": "Serverless networking and egress", "slug": "security/serverless-networking" },
+        { "title": "Data residency and classification", "slug": "security/data-residency" },
         { "title": "Audit and compliance", "slug": "security/audit-and-compliance" }
       ]
     },
@@ -109,11 +114,14 @@
         { "title": "Wave planning", "slug": "execution/wave-planning" },
         { "title": "Pilot", "slug": "execution/pilot" },
         { "title": "Large-scale data transfer", "slug": "execution/large-scale-data-transfer" },
+        { "title": "Storage transfer runbooks", "slug": "execution/storage-transfer-runbooks" },
         { "title": "Bulk migration", "slug": "execution/bulk-migration" },
         { "title": "What does not migrate", "slug": "execution/what-does-not-migrate" },
         { "title": "Cutover", "slug": "execution/cutover" },
         { "title": "Rollback", "slug": "execution/rollback" },
-        { "title": "Hypercare", "slug": "execution/hypercare" }
+        { "title": "Hypercare", "slug": "execution/hypercare" },
+        { "title": "Cost and tagging continuity", "slug": "execution/cost-and-tagging-continuity" },
+        { "title": "Decommissioning the source", "slug": "execution/decommissioning" }
       ]
     },
     {

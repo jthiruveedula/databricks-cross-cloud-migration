@@ -1,0 +1,274 @@
+---
+title: 'Storage transfer runbooks'
+layout: ../../layouts/Layout.astro
+description: 'Command-level runbooks for moving bytes between ADLS, S3, and GCS — Storage Transfer Service, AzCopy, DataSync, rclone — plus the Delta-log consistency trap and cross-cloud checksum semantics.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Tabs from '../../components/Tabs.tsx';
+import Accordion from '../../components/Accordion.tsx';
+
+# Storage transfer runbooks
+
+[Large-scale data transfer](/execution/large-scale-data-transfer) sizes the pipe. This page is what you actually type.
+
+Before any of it: most of a Databricks estate should **not** move by raw file copy. Read the next section before running a single transfer job.
+
+## Decide the plane per dataset, before choosing a tool
+
+| Dataset | Plane | Why |
+|---|---|---|
+| Delta tables | **`DEEP CLONE`** | Produces a consistent, registered target table. Copies data *and* a valid log |
+| Non-Delta files (CSV, Parquet, JSON, images) | **Storage transfer** | No transaction log to keep consistent |
+| Volume contents | **Storage transfer** | Volumes are files; the Volume object is recreated separately |
+| Archives, cold data, landing zones | **Storage transfer** | Often the bulk of the bytes and the least sensitive to consistency |
+| Huge, rarely-read Delta tables | **Delta Sharing** | Do not move it at all — see [cross-cloud collaboration](/collaboration/cross-cloud-collaboration) |
+
+<Callout client:visible variant="warning" title="Raw-copying a live Delta table is the most expensive mistake on this page">
+  A Delta table is data files **plus** a `_delta_log` that must agree with them. A copy tool walks the object listing over minutes or hours while writers keep committing. You can easily land a `_delta_log` referencing data files the copy had not reached yet, or data files with no log entry — a target table that lists fine, opens fine, and then fails or silently under-reads.
+
+  It reconciles *worse* than it fails: row counts come from the log, so a table missing data files whose log entries were copied may report the right count and return short. Use `DEEP CLONE` for Delta. If you must move a Delta table's files directly, the source must be **frozen** for the duration, and the target must be validated with `DESCRIBE HISTORY` and a row count — not just an object count.
+</Callout>
+
+The legitimate raw-copy pattern for Delta is *seeding*: bulk-copy the files while the source stays live to get 95% of the bytes across cheaply, then run `DEEP CLONE` over the top. The clone is incremental — it copies only what the target lacks — so the seed makes it fast, and the clone is what makes it correct.
+
+---
+
+## Azure ADLS Gen2 → GCS
+
+The most common Databricks direction, and the one with a precondition worth checking on day one.
+
+Databricks on Azure almost always uses **ADLS Gen2 with hierarchical namespace (HNS)** rather than plain Blob storage. Storage Transfer Service supports it: Data Lake Storage Gen2 is selectable as a source type, and event-driven transfers are available for it as well as for Blob.
+
+<Callout client:visible variant="warning" title="The destination is flat, and directory ACLs have nowhere to go">
+  The constraint is on the GCS side, not the Azure side. Cloud Storage objects live in a **flat namespace**, so Storage Transfer Service does not reproduce a hierarchical namespace in the destination — your ADLS directory tree lands as object-name prefixes.
+
+  For Delta and Parquet data that is a non-event: those paths were always prefixes in practice. What does not survive is anything that depended on directories being real objects — most importantly **POSIX-style directory ACLs on ADLS Gen2 have no GCS equivalent.** If access control was expressed at the directory level rather than through Unity Catalog, that control does not migrate with the bytes and must be rebuilt as [external locations and grants](/governance/external-locations-and-volumes).
+</Callout>
+
+### 1. Mint a SAS the transfer service will actually accept
+
+Three requirements catch people on the first attempt, and all three fail with errors that read like something else.
+
+<CodeBlock client:visible language="bash" filename="01-source-sas.sh" code={`az storage account generate-sas \\
+  --account-name prodstorage \\
+  --services b \\
+  --resource-types co \\
+  --permissions rl \\
+  --expiry "$(date -u -d '+7 days' '+%Y-%m-%dT%H:%MZ')" \\
+  --https-only \\
+  --output tsv`} />
+
+| Requirement | Why it fails otherwise |
+|---|---|
+| Permissions **Read and List** | List alone enumerates and copies nothing; add Delete *only* if you intend the source to be emptied, which during a migration you do not |
+| Resource types **Container and Object** (`co`) | Object-only cannot enumerate; the job fails at listing, which reads as an empty source |
+| **No IP restriction** | Storage Transfer Service calls from a range of addresses. A security team's instinct is to lock the SAS to an IP, and that silently breaks the job |
+
+<Callout client:visible variant="tip" title="The default 8-hour expiry is shorter than your transfer">
+  A SAS that expires mid-transfer fails the job partway through with an authorization error that looks like a permissions misconfiguration rather than a clock. Size the window against the *measured* transfer estimate plus retries, and hold the token in a secret manager — not in shell history.
+</Callout>
+
+### 2. Prepare the destination
+
+<CodeBlock client:visible language="bash" filename="02-target-bucket.sh" code={`gcloud storage buckets create gs://nwr-prod-raw \\
+  --location=us-central1 \\
+  --uniform-bucket-level-access \\
+  --public-access-prevention
+
+# Grant the Storage Transfer Service agent write on the destination.
+# The service account is project-specific -- read it, do not guess it.
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
+STS_SA="project-\${PROJECT_NUMBER}@storage-transfer-service.iam.gserviceaccount.com"
+
+gcloud storage buckets add-iam-policy-binding gs://nwr-prod-raw \\
+  --member="serviceAccount:\${STS_SA}" \\
+  --role=roles/storage.objectAdmin`} />
+
+### 3. Create and run the transfer
+
+<CodeBlock client:visible language="bash" filename="03-transfer.sh" code={`gcloud transfer jobs create \\
+  https://prodstorage.blob.core.windows.net/raw \\
+  gs://nwr-prod-raw \\
+  --source-creds-file=./azure-sas.json \\
+  --name=nwr-raw-seed \\
+  --description="Wave 1 seed: ADLS raw -> GCS" \\
+  --overwrite-when=different \\
+  --delete-from=none
+
+# Watch it. Do not assume it finished because the command returned.
+gcloud transfer operations list --job-names=nwr-raw-seed --format=yaml`} />
+
+`--delete-from=none` is deliberate: during a migration you never want the transfer to delete anything, on either side. Only switch to a mirroring mode once the source is frozen and you specifically want the target to match exactly.
+
+---
+
+## Amazon S3 → Azure Blob / ADLS Gen2
+
+AzCopy is the direct path, and it is genuinely server-to-server — it uses **Put Block From URL**, so the bytes do not flow through the machine running the command. A small VM is enough.
+
+<CodeBlock client:visible language="bash" filename="s3-to-azure.sh" code={`export AWS_ACCESS_KEY_ID=<access-key>
+export AWS_SECRET_ACCESS_KEY=<secret-access-key>
+
+azcopy login   # or append a SAS to the destination URL
+
+azcopy copy \\
+  'https://s3.amazonaws.com/nwr-prod-raw/sales' \\
+  'https://nwrprod.blob.core.windows.net/raw/sales' \\
+  --recursive=true \\
+  --from-to=S3Blob \\
+  --s2s-handle-invalid-metadata=RenameIfInvalid \\
+  --log-level=INFO`} />
+
+Three behaviours that bite on a real estate:
+
+<Accordion client:visible items={[
+  {
+    title: 'Bucket names get silently rewritten',
+    content: 'S3 bucket names allow characters Azure container names do not. AzCopy replaces periods with hyphens, and collapses consecutive hyphens into a count -- a bucket named `my----bucket` becomes `my-4-bucket`. It also resolves collisions by suffixing, so `bucket.name` can land as `bucket-name-2` if `bucket-name` already exists. Every one of those renames breaks any path reference that was not rewritten to match. Copy bucket-by-bucket with explicit destination names rather than copying all buckets at once, so the mapping is yours and not the tool\'s.'
+  },
+  {
+    title: 'Object metadata can be dropped by default',
+    content: 'S3 and Azure allow different characters in metadata keys. The default `--s2s-handle-invalid-metadata=ExcludeIfInvalid` drops incompatible metadata and logs a warning -- which nobody reads. Use `RenameIfInvalid` to preserve it, or `FailIfInvalid` if metadata is load-bearing and you would rather stop than lose it silently. Note also that AzCopy lowercases uppercase metadata names, per HTTP spec.'
+  },
+  {
+    title: 'Hierarchical namespace uses the blob endpoint',
+    content: 'For an ADLS Gen2 account with HNS, use the same `blob.core.windows.net` URL syntax rather than `dfs.core.windows.net` -- multi-protocol access makes the blob endpoint work. Using the wrong endpoint is a common first-attempt failure.'
+  }
+]} />
+
+---
+
+## The other four directions
+
+<Tabs client:visible tabs={[
+  {
+    label: 'S3 → GCS',
+    content: 'The best-supported cross-cloud path there is. Storage Transfer Service is agentless with an AWS access key or, preferably, federated identity so no long-lived key exists: `gcloud transfer jobs create s3://bucket/prefix gs://target-bucket --source-creds-file=aws-creds.json`. Same rules as the Azure job — `--delete-from=none` during migration, watch the operation rather than trusting the return.'
+  },
+  {
+    label: 'Azure → S3',
+    content: 'AWS DataSync supports Azure Blob as a source, which keeps it managed and agentless-ish. The alternative that always works is rclone on a compute instance in the destination cloud: `rclone sync azure:raw s3:nwr-prod-raw --transfers=64 --checkers=128 --fast-list`. Put the instance in the DESTINATION cloud — ingress is free and egress is charged, so you want the long-haul leg to be a pull rather than a push where you can choose.'
+  },
+  {
+    label: 'GCS → Azure',
+    content: 'AzCopy handles GCS as a source with `--from-to=GCPBlob`, authorized by a service-account key via GOOGLE_APPLICATION_CREDENTIALS plus the GCP project id. As with S3, it is a server-to-server copy. Verify current support for your object sizes and any composite objects before planning around it.'
+  },
+  {
+    label: 'GCS → S3',
+    content: 'GCS exposes an S3-compatible interop endpoint with HMAC keys, so most S3-native tooling works: create an HMAC key for a service account, then point rclone or the AWS CLI at `storage.googleapis.com`. This is also the fallback whenever a managed service does not cover a direction — an S3-compatible endpoint plus rclone is the universal path.'
+  }
+]} />
+
+<Callout client:visible variant="tip" title="Run self-hosted transfer compute in the destination cloud">
+  Egress is charged, ingress generally is not. When you control where the copy process runs — rclone, a Databricks job, a VM — put it in the **destination** so the transfer is a pull. It does not change the egress bill from the source, but it does avoid paying twice when the tool stages through a third location, and it keeps the retry loop close to the writes.
+</Callout>
+
+---
+
+## Checksums do not mean the same thing in each cloud
+
+"Compare the checksums" sounds like one operation. It is three, and they do not interoperate.
+
+| Cloud | Native integrity value | The catch |
+|---|---|---|
+| Azure Blob | `Content-MD5` | **Optional.** Often absent on blobs written by Spark; absent is not corrupt |
+| GCS | `CRC32C` (always), `MD5` | **No MD5 on composite objects**; CRC32C has no S3 or Azure equivalent |
+| S3 | `ETag` | **Only equals MD5 for single-part uploads.** Multipart ETags end in `-N` and are a hash of hashes |
+
+Databricks writes Parquet files that are frequently multipart-uploaded and frequently lack `Content-MD5`. So the naive plan — export both sides' checksums and diff — produces a large pile of "mismatches" that are not mismatches.
+
+**What actually works, in order of cost:**
+
+1. **Object count and total bytes per prefix.** Cheap, catches truncated transfers, catches the overwhelming majority of real failures.
+2. **Trust the transfer tool's own verification.** STS, DataSync, and AzCopy verify each object as they copy, using whatever value both sides support. This is stronger than a post-hoc comparison you construct yourself.
+3. **Spot-check with a re-computed hash** on a sample, reading both objects and hashing the bytes yourself — the only truly cloud-neutral comparison, and too expensive to run over everything.
+4. **Validate at the Databricks layer**, which is what actually matters: row counts, schema, and clone provenance per [data reconciliation](/validation/data-reconciliation).
+
+<CodeBlock client:visible language="bash" filename="count-and-bytes.sh" code={`# Source (Azure)
+az storage blob list --account-name prodstorage --container-name raw \\
+  --prefix sales/ --auth-mode login --query "[].properties.contentLength" -o tsv \\
+  | awk '{n++; s+=$1} END {print "objects="n, "bytes="s}'
+
+# Target (GCS)
+gcloud storage ls -r --long gs://nwr-prod-raw/sales/** \\
+  | awk '{n++; s+=$1} END {print "objects="n, "bytes="s}'`} />
+
+Expect small, explainable differences — directory placeholder blobs on HNS accounts, and `_SUCCESS`/`_committed_*` marker files. Explain each class once, then require an exact match on everything else.
+
+---
+
+## The incremental pass and the freeze
+
+A bulk transfer runs against a live source. Everything written during it is missing from the target, so plan the passes rather than discovering the gap.
+
+| Pass | When | Command shape |
+|---|---|---|
+| Seed | Weeks before cutover, source live | Full transfer job |
+| Catch-up | Every few days | Same job re-run — transfer services skip unchanged objects |
+| **Freeze** | Cutover window | Source writes revoked — see [cutover](/execution/cutover) |
+| Final | Immediately after freeze | Same job again; should be small and fast |
+| Verify | Before opening the target | Counts, bytes, then Databricks-level reconciliation |
+
+Re-running an unchanged transfer job is the idiomatic incremental: STS, DataSync, AzCopy `--overwrite=ifSourceNewer`, and `rclone sync` all compare and skip. Only the final pass, after the freeze, is a go/no-go gate; the ones before it are rehearsals whose deltas are expected.
+
+<Callout client:visible variant="tip" title="On a large estate, switch catch-up from scheduled to event-driven">
+  A scheduled catch-up pass re-lists the entire source every time. On a bucket with tens of millions of objects that listing is the expensive part, and it gets slower as the estate grows — so the catch-up window widens exactly as cutover approaches.
+
+  Storage Transfer Service supports **event-driven transfers** from Azure Blob and Data Lake Storage Gen2, and from S3, which react to change notifications instead of re-listing. Set it up once the seed completes and the target tracks the source continuously; the final post-freeze pass then has almost nothing to do, which is precisely where you want the uncertainty to be small.
+</Callout>
+
+<Callout client:visible variant="warning" title="The final pass is only trustworthy if writes actually stopped">
+  Revoking write in the storage layer is not the same as pausing Databricks jobs, and neither catches a partner integration writing directly into the container. Check the source audit log for post-freeze writes before declaring the final pass complete — the query is on [decommissioning](/execution/decommissioning), and this is the moment to run it, not later.
+</Callout>
+
+## Throttling, restart, and the small-file problem
+
+- **Per-account request limits, not bandwidth, are usually the ceiling.** A table with a million small Parquet files is a million requests; the bytes are irrelevant. If throughput is far below the link, look at request rate and at whether `OPTIMIZE` on the source before transfer would move a tenth of the objects for the same bytes.
+- **Every tool here is restartable.** Never restart a failed transfer from scratch; re-run the same job and let it skip what landed.
+- **Log to a file and keep it.** AzCopy job logs and STS operation records are the evidence that a given prefix transferred completely, and they are what an auditor or a post-incident review will ask for.
+- **Egress is charged by the source cloud** and is the dominant one-time cost — model it, and ask the account team about a migration waiver, per [cost and tagging continuity](/execution/cost-and-tagging-continuity).
+
+## Validation
+
+- Object count and total bytes match per prefix, with every category of difference explained rather than tolerated.
+- Transfer tool reports zero failed objects; the log is retained as evidence.
+- A sampled re-computed hash matches on both sides.
+- Delta tables were produced by `DEEP CLONE`, not by raw copy — verified with `DESCRIBE HISTORY`.
+- The final pass ran **after** writes stopped, and the source shows no post-freeze writes.
+
+## Rollback
+
+Transfers are additive: the source is untouched and a failed or partial transfer is re-run rather than reverted. The only destructive setting is a mirroring/delete mode — keep it off until the source is frozen and you specifically want an exact match.
+
+## Automation opportunity
+
+- Script the seed and catch-up passes as a scheduled job from the day the target bucket exists, so the final pass is small by construction.
+- Emit object counts and byte totals per prefix into a table after every pass, so drift is a trend rather than a cutover-night discovery.
+- Gate the cutover job on the final-pass verification, the same way [decommissioning](/execution/decommissioning) gates deletion on export sign-off.
+
+<Checklist client:visible title="Storage transfer" items={[
+  { id: 'plane', label: 'Every dataset assigned a plane: DEEP CLONE, storage transfer, or Delta Sharing' },
+  { id: 'nodelta', label: 'No Delta table is being raw-copied against a live source' },
+  { id: 'hns', label: 'Directory-level ACLs on ADLS Gen2 accounted for — they do not survive into a flat GCS namespace' },
+  { id: 'creds', label: 'SAS has Read+List, resource types Container AND Object, no IP restriction, expiry longer than the measured transfer' },
+  { id: 'eventdriven', label: 'Catch-up switched to event-driven if source listing is the bottleneck' },
+  { id: 'nodelete', label: 'Delete/mirror mode disabled for every pass before the freeze' },
+  { id: 'names', label: 'Bucket and container name mapping chosen explicitly, not left to tool auto-rename' },
+  { id: 'metadata', label: 'Metadata handling flag set deliberately rather than defaulted' },
+  { id: 'counts', label: 'Object count and byte totals compared per prefix; differences explained by category' },
+  { id: 'final', label: 'Final pass ran after writes stopped, and post-freeze writes checked in the audit log' },
+  { id: 'logs', label: 'Transfer logs retained as completion evidence' },
+]} />
+
+## Sources
+
+- Microsoft — [Copy data from Amazon S3 to Azure Storage by using AzCopy](https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-s3) (`Put Block From URL` server-to-server copy, `--from-to=S3Blob`, bucket-name rewriting, `s2s-handle-invalid-metadata`, HNS via the blob endpoint)
+- Google Cloud — [Transfer from Microsoft Azure Blob Storage](https://cloud.google.com/storage-transfer/docs/source-microsoft-azure) (SAS needs Read + List, resource types Container **and** Object, HTTPS only, and no IP restriction; default expiry is 8 hours)
+- Google Cloud — [Event-driven transfers from Azure Blob Storage or Data Lake Storage Gen2](https://cloud.google.com/storage-transfer/docs/event-driven-azure)
+- Google Cloud — [Known limitations](https://cloud.google.com/storage-transfer/docs/known-limitations-transfer) (Cloud Storage is a flat namespace; hierarchical structure is not reproduced in the destination)
+- Google Cloud — [Create transfers](https://cloud.google.com/storage-transfer/docs/create-transfers)
+- AWS — [DataSync cross-cloud transfers](https://aws.amazon.com/about-aws/whats-new/2025/05/aws-datasync-accelerates-cross-cloud-data-transfers/)
+- Databricks — [Clone a table](https://docs.databricks.com/aws/en/tables/operations/clone)

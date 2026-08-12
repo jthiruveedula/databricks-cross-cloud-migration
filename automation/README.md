@@ -33,8 +33,19 @@ out of scope, a materialized view, a streaming table, a Scala function, a
 registered model, a retired principal, a masked column:
 
 ```bash
+# The metastore half
 dbxmig -c examples/migration.fixture.yaml gaps -i tests/fixtures/source_metastore.json
 dbxmig -c examples/migration.fixture.yaml ddl  -i tests/fixtures/source_metastore.json
+
+# The workspace half
+dbxmig -c examples/migration.fixture.yaml workspace  --fixture tests/fixtures/workspace.json -o ws.json
+dbxmig -c examples/migration.fixture.yaml crossrefs  -w tests/fixtures/workspace.json
+
+# ...and the code, with line numbers
+dbxmig -c examples/migration.fixture.yaml crossrefs  -w tests/fixtures/workspace.json -s ../src
+
+# ...and turn the collected jobs and pipelines into deployable bundle YAML
+dbxmig -c examples/migration.fixture.yaml bundle     -w tests/fixtures/workspace.json -o ./bundle
 ```
 
 `gaps` exits non-zero when anything needs a decision. That makes it usable as a
@@ -45,7 +56,9 @@ CI gate on the migration itself, not just a report you read once.
 | Command | What it does | Needs a workspace |
 |---|---|---|
 | `validate` | Check the config before anything else runs | no |
-| `inventory` | Export the source metastore to JSON | yes (source) |
+| `inventory` | Export the source **metastore** to JSON | yes (source) |
+| `workspace` | Collect the **workspace plane** — jobs, clusters, policies, pools, warehouses, dashboards, queries, alerts, secret scopes, repos, principals, object ACLs — as JSON plus one CSV per asset class | yes (source) |
+| `crossrefs` | What each workspace asset depends on and what breaks: storage paths, secrets, policies, warehouses, IAM identities, plus which assets must move in the same wave. `--source DIR` also scans exported notebooks and repo code, reporting a file and line number | no |
 | `plan` | Order every object by dependency into executable steps | no |
 | `gaps` | **Read this one.** Everything that will not migrate on its own | no |
 | `ddl` | Emit target SQL, idempotent, in dependency order | no |
@@ -129,7 +142,7 @@ Deliberately out of scope, and reported as manual work rather than pretended:
 ## Tests
 
 ```bash
-pytest          # 123 tests, no credentials, no network
+pytest          # 195 tests, no credentials, no network
 ruff check .
 ```
 
