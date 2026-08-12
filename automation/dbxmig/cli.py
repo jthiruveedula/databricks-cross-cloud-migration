@@ -26,6 +26,7 @@ import sys
 from typing import List, Optional, Sequence
 
 from . import __version__
+from .bundle import generate_bundle
 from .config import ConfigError, MigrationConfig, load_config, load_principal_map
 from .crossrefs import coverage_gaps, merge, scan, scan_source_tree, to_rows
 from .ddl import (
@@ -422,7 +423,10 @@ def cmd_workspace(config: MigrationConfig, args: argparse.Namespace) -> int:
         if not isinstance(gateway, DatabricksGateway):
             raise ConfigError("workspace collection needs a live workspace or --fixture")
         inventory = collect_workspace_inventory(
-            gateway.client, include_acls=not args.no_acls, include_query_text=not args.no_query_text
+            gateway.client,
+            include_acls=not args.no_acls,
+            include_query_text=not args.no_query_text,
+            include_raw=args.raw,
         )
     _write(args.out, json.dumps(inventory.to_dict(), indent=2, sort_keys=True))
 
@@ -461,6 +465,39 @@ def cmd_crossrefs(config: MigrationConfig, args: argparse.Namespace) -> int:
         print("wrote {0}".format(args.csv), file=sys.stderr)
     _write(args.out, crossref_summary(inventory, report))
     return EXIT_FINDINGS if report.blockers else EXIT_OK
+
+
+def cmd_bundle(config: MigrationConfig, args: argparse.Namespace) -> int:
+    """Emit Declarative Automation Bundle YAML from the workspace inventory."""
+    inventory = _load_workspace(args.workspace)
+    result = generate_bundle(
+        inventory,
+        bundle_name=args.name,
+        target_name=args.target_name,
+        target_host=config.target.host,
+        rewriter=config.rewriter(),
+        pause_schedules=not args.no_pause,
+    )
+    out_dir = args.out or "bundle"
+    for relative, content in sorted(result.files.items()):
+        path = os.path.join(out_dir, relative)
+        directory = os.path.dirname(path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(content)
+    counts = ", ".join(
+        "{0}={1}".format(k, v) for k, v in sorted(result.resource_counts.items())
+    )
+    print(
+        "wrote {0} file(s) to {1} ({2}); {3} variable(s); {4} item(s) need review".format(
+            len(result.files), out_dir, counts, len(result.variables), len(result.review)
+        ),
+        file=sys.stderr,
+    )
+    for _, reason in result.review:
+        print("review: " + reason, file=sys.stderr)
+    return EXIT_FINDINGS if result.needs_review() else EXIT_OK
 
 
 def cmd_apply(config: MigrationConfig, args: argparse.Namespace) -> int:
@@ -578,6 +615,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--fixture", help="read from a JSON fixture instead of a live workspace")
     p.add_argument("--csv-dir", help="also write one CSV per asset class into this directory")
     p.add_argument("--no-acls", action="store_true", help="skip workspace object ACLs (faster)")
+    p.add_argument(
+        "--raw",
+        action="store_true",
+        help="keep full job/pipeline definitions -- required for `dbxmig bundle`",
+    )
     p.add_argument("--no-query-text", action="store_true", help="omit SQL bodies from the manifest")
     p.set_defaults(func=cmd_workspace)
 
@@ -593,6 +635,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--out", help="write the report here instead of stdout")
     p.add_argument("--csv", help="also write the findings as CSV")
     p.set_defaults(func=cmd_crossrefs)
+
+    p = sub.add_parser(
+        "bundle", help="generate Declarative Automation Bundle YAML from the workspace inventory"
+    )
+    p.add_argument("-w", "--workspace", default="workspace.json", help="workspace inventory JSON")
+    p.add_argument("-o", "--out", default="bundle", help="directory to write the bundle into")
+    p.add_argument("--name", default="migrated-estate", help="bundle name")
+    p.add_argument("--target-name", default="target", help="bundle target name")
+    p.add_argument(
+        "--no-pause",
+        action="store_true",
+        help="keep original schedules instead of emitting every job PAUSED",
+    )
+    p.set_defaults(func=cmd_bundle)
 
     p = sub.add_parser("plan", help="order the inventory into executable steps")
     add_common(p)

@@ -43,6 +43,9 @@ dbxmig -c examples/migration.fixture.yaml crossrefs  -w tests/fixtures/workspace
 
 # ...and the code, with line numbers
 dbxmig -c examples/migration.fixture.yaml crossrefs  -w tests/fixtures/workspace.json -s ../src
+
+# ...and turn the collected jobs and pipelines into deployable bundle YAML
+dbxmig -c examples/migration.fixture.yaml bundle     -w tests/fixtures/workspace.json -o ./bundle
 ```
 
 `gaps` exits non-zero when anything needs a decision. That makes it usable as a
@@ -139,7 +142,7 @@ Deliberately out of scope, and reported as manual work rather than pretended:
 ## Tests
 
 ```bash
-pytest          # 166 tests, no credentials, no network
+pytest          # 184 tests, no credentials, no network
 ruff check .
 ```
 

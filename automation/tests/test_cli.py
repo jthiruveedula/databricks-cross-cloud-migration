@@ -309,3 +309,21 @@ def test_crossrefs_source_scan_adds_notebook_findings_with_lines(tmp_path, capsy
     out = capsys.readouterr().out
     assert "source_file" in out
     assert "line 1" in out
+
+
+def test_bundle_command_writes_a_deployable_tree(tmp_path, capsys):
+    out = str(tmp_path / "bundle")
+    code = main(
+        ["-c", write_config(tmp_path), "bundle", "-w", WORKSPACE_FIXTURE, "-o", out]
+    )
+    # Non-zero because the fixture deliberately contains a job collected
+    # without --raw, which must be reported rather than silently dropped.
+    assert code == EXIT_FINDINGS
+    assert os.path.exists(os.path.join(out, "databricks.yml"))
+    assert os.path.exists(os.path.join(out, "resources", "jobs.yml"))
+    assert os.path.exists(os.path.join(out, "REVIEW.md"))
+    err = capsys.readouterr().err
+    assert "need review" in err
+    jobs = open(os.path.join(out, "resources", "jobs.yml"), encoding="utf-8").read()
+    assert "${var." in jobs
+    assert "prodstorage.dfs.core.windows.net" not in jobs

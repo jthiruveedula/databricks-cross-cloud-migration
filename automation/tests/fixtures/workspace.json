@@ -12,10 +12,78 @@
         "task_count": 3,
         "schedule": "0 0 2 * * ?",
         "paused": false,
-        "cluster_policy_ids": ["POL-STANDARD-ETL"],
+        "cluster_policy_ids": [
+          "POL-STANDARD-ETL"
+        ],
         "warehouse_ids": [],
-        "notebook_paths": ["/Repos/data-eng/sales/load_orders"],
-        "tags": { "domain": "sales", "cost_center": "CC-4410" }
+        "notebook_paths": [
+          "/Repos/data-eng/sales/load_orders"
+        ],
+        "tags": {
+          "domain": "sales",
+          "cost_center": "CC-4410"
+        },
+        "raw": {
+          "job_id": 8801,
+          "creator_user_name": "priya@northwind.example",
+          "created_time": 1750000000000,
+          "settings": {
+            "name": "sales-daily-load",
+            "schedule": {
+              "quartz_cron_expression": "0 0 2 * * ?",
+              "timezone_id": "UTC",
+              "pause_status": "UNPAUSED"
+            },
+            "job_clusters": [
+              {
+                "job_cluster_key": "etl",
+                "new_cluster": {
+                  "spark_version": "15.4.x-scala2.12",
+                  "node_type_id": "Standard_DS4_v2",
+                  "num_workers": 4,
+                  "policy_id": "POL-STANDARD-ETL",
+                  "instance_pool_id": "POOL-WARM-01",
+                  "init_scripts": [
+                    {
+                      "abfss": {
+                        "destination": "abfss://raw@prodstorage.dfs.core.windows.net/init/observability.sh"
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "tasks": [
+              {
+                "task_key": "load_orders",
+                "job_cluster_key": "etl",
+                "notebook_task": {
+                  "notebook_path": "/Repos/data-eng/sales/load_orders",
+                  "base_parameters": {
+                    "src": "abfss://raw@prodstorage.dfs.core.windows.net/sales/orders"
+                  }
+                }
+              },
+              {
+                "task_key": "publish",
+                "depends_on": [
+                  {
+                    "task_key": "load_orders"
+                  }
+                ],
+                "sql_task": {
+                  "warehouse_id": "WH-FINANCE-01",
+                  "query": {
+                    "query_id": "Q-REV-01"
+                  }
+                }
+              }
+            ],
+            "tags": {
+              "domain": "sales"
+            }
+          }
+        }
       },
       {
         "job_id": "8802",
@@ -25,10 +93,17 @@
         "task_count": 1,
         "schedule": "0 0 5 * * ?",
         "paused": false,
-        "cluster_policy_ids": ["POL-RETIRED-2023"],
-        "warehouse_ids": ["WH-FINANCE-01"],
-        "notebook_paths": ["/Shared/finance/ledger_export"],
-        "tags": {}
+        "cluster_policy_ids": [
+          "POL-RETIRED-2023"
+        ],
+        "warehouse_ids": [
+          "WH-FINANCE-01"
+        ],
+        "notebook_paths": [
+          "/Shared/finance/ledger_export"
+        ],
+        "tags": {},
+        "raw": {}
       },
       {
         "job_id": "8803",
@@ -40,8 +115,12 @@
         "paused": true,
         "cluster_policy_ids": [],
         "warehouse_ids": [],
-        "notebook_paths": ["/Shared/legacy/crawl"],
-        "tags": { "note": "reads dbfs:/mnt/legacy/archive nightly" }
+        "notebook_paths": [
+          "/Shared/legacy/crawl"
+        ],
+        "tags": {
+          "note": "reads dbfs:/mnt/legacy/archive nightly"
+        }
       }
     ],
     "pipelines": [
@@ -53,7 +132,25 @@
         "target": "sales",
         "storage": "abfss://raw@prodstorage.dfs.core.windows.net/pipelines/orders",
         "serverless": false,
-        "continuous": true
+        "continuous": true,
+        "raw": {
+          "pipeline_id": "PIPE-001",
+          "state": "RUNNING",
+          "spec": {
+            "name": "orders-bronze-silver",
+            "catalog": "prod",
+            "target": "sales",
+            "continuous": true,
+            "storage": "abfss://raw@prodstorage.dfs.core.windows.net/pipelines/orders",
+            "libraries": [
+              {
+                "notebook": {
+                  "path": "/Repos/data-eng/sales/bronze"
+                }
+              }
+            ]
+          }
+        }
       }
     ],
     "clusters": [
@@ -70,11 +167,15 @@
         "policy_id": "POL-STANDARD-ETL",
         "instance_pool_id": "POOL-WARM-01",
         "instance_profile_arn": "",
-        "init_scripts": ["abfss://raw@prodstorage.dfs.core.windows.net/init/observability.sh"],
+        "init_scripts": [
+          "abfss://raw@prodstorage.dfs.core.windows.net/init/observability.sh"
+        ],
         "spark_conf": {
           "spark.hadoop.fs.azure.account.key": "{{secrets/prod-etl/adls_account_key}}"
         },
-        "custom_tags": { "domain": "shared" }
+        "custom_tags": {
+          "domain": "shared"
+        }
       },
       {
         "cluster_id": "0811-legacy-02",
@@ -89,7 +190,9 @@
         "policy_id": "",
         "instance_pool_id": "",
         "instance_profile_arn": "arn:aws:iam::123456789012:instance-profile/legacy-etl-role",
-        "init_scripts": ["dbfs:/mnt/legacy/init/bootstrap.sh"],
+        "init_scripts": [
+          "dbfs:/mnt/legacy/init/bootstrap.sh"
+        ],
         "spark_conf": {},
         "custom_tags": {}
       }
@@ -161,7 +264,10 @@
       {
         "scope": "prod-etl",
         "backend_type": "DATABRICKS",
-        "key_names": ["adls_account_key", "partner_api_token"],
+        "key_names": [
+          "adls_account_key",
+          "partner_api_token"
+        ],
         "key_count": 2
       }
     ],
@@ -175,31 +281,127 @@
       }
     ],
     "groups": [
-      { "group_id": "G-01", "display_name": "sales-eng", "member_count": 12, "meta_resource_type": "WorkspaceGroup" },
-      { "group_id": "G-02", "display_name": "data-readers", "member_count": 140, "meta_resource_type": "Group" }
+      {
+        "group_id": "G-01",
+        "display_name": "sales-eng",
+        "member_count": 12,
+        "meta_resource_type": "WorkspaceGroup"
+      },
+      {
+        "group_id": "G-02",
+        "display_name": "data-readers",
+        "member_count": 140,
+        "meta_resource_type": "Group"
+      }
     ],
     "service_principals": [
-      { "application_id": "11111111-2222-3333-4444-555555555555", "display_name": "svc-etl-prod", "active": true }
+      {
+        "application_id": "11111111-2222-3333-4444-555555555555",
+        "display_name": "svc-etl-prod",
+        "active": true
+      }
     ],
     "object_acls": [
-      { "object_type": "jobs", "object_id": "8801", "object_name": "sales-daily-load", "principal": "sales-eng", "permission_level": "CAN_MANAGE" },
-      { "object_type": "clusters", "object_id": "0811-shared-01", "object_name": "shared-analytics", "principal": "data-readers", "permission_level": "CAN_RESTART" }
+      {
+        "object_type": "jobs",
+        "object_id": "8801",
+        "object_name": "sales-daily-load",
+        "principal": "sales-eng",
+        "permission_level": "CAN_MANAGE"
+      },
+      {
+        "object_type": "clusters",
+        "object_id": "0811-shared-01",
+        "object_name": "shared-analytics",
+        "principal": "data-readers",
+        "permission_level": "CAN_RESTART"
+      }
     ]
   },
   "results": [
-    { "asset_class": "jobs", "collected": 3, "ok": true, "reason": "" },
-    { "asset_class": "pipelines", "collected": 1, "ok": true, "reason": "" },
-    { "asset_class": "clusters", "collected": 2, "ok": true, "reason": "" },
-    { "asset_class": "cluster_policies", "collected": 1, "ok": true, "reason": "" },
-    { "asset_class": "instance_pools", "collected": 1, "ok": true, "reason": "" },
-    { "asset_class": "sql_warehouses", "collected": 1, "ok": true, "reason": "" },
-    { "asset_class": "dashboards", "collected": 1, "ok": true, "reason": "" },
-    { "asset_class": "queries", "collected": 2, "ok": true, "reason": "" },
-    { "asset_class": "alerts", "collected": 1, "ok": true, "reason": "" },
-    { "asset_class": "secret_scopes", "collected": 1, "ok": true, "reason": "" },
-    { "asset_class": "repos", "collected": 1, "ok": true, "reason": "" },
-    { "asset_class": "groups", "collected": 2, "ok": true, "reason": "" },
-    { "asset_class": "service_principals", "collected": 1, "ok": true, "reason": "" },
-    { "asset_class": "object_acls", "collected": 2, "ok": true, "reason": "" }
+    {
+      "asset_class": "jobs",
+      "collected": 3,
+      "ok": true,
+      "reason": ""
+    },
+    {
+      "asset_class": "pipelines",
+      "collected": 1,
+      "ok": true,
+      "reason": ""
+    },
+    {
+      "asset_class": "clusters",
+      "collected": 2,
+      "ok": true,
+      "reason": ""
+    },
+    {
+      "asset_class": "cluster_policies",
+      "collected": 1,
+      "ok": true,
+      "reason": ""
+    },
+    {
+      "asset_class": "instance_pools",
+      "collected": 1,
+      "ok": true,
+      "reason": ""
+    },
+    {
+      "asset_class": "sql_warehouses",
+      "collected": 1,
+      "ok": true,
+      "reason": ""
+    },
+    {
+      "asset_class": "dashboards",
+      "collected": 1,
+      "ok": true,
+      "reason": ""
+    },
+    {
+      "asset_class": "queries",
+      "collected": 2,
+      "ok": true,
+      "reason": ""
+    },
+    {
+      "asset_class": "alerts",
+      "collected": 1,
+      "ok": true,
+      "reason": ""
+    },
+    {
+      "asset_class": "secret_scopes",
+      "collected": 1,
+      "ok": true,
+      "reason": ""
+    },
+    {
+      "asset_class": "repos",
+      "collected": 1,
+      "ok": true,
+      "reason": ""
+    },
+    {
+      "asset_class": "groups",
+      "collected": 2,
+      "ok": true,
+      "reason": ""
+    },
+    {
+      "asset_class": "service_principals",
+      "collected": 1,
+      "ok": true,
+      "reason": ""
+    },
+    {
+      "asset_class": "object_acls",
+      "collected": 2,
+      "ok": true,
+      "reason": ""
+    }
   ]
 }

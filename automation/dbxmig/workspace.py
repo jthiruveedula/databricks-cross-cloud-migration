@@ -158,7 +158,26 @@ def _collect(
 # which wave it belongs to.
 
 
-def flatten_job(raw: Any) -> Dict[str, Any]:
+def _as_payload(raw: Any) -> Dict[str, Any]:
+    """The object's own dict form, when the SDK offers one.
+
+    Kept alongside the flattened row so bundle generation can be faithful.
+    The flattened fields are for humans and spreadsheets; this is for machines
+    that have to recreate the object exactly.
+    """
+    for method in ("as_dict", "as_shallow_dict"):
+        fn = getattr(raw, method, None)
+        if callable(fn):
+            try:
+                value = fn()
+            except Exception:
+                continue
+            if isinstance(value, dict):
+                return value
+    return {}
+
+
+def flatten_job(raw: Any, include_raw: bool = False) -> Dict[str, Any]:
     settings = _attr(raw, "settings")
     tasks = _attr(settings, "tasks", []) or []
     schedule = _attr(settings, "schedule")
@@ -196,10 +215,11 @@ def flatten_job(raw: Any) -> Dict[str, Any]:
         "warehouse_ids": warehouse_ids,
         "notebook_paths": notebook_paths,
         "tags": dict(_attr(settings, "tags", {}) or {}),
+        "raw": _as_payload(raw) if include_raw else {},
     }
 
 
-def flatten_pipeline(raw: Any) -> Dict[str, Any]:
+def flatten_pipeline(raw: Any, include_raw: bool = False) -> Dict[str, Any]:
     spec = _attr(raw, "spec")
     return {
         "pipeline_id": str(_attr(raw, "pipeline_id", "")),
@@ -210,6 +230,7 @@ def flatten_pipeline(raw: Any) -> Dict[str, Any]:
         "storage": str(_attr(spec, "storage", "")),
         "serverless": bool(_attr(spec, "serverless", False)),
         "continuous": bool(_attr(spec, "continuous", False)),
+        "raw": _as_payload(raw) if include_raw else {},
     }
 
 
@@ -339,6 +360,7 @@ def collect_workspace_inventory(
     client: Any,
     include_acls: bool = True,
     include_query_text: bool = True,
+    include_raw: bool = False,
 ) -> WorkspaceInventory:
     """Walk the workspace APIs and build the inventory.
 
@@ -349,12 +371,14 @@ def collect_workspace_inventory(
     inventory.workspace_host = str(getattr(getattr(client, "config", None), "host", "") or "")
 
     _collect(
-        inventory, "jobs", lambda: [flatten_job(j) for j in client.jobs.list(expand_tasks=True)]
+        inventory,
+        "jobs",
+        lambda: [flatten_job(j, include_raw) for j in client.jobs.list(expand_tasks=True)],
     )
     _collect(
         inventory,
         "pipelines",
-        lambda: [flatten_pipeline(p) for p in client.pipelines.list_pipelines()],
+        lambda: [flatten_pipeline(p, include_raw) for p in client.pipelines.list_pipelines()],
     )
     _collect(inventory, "clusters", lambda: [flatten_cluster(c) for c in client.clusters.list()])
     _collect(
