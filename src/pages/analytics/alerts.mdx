@@ -29,20 +29,41 @@ SQL alerts are easy to under-prioritize during migration because they're invisib
 
 <CodeBlock client:visible language="python" filename="migrate_alerts.py" code={`import requests
 
-alerts = requests.get(
-    f"{SOURCE_HOST}/api/2.0/preview/sql/alerts",
-    headers={"Authorization": f"Bearer {SOURCE_TOKEN}"},
-).json()
+def all_alerts(host, token):
+    """Current Alerts API at /api/2.0/sql/alerts -- token-paginated."""
+    page_token, out = None, []
+    while True:
+        response = requests.get(
+            f"{host}/api/2.0/sql/alerts",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"page_token": page_token} if page_token else {},
+        ).json()
+        out.extend(response.get("results", []))
+        page_token = response.get("next_page_token")
+        if not page_token:
+            return out
 
-for alert in alerts:
+for alert in all_alerts(SOURCE_HOST, SOURCE_TOKEN):
     target_alert = {
-        "name": alert["name"],
-        "query_id": TARGET_QUERY_ID_MAP[alert["query"]["id"]],  # migrated query IDs, not source IDs
-        "options": alert["options"],  # threshold, column, comparator
-        "rearm": alert.get("rearm"),
+        "display_name": alert["display_name"],
+        # Migrated query IDs, never source ones -- see the query ID map.
+        "query_id": TARGET_QUERY_ID_MAP[alert["query_id"]],
+        "condition": alert["condition"],       # threshold, column, comparator
+        "seconds_to_retrigger": alert.get("seconds_to_retrigger"),
     }
-    # POST target_alert to target workspace, then attach notification destinations
+    requests.post(
+        f"{TARGET_HOST}/api/2.0/sql/alerts",
+        headers={"Authorization": f"Bearer {TARGET_TOKEN}"},
+        json={"alert": target_alert},
+    )
+    # Then attach notification destinations -- they are not part of this payload.
 `} />
+
+<Callout client:visible variant="warning" title="The legacy alerts API is on its way out, and the new one is not a rename">
+  `/api/2.0/preview/sql/alerts` became `/api/2.0/sql/alerts`, with the legacy version supported only for a limited window. The shapes differ as well as the path: `name` became `display_name`, the old `options` blob became a structured `condition`, `rearm` became `seconds_to_retrigger`, and list responses are token-paginated. Update also moved to `PATCH` for partial updates, and delete now moves an alert to the trash rather than removing it permanently.
+
+  For a migration that last point is quietly useful: a mistakenly deleted target alert is recoverable, so cleaning up a bad import is not the one-way door it used to be.
+</Callout>
 
 ## Notification destination checklist
 
@@ -72,3 +93,8 @@ Keep source alerts active through hypercare rather than disabling them the momen
   { id: 'force-fired', label: 'Every migrated alert force-triggered and confirmed to notify correctly' },
   { id: 'parallel-run', label: 'Source and target alerts run in parallel through part of hypercare' },
 ]} />
+
+## Sources
+
+- Databricks — [Update to the latest Databricks SQL API version](https://docs.databricks.com/aws/en/sql/dbsql-api-latest) (`/api/2.0/preview/sql/alerts` is now `/api/2.0/sql/alerts`; token pagination, `PATCH` updates, delete moves to trash)
+- Databricks — [Alerts API](https://docs.databricks.com/api/workspace/alerts)

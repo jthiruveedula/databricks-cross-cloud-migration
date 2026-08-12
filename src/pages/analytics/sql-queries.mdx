@@ -29,10 +29,21 @@ Saved queries in Databricks SQL reference a warehouse, a catalog/schema, and oft
 
 <CodeBlock client:visible language="python" filename="migrate_queries.py" code={`import requests
 
-queries = requests.get(
-    f"{SOURCE_HOST}/api/2.0/preview/sql/queries",
-    headers={"Authorization": f"Bearer {SOURCE_TOKEN}"},
-).json()["results"]
+def all_queries(host, token):
+    """Current Queries API. Token-paginated -- a single GET returns one page."""
+    page_token, out = None, []
+    while True:
+        response = requests.get(
+            f"{host}/api/2.0/sql/queries",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"page_token": page_token} if page_token else {},
+        ).json()
+        out.extend(response.get("results", []))
+        page_token = response.get("next_page_token")
+        if not page_token:
+            return out
+
+queries = all_queries(SOURCE_HOST, SOURCE_TOKEN)
 
 CATALOG_MAP = {"prod_catalog": "prod_catalog_target"}  # adjust per your naming decision
 
@@ -42,13 +53,26 @@ def rewrite_query(sql: str) -> str:
     return sql
 
 for q in queries:
+    # The current API takes warehouse_id directly. data_source_id was the
+    # legacy proxy for a warehouse and needed a separate lookup -- see
+    # common errors if you are adapting an older script.
     target_query = {
-        "name": q["name"],
-        "query": rewrite_query(q["query"]),
-        "data_source_id": TARGET_WAREHOUSE_DATA_SOURCE_ID,
+        "display_name": q["display_name"],
+        "query_text": rewrite_query(q["query_text"]),
+        "warehouse_id": TARGET_WAREHOUSE_ID,
     }
-    # POST target_query to target workspace's /api/2.0/preview/sql/queries
+    requests.post(
+        f"{TARGET_HOST}/api/2.0/sql/queries",
+        headers={"Authorization": f"Bearer {TARGET_TOKEN}"},
+        json={"query": target_query},
+    )
 `} />
+
+<Callout client:visible variant="warning" title="Do not build this on the legacy /preview/ endpoints">
+  The Databricks SQL API moved: `/api/2.0/preview/sql/queries` became `/api/2.0/sql/queries`, and the legacy version is supported only for a limited window before being phased out. Building a migration script on the legacy path means writing an integration against an API with a retirement date, during a project that already has enough deadlines.
+
+  The new API is not a drop-in rename. Field names changed — `name` and `query` became `display_name` and `query_text`, and `data_source_id` became `warehouse_id` — list responses are **token-paginated** rather than returning everything at once, and updates use `PATCH` for partial updates. A script ported by search-and-replacing the URL will fail on the field names, and one ported without pagination will silently migrate only the first page.
+</Callout>
 
 ## Validation
 
@@ -72,3 +96,8 @@ Saved queries are configuration; if a migrated query is wrong, fix and redeploy 
   { id: 'diff', label: 'Migrated query output diffed against source for the same time window' },
   { id: 'nested', label: 'Queries referencing other saved queries validated, not just top-level ones' },
 ]} />
+
+## Sources
+
+- Databricks — [Update to the latest Databricks SQL API version](https://docs.databricks.com/aws/en/sql/dbsql-api-latest) (`/api/2.0/preview/sql/queries` is now `/api/2.0/sql/queries`; renamed fields, token pagination, `PATCH` for partial updates)
+- Databricks — [Queries (legacy) API](https://docs.databricks.com/api/workspace/querieslegacy)
