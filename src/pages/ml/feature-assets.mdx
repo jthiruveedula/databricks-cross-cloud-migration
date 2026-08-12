@@ -10,7 +10,7 @@ import Checklist from '../../components/Checklist.tsx';
 
 # Feature assets
 
-Feature tables (via Databricks Feature Engineering / Feature Store) are Delta tables with extra metadata: primary keys, feature lookups used at training time, and an online-serving path used at inference time. Migrating the table alone (as covered generically in [governance/metastore migration](/governance/metastore-migration)) is not enough — the feature-lookup metadata and any online store sync need to move too.
+A feature table in Unity Catalog is not a special object type. It is a Delta table with a **primary key constraint** — plus, at inference time, an online serving path. That makes migration deceptively simple-looking: the table clones like any other, and everything that made it a feature table is in the parts a clone leaves behind.
 
 <Callout client:visible variant="warning" title="Training/serving skew is the specific risk here">
   If a feature table migrates but its serving/online-store counterpart doesn't (or migrates with a subtle difference), a model can train correctly against target offline features while serving stale or mismatched values online. Validate both paths, not just the offline table.
@@ -21,25 +21,37 @@ Feature tables (via Databricks Feature Engineering / Feature Store) are Delta ta
 | Asset | Migration approach |
 |---|---|
 | Feature table (Delta) | Migrate via Delta Deep Clone like any other UC table |
-| Feature table metadata (primary keys, timestamp keys) | Re-register as a feature table in target using the Feature Engineering client, not a plain `CREATE TABLE` |
+| **Primary key constraint** | **Re-add it.** `CLONE` does not carry constraints — and in Unity Catalog the constraint is what makes the table a feature table |
 | Training set specs (`FeatureLookup` definitions used in training code) | Update catalog/schema references in training code, same as any other hardcoded reference |
-| Online store sync (if used for low-latency serving) | Re-create the online store publish job against target, pointed at the target online store instance |
+| Online serving | Rebuild on an **Online Feature Store**; legacy online tables are no longer supported — see below |
 
-## Migration pattern
+## In Unity Catalog there is no registration step, and that is the trap
 
-<CodeBlock client:visible language="python" filename="migrate_feature_table.py" code={`from databricks.feature_engineering import FeatureEngineeringClient
+<Callout client:visible variant="warning" title="A deep-cloned feature table silently stops being a feature table">
+  In Unity Catalog, **any Delta table with a primary key constraint is automatically a feature table.** There is no separate registry and nothing to re-register — which sounds like it makes migration easier, and instead makes the failure quiet.
+
+  `CLONE` does not copy constraints. So a deep-cloned feature table arrives in the target with all its data, all its columns, matching row counts, and **no primary key** — meaning Unity Catalog no longer considers it a feature table at all. It reconciles perfectly. It just is not a feature table any more, and the first `FeatureLookup` against it fails.
+
+  The fix is not the Feature Engineering client. It is the constraint that [metastore migration](/governance/metastore-migration) already tells you to re-apply — this page is simply where forgetting it costs the most.
+</Callout>
+
+<CodeBlock client:visible language="sql" filename="restore-feature-table.sql" code={`-- After the deep clone. Primary key columns must be NOT NULL first.
+ALTER TABLE prod_gcp.features.customer_features
+  ALTER COLUMN customer_id SET NOT NULL;
+
+ALTER TABLE prod_gcp.features.customer_features
+  ADD CONSTRAINT customer_features_pk PRIMARY KEY (customer_id);
+
+-- With a time series feature table, the timestamp key is part of the PK:
+--   PRIMARY KEY (customer_id, event_time TIMESERIES)`} />
+
+<CodeBlock client:visible language="python" filename="verify-feature-tables.py" code={`# Verify, do not assume. A feature table with no PK looks like a normal table.
+from databricks.feature_engineering import FeatureEngineeringClient
 
 fe = FeatureEngineeringClient()
-
-# Data itself migrates via Delta Deep Clone (see cloud-mappings path-rewrite pattern);
-# this re-establishes the feature-table *metadata* on top of the migrated Delta table
-fe.create_table(
-    name="target_catalog.features.customer_features",
-    primary_keys=["customer_id"],
-    timestamp_keys=["event_time"],
-    df=spark.table("target_catalog.features.customer_features"),
-    description="Customer features migrated from source_catalog.features.customer_features",
-)
+for name in migrated_feature_tables:
+    table = fe.get_table(name=name)
+    assert table.primary_keys, f"{name} lost its primary key in the clone"
 `} />
 
 ## Training code references
@@ -56,11 +68,24 @@ feature_lookups = [
 ]
 `} />
 
+## Online serving: legacy online tables are gone
+
+<Callout client:visible variant="warning" title="Do not rebuild what the source had — the online path has been replaced">
+  Databricks **online tables are no longer supported**. Online serving is now the **Databricks Online Feature Store**, powered by Lakebase, and online feature stores created with `fe.create_online_store()` after 23 March 2026 are created as Lakebase Autoscaling projects.
+
+  For a migration this means the target side is not a like-for-like rebuild of whatever the source is running. If the source uses legacy online tables, the target is an Online Feature Store, and Databricks publishes a specific migration path for that transition. Treat it as a component redesign with its own testing, not as a config copy.
+</Callout>
+
+<Callout client:visible variant="warning" title="On GCP this can be a hard blocker, not a task">
+  Online Feature Store is powered by Lakebase, and **Lakebase availability differs by cloud** — see [newer platform surfaces](/discovery/newer-platform-surfaces). A migration to GCP that assumes online feature serving works exactly as it does on AWS needs that assumption checked against the current status for the target cloud and region *before* the wave is planned. A beta dependency under a real-time serving path is a business decision, not a technical detail.
+</Callout>
+
 ## Validation
 
 - Re-run a training job against the migrated feature table and confirm it produces a model statistically equivalent to one trained against source features for the same time window.
 - If an online store is in use, compare a sample of served feature values between source and target for the same entity keys — this is the check that catches training/serving skew before it reaches production.
-- Confirm point-in-time correctness (as-of joins) still resolve correctly against target — timestamp key handling is easy to silently break during a metadata re-registration.
+- Confirm point-in-time correctness (as-of joins) still resolves against target — the `TIMESERIES` marker on the timestamp key is part of the primary key constraint, so it is lost with the constraint and easy to restore incompletely.
+- Assert that every migrated feature table actually reports a primary key. A table that lost it still queries fine and is no longer a feature table.
 
 ## Rollback
 
@@ -68,13 +93,23 @@ Feature tables are Delta tables underneath; rollback follows the same pattern as
 
 ## Automation opportunity
 
-- Generate the feature-table re-registration script from the source feature table's existing metadata (primary keys, timestamp keys) via the Feature Engineering API, rather than hand-transcribing the schema.
+- Generate the `ADD CONSTRAINT` statements from the source tables' existing primary keys rather than hand-transcribing them — `dbxmig` already captures constraints per table in the [inventory](/discovery/asset-inventory), and they are emitted as part of its DDL.
+- Assert primary keys on every migrated feature table as a post-migration check, since the failure is silent.
 - Add an automated training/serving parity check comparing a sample of online-store values to the offline feature table, run continuously through hypercare.
 
 <Checklist client:visible title="Feature asset migration" items={[
   { id: 'data', label: 'Feature table data migrated via Delta Deep Clone' },
-  { id: 'metadata', label: 'Feature-table metadata (primary/timestamp keys) re-registered, not just a plain table' },
+  { id: 'pk', label: 'Primary key constraint re-added after the clone — without it the table is not a feature table' },
+  { id: 'timeseries', label: 'TIMESERIES timestamp key restored on time series feature tables' },
+  { id: 'pk-verify', label: 'Every migrated feature table asserted to report a primary key' },
   { id: 'training-code', label: 'FeatureLookup references updated in all training pipelines' },
-  { id: 'online-store', label: 'Online store sync re-created and validated against target, if in use' },
+  { id: 'online-store', label: 'Online serving rebuilt on an Online Feature Store — not a like-for-like copy of legacy online tables' },
+  { id: 'lakebase', label: 'Lakebase availability confirmed for the target cloud and region before planning the wave' },
   { id: 'parity', label: 'Training/serving parity validated -- no skew between offline and online values' },
 ]} />
+
+## Sources
+
+- Databricks — [Feature tables in Unity Catalog](https://docs.databricks.com/aws/en/machine-learning/feature-store/uc/feature-tables-uc) (any UC table with a primary key is automatically a feature table; no separate registration)
+- Databricks — [Databricks Online Feature Stores](https://docs.databricks.com/aws/en/machine-learning/feature-store/online-feature-store) (powered by Lakebase; stores created after 23 March 2026 use Lakebase Autoscaling)
+- Databricks — [Migrate from legacy and third-party online tables](https://docs.databricks.com/aws/en/machine-learning/feature-store/migrate-from-online-tables) (online tables are no longer supported)
