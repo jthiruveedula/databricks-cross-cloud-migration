@@ -102,11 +102,23 @@ print(version_map)  # source version -> target version, needed by every consumer
 ## Auditing consumers before cutover
 
 <Callout client:visible variant="warning" title="A model reference is a dependency, same as a table reference">
-  Every job, pipeline, or serving endpoint that loads `models:/churn_model/Production` breaks the moment that alias doesn't exist in target with the right model behind it. Treat this exactly like the table dependency mapping in [dependency mapping](/discovery/dependency-mapping) — trace every consumer before cutover, don't discover them from broken jobs afterward.
+  Every job, pipeline, or serving endpoint that loads `models:/churn_model/Production` breaks twice over in the target: the name is two-level, and `Production` is a stage that no longer exists. It has to become `models:/prod_gcp.ml.churn_model@champion`. Treat this exactly like the table dependency mapping in [dependency mapping](/discovery/dependency-mapping) — trace every consumer before cutover, don't discover them from broken jobs afterward.
 </Callout>
 
-<CodeBlock client:visible language="bash" filename="find_model_references.sh" code={`# Search notebooks and job definitions for model registry references
-grep -rn "models:/" ./exported-notebooks/ ./exported-jobs/
+<CodeBlock client:visible language="bash" filename="find_model_references.sh" code={`SRC=./exported-notebooks ./exported-jobs
+
+# Every model reference, so nothing is missed
+grep -rn "models:/" $SRC
+
+# The two that MUST change, separated out because they fail differently:
+# 1. Stage-based URIs -- the stage does not exist in Unity Catalog
+grep -rnE "models:/[^\\"']+/(Production|Staging|Archived|None)\\b" $SRC
+
+# 2. Two-level names -- Unity Catalog requires catalog.schema.model
+grep -rnE "models:/[A-Za-z0-9_-]+(/|@)" $SRC | grep -vE "models:/[^/]+\\.[^/]+\\.[^/@]+"
+
+# And the API call that has nothing to call in the target
+grep -rn "transition_model_version_stage" $SRC
 `} />
 
 ## Validation
