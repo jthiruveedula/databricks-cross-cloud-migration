@@ -20,7 +20,8 @@
         { "title": "Asset inventory", "slug": "discovery/asset-inventory" },
         { "title": "Dependency mapping", "slug": "discovery/dependency-mapping" },
         { "title": "Risk assessment", "slug": "discovery/risk-assessment" },
-        { "title": "AI-assisted assessment", "slug": "discovery/ai-assisted-assessment" }
+        { "title": "AI-assisted assessment", "slug": "discovery/ai-assisted-assessment" },
+        { "title": "Newer platform surfaces", "slug": "discovery/newer-platform-surfaces" }
       ]
     },
     {
@@ -58,6 +59,7 @@
         { "title": "Identity federation", "slug": "security/identity-federation" },
         { "title": "Secrets and KMS", "slug": "security/secrets-and-kms" },
         { "title": "Network security", "slug": "security/network-security" },
+        { "title": "Serverless networking and egress", "slug": "security/serverless-networking" },
         { "title": "Audit and compliance", "slug": "security/audit-and-compliance" }
       ]
     },

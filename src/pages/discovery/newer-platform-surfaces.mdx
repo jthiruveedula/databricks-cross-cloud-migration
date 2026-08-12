@@ -1,0 +1,147 @@
+---
+title: 'Newer platform surfaces'
+layout: ../../layouts/Layout.astro
+description: 'Databricks Apps, Genie spaces, AI Search indexes, Lakebase, and Delta Sharing objects — assets a table-and-job-shaped inventory misses entirely.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Accordion from '../../components/Accordion.tsx';
+
+# Newer platform surfaces
+
+Most migration inventories are shaped like a 2022 Databricks estate: tables, jobs, clusters, dashboards. Everything on this page postdates that shape, and every one of them is invisible to an inventory that only asks the questions a 2022 estate would have answered.
+
+They share a failure mode. Nobody notices they are missing, because nobody had them on the list.
+
+<Callout client:visible variant="warning" title="Check whether you have these before deciding you do not">
+  The most common outcome of this page is "we don't use any of that" — and the second most common is discovering that one team does, three weeks after cutover. Each section below names the API or UI location to check. Checking costs minutes.
+</Callout>
+
+## The register
+
+| Surface | Migrates by | Real cost if missed |
+|---|---|---|
+| Databricks Apps | Redeploy from source; **recreate the app's identity and secrets** | An internal tool disappears; its users are not on your comms list |
+| Genie spaces | Recreate; re-point at target tables; **re-teach the instructions** | Curated business context and sample SQL lost, silently |
+| AI Search — delta sync index | Recreate the index; it rebuilds from the source table | Rebuild time and embedding cost, inside the cutover window |
+| AI Search — **direct access** index | **Re-ingest the vectors; there is no source table** | Data loss — the vectors exist nowhere else |
+| Lakebase (managed Postgres) | Postgres dump/restore, **if it exists in the target cloud** | Availability differs by cloud; may be a hard blocker |
+| Delta Sharing shares | Recreate share and objects | Consumers lose data access |
+| Delta Sharing **recipients** | Recreate; **new activation link per recipient** | External partners break; each needs contacting |
+| Delta Sharing providers (inbound) | Re-accept from the provider side | You lose data you consume |
+| Marketplace listings | Recreate | Your published listings vanish |
+
+---
+
+## Databricks Apps
+
+An App is a small web application hosted in the workspace, usually built by a data team for a business team, and usually not documented anywhere the platform team would look.
+
+**Check for them:** the Apps section of the workspace UI, or the Apps API. If the answer is non-zero, find the owner of each one before doing anything else.
+
+Three things move separately and all of them are needed:
+
+- **The code**, which is usually in a repo — the easy part.
+- **The app's identity.** An App runs as a service principal with its own grants. That principal must exist in the target account and hold the equivalent grants, and it is the piece most often forgotten because the app's own users never see it.
+- **Its configuration and secrets** — environment variables, secret-scope references, and any SQL warehouse it queries through, all of which change identifier in the target.
+
+<Callout client:visible variant="tip" title="Apps have their own networking story">
+  An App that reaches anything outside Databricks is subject to the same serverless egress rules as everything else on that plane. If it calls an internal API, that is a private endpoint rule on the NCC — see [serverless networking](/security/serverless-networking).
+</Callout>
+
+## Genie spaces
+
+A Genie space is the natural-language interface over a set of tables, and what makes it useful is not the space — it is the **curated context**: the instructions, the example SQL, the metric definitions, and the corrections someone spent months adding after watching it get answers wrong.
+
+The tables migrate. The curation is the asset, and it is the part a table-shaped inventory does not see.
+
+**Check for them:** the Genie section of the workspace UI. For each space, export the instructions and sample queries *as text* before cutover, whatever the tooling supports at the time — treat it like documentation you are about to lose rather than like a configuration object.
+
+Re-pointing a space at target tables is mechanical. Rebuilding six months of "no, revenue means *net* revenue" is not.
+
+## AI Search (Vector Search) — one of the two kinds is data loss
+
+This is the sharpest distinction on the page, and it decides whether an index is an inconvenience or a loss.
+
+<Accordion client:visible items={[
+  {
+    title: 'Delta sync index — recreate, and budget the rebuild',
+    content: 'A delta sync index derives from a source Delta table and keeps itself updated as that table changes. Once the source table exists in the target, recreate the index and let it build. Nothing is lost. What you must budget is time and cost: the rebuild re-embeds the corpus, which on a large table is hours and a real compute bill, and it belongs inside the cutover window rather than being discovered after it. Also note the sync mode -- continuous keeps a compute cluster running to stream updates, triggered does not -- so the target cost profile differs depending on which you recreate.'
+  },
+  {
+    title: 'Direct access index — the vectors exist nowhere else',
+    content: 'A direct access index is written to directly. There is no source Delta table to rebuild from, which means the vectors in it are primary data. If the application that populated it can regenerate them, this is a re-ingest job to schedule. If it cannot -- because the embedding model changed, or the source documents are gone, or the writer was a one-off -- then deleting that index destroys data. Establish which kind each index is during discovery, not at cutover.'
+  }
+]} />
+
+**Check for them:** the vector search endpoints and indexes APIs, or `databricks vector-search-indexes list-indexes`. Record the index type per index; it is the field that decides the plan.
+
+## Lakebase — check availability before designing anything
+
+Lakebase is managed Postgres inside Databricks, co-located with the lakehouse, used for transactional workloads and applications rather than analytics.
+
+<Callout client:visible variant="warning" title="This is the one where the target cloud may simply not support what you have">
+  Lakebase availability differs by cloud — as of August 2026 it is generally available on AWS while GCP is in beta. Everything else in this runbook assumes feature parity is a detail to verify; here it can be the deciding constraint on a migration direction. Confirm the current status for your specific target cloud and region before committing, because a beta dependency under a production workload is a business decision, not a technical one.
+</Callout>
+
+Migration itself is comparatively conventional — it is Postgres, so a dump and restore. What is not conventional: the Unity Catalog syncs feeding it must be re-established against target tables, branches do not travel, and any application connecting to it needs a new connection string and a target-account identity.
+
+## Delta Sharing — shares, recipients, and providers
+
+Three distinct objects, three distinct problems, and the middle one involves other organisations.
+
+<CodeBlock client:visible language="sql" filename="inventory-sharing.sql" code={`-- What you publish
+SELECT * FROM system.information_schema.shares;
+
+-- Who receives it
+SELECT * FROM system.information_schema.recipients;
+
+-- What you consume from others
+SELECT * FROM system.information_schema.providers;`} />
+
+- **Shares** are recreated in the target metastore and repopulated with target objects. Mechanical.
+- **Recipients** need a **new activation link each**, because tokens are bound to the source metastore. That is an email and a scheduling conversation with an organisation you do not control, per recipient, and it is the reason this belongs in the plan four weeks out rather than on cutover night.
+- **Providers** — data you consume — must be re-accepted from the provider's side. You are now the external party in someone else's process, on their timeline.
+
+<Callout client:visible variant="tip" title="Recipients are the only migration task where the critical path runs through another company">
+  Everything else on this page you can accelerate by working harder. Recipient re-activation moves at the speed of the partner's ticket queue. Start it first.
+</Callout>
+
+## Validation
+
+- Every surface above has been explicitly checked and the result recorded — including the zeroes.
+- Every App has a named owner, a target service principal, and its secrets re-sourced.
+- Genie instructions and sample SQL exported as text before the source is touched.
+- Every AI Search index is classified delta-sync or direct-access, and every direct-access index has a re-ingest plan or a written acceptance that it is being discarded.
+- Lakebase availability confirmed for the target cloud **and region**, not just the cloud.
+- Every Delta Sharing recipient contacted, with re-activation scheduled.
+
+## Rollback
+
+All discovery-stage work, so nothing to roll back — except the one irreversible case: a **direct access AI Search index deleted without a re-ingest path** is data loss, and it goes with the source. Confirm classification before the [decommissioning](/execution/decommissioning) freeze.
+
+## Automation opportunity
+
+- Add these APIs to the workspace collection so the counts land in the same report as everything else — see the [automation toolkit](/templates/automation-toolkit). Until then they are a manual checklist item, which is exactly why they get missed.
+- Fail discovery sign-off if any of these classes is unrecorded. "Not checked" and "zero" must be distinguishable, the same rule the [asset inventory](/discovery/asset-inventory) applies everywhere else.
+
+<Checklist client:visible title="Newer platform surfaces" items={[
+  { id: 'apps', label: 'Databricks Apps enumerated; owner, service principal, and secrets identified per app' },
+  { id: 'genie', label: 'Genie spaces enumerated; instructions and sample SQL exported as text' },
+  { id: 'vs-type', label: 'Every AI Search index classified delta-sync or direct-access' },
+  { id: 'vs-direct', label: 'Direct-access indexes have a re-ingest plan or a written acceptance of loss' },
+  { id: 'vs-budget', label: 'Index rebuild time and embedding cost budgeted inside the cutover window' },
+  { id: 'lakebase', label: 'Lakebase availability confirmed for the target cloud AND region' },
+  { id: 'shares', label: 'Delta Sharing shares, recipients, and providers inventoried' },
+  { id: 'recipients', label: 'Recipient re-activation started early — it runs at partner speed' },
+  { id: 'zeroes', label: 'Every surface checked, including the ones that came back zero' },
+]} />
+
+## Sources
+
+- Databricks — [Databricks AI Search](https://docs.databricks.com/aws/en/vector-search/vector-search) and [Create AI Search endpoints and indexes](https://docs.databricks.com/aws/en/vector-search/create-vector-search) (delta sync vs direct access; continuous vs triggered sync)
+- Databricks — [Lakebase Postgres](https://docs.databricks.com/aws/en/oltp/projects/) and [Lakebase Provisioned](https://docs.databricks.com/aws/en/oltp/instances/)
+- Databricks — [Configure networking for Databricks Apps](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/networking)
+- Databricks — [Information schema](https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-information-schema) (`SHARES`, `RECIPIENTS`, `PROVIDERS` views)
