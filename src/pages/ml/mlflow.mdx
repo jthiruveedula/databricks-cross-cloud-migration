@@ -22,8 +22,19 @@ MLflow experiment tracking is workspace-local — experiments, runs, metrics, an
 |---|---|
 | Experiments | Recreate by name in target; map source experiment ID → target experiment ID |
 | Runs (params, metrics, tags) | Read via `MlflowClient` on source, re-log via `mlflow.start_run()` on target |
+| **Metric history** | **Not in `run.data.metrics`** — that holds only the latest value per key. Fetch `get_metric_history` per metric |
 | Logged artifacts (models, plots, files) | Download from source artifact store, re-upload to target artifact store |
-| Run lineage / parent-child runs | Preserve `mlflow.parentRunId` tag when re-logging so nested-run structure survives |
+| Run lineage / parent-child runs | Re-set `mlflow.parentRunId` **remapped through the run ID map** — the source parent ID means nothing in the target, and parents must migrate before their children |
+| **Source → target run ID map** | Nothing produces it for you, and [model registry](/ml/model-registry) re-registration needs it |
+
+<Callout client:visible variant="warning" title="The naive version of this script silently loses training curves and stops at 1000 runs">
+  Two defaults make a script that looks correct on a demo experiment and quietly under-delivers on a real one:
+
+  - **`run.data.metrics` is the latest value per key, not the series.** Re-logging from it turns a 200-epoch training curve into a single point. The history lives behind `get_metric_history(run_id, key)`, and re-logging needs the original `step` and `timestamp` or the x-axis is still lost.
+  - **`search_runs` returns at most 1000 runs** and pages via `page_token`. An experiment with 5,000 runs migrates 1,000 of them and reports success.
+
+  Both fail silently — the target has runs, the counts just do not match, and nobody compares them unless the validation step below is actually run.
+</Callout>
 
 ## Migration script pattern
 
@@ -36,18 +47,50 @@ mlflow.set_tracking_uri(TARGET_TRACKING_URI)
 experiment = source_client.get_experiment_by_name("churn_model")
 target_exp_id = mlflow.create_experiment("churn_model")
 
-for run in source_client.search_runs([experiment.experiment_id]):
+def all_runs(experiment_id):
+    """search_runs caps at 1000 -- page or silently lose the rest."""
+    token = None
+    while True:
+        page = source_client.search_runs(
+            [experiment_id], max_results=1000, page_token=token
+        )
+        for run in page:
+            yield run
+        token = getattr(page, "token", None)
+        if not token:
+            break
+
+run_id_map = {}
+for run in all_runs(experiment.experiment_id):
     with mlflow.start_run(experiment_id=target_exp_id) as target_run:
+        run_id_map[run.info.run_id] = target_run.info.run_id
+
         for key, value in run.data.params.items():
             mlflow.log_param(key, value)
-        for key, value in run.data.metrics.items():
-            mlflow.log_metric(key, value)
+
+        # run.data.metrics holds only the LATEST value per key. Replay the
+        # full series, preserving step and timestamp, or the curve is lost.
+        for key in run.data.metrics:
+            for point in source_client.get_metric_history(run.info.run_id, key):
+                mlflow.log_metric(key, point.value, step=point.step, timestamp=point.timestamp)
+
         for key, value in run.data.tags.items():
-            if not key.startswith("mlflow."):  # mlflow.* tags are system-managed, don't copy verbatim
+            if not key.startswith("mlflow."):  # mlflow.* tags are system-managed
                 mlflow.set_tag(key, value)
+
+        # ...with one exception. parentRunId is an mlflow.* tag, so the filter
+        # above drops it and the nested-run structure collapses. Re-set it,
+        # REMAPPED -- the source parent id means nothing in the target.
+        parent = run.data.tags.get("mlflow.parentRunId")
+        if parent and parent in run_id_map:
+            mlflow.set_tag("mlflow.parentRunId", run_id_map[parent])
 
         local_path = source_client.download_artifacts(run.info.run_id, ".")
         mlflow.log_artifacts(local_path)
+
+# Hand this to model-registry migration: re-registering a model version needs
+# the MIGRATED run id, not the source one.
+print(run_id_map)
 `} />
 
 ## Artifact store URI portability
