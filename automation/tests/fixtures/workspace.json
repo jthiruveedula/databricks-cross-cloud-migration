@@ -315,6 +315,41 @@
         "object_name": "shared-analytics",
         "principal": "data-readers",
         "permission_level": "CAN_RESTART"
+      },
+      {
+        "object_type": "jobs",
+        "object_id": "8802",
+        "object_name": "finance-ledger-export",
+        "principal": "sam@northwind.example",
+        "permission_level": "CAN_MANAGE_RUN"
+      },
+      {
+        "object_type": "jobs",
+        "object_id": "8801",
+        "object_name": "sales-daily-load",
+        "principal": "sales-eng",
+        "permission_level": "IS_OWNER"
+      },
+      {
+        "object_type": "sql/warehouses",
+        "object_id": "WH-A",
+        "object_name": "shared-bi",
+        "principal": "data-readers",
+        "permission_level": "CAN_USE"
+      },
+      {
+        "object_type": "sql/warehouses",
+        "object_id": "WH-B",
+        "object_name": "shared-bi",
+        "principal": "data-readers",
+        "permission_level": "CAN_USE"
+      },
+      {
+        "object_type": "clusters",
+        "object_id": "0811-legacy-02",
+        "object_name": "legacy-etl",
+        "principal": "departed-contractor",
+        "permission_level": "CAN_RESTART"
       }
     ]
   },
@@ -399,7 +434,7 @@
     },
     {
       "asset_class": "object_acls",
-      "collected": 2,
+      "collected": 7,
       "ok": true,
       "reason": ""
     }

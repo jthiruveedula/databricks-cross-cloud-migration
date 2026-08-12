@@ -170,8 +170,11 @@ def test_workspace_local_groups_are_distinguishable_from_account_groups(
 
 def test_object_acls_are_a_separate_permission_system(workspace: WorkspaceInventory):
     acls = workspace.rows("object_acls")
-    assert {a["object_type"] for a in acls} == {"jobs", "clusters"}
+    assert {"jobs", "clusters", "sql/warehouses"} <= {a["object_type"] for a in acls}
     assert any(a["permission_level"] == "CAN_RESTART" for a in acls)
+    # IS_OWNER is collected -- deciding it cannot be replayed is acls.py's job,
+    # not the collector's. The inventory records what the source actually has.
+    assert any(a["permission_level"] == "IS_OWNER" for a in acls)
 
 
 # ---- newer platform surfaces --------------------------------------------

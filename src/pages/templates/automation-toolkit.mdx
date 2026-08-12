@@ -73,6 +73,7 @@ dbxmig -c examples/migration.fixture.yaml gaps -i tests/fixtures/source_metastor
 | `gaps` | Everything with no automated path — **read this first** | no |
 | `ddl` | Emits idempotent target SQL, in dependency order | no |
 | `grants` | Emits translated `GRANT` and `SET OWNER` statements | no |
+| `acls` | Replays **workspace object ACLs** — the permission system Unity Catalog grants do not cover | no |
 | `bundle` | Generates Declarative Automation Bundle YAML for jobs and pipelines, with every workspace-scoped id turned into a variable | no |
 | `apply` | Executes, resumably — dry-run unless `--execute` | yes (target) |
 | `reconcile` | Compares target against source, exits non-zero on a blocker | no |
