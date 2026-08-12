@@ -12,6 +12,10 @@ import Checklist from '../../components/Checklist.tsx';
 
 Every [cloud mapping](/cloud-mappings/cross-cloud-equivalency-matrix) page and [bulk migration](/execution/bulk-migration) assume the bytes move. This page is about the part underneath that assumption: at 10s–100s of TB, and certainly at PB scale, the public internet path and a single `DEEP CLONE` job are not a transfer plan — they're a bottleneck you discover during wave 1 instead of during planning.
 
+<Callout client:visible variant="tip" title="This page sizes the pipe. The commands are next door.">
+  Per-direction runbooks — Storage Transfer Service, AzCopy, DataSync, rclone — with credential setup, cross-cloud checksum semantics, and the Delta-log consistency trap that makes raw-copying a live Delta table dangerous: [storage transfer runbooks](/execution/storage-transfer-runbooks).
+</Callout>
+
 <Callout client:visible variant="prerequisite" title="Size the pipe before you size the wave">
   Wave planning tells you *what* moves in what order. This page tells you *how fast bytes can actually move* between the source and target cloud — the number that determines whether your cutover window is realistic. Do this math before committing dates to the business.
 </Callout>
