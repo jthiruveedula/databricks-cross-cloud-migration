@@ -172,3 +172,92 @@ def test_object_acls_are_a_separate_permission_system(workspace: WorkspaceInvent
     acls = workspace.rows("object_acls")
     assert {a["object_type"] for a in acls} == {"jobs", "clusters"}
     assert any(a["permission_level"] == "CAN_RESTART" for a in acls)
+
+
+# ---- newer platform surfaces --------------------------------------------
+
+
+def test_missing_api_is_not_checked_rather_than_empty_or_failed():
+    class Client:
+        config = Obj(host="https://x")
+        jobs = Obj(list=lambda **k: [])
+        pipelines = Obj(list_pipelines=lambda: [])
+        clusters = Obj(list=lambda: [])
+        cluster_policies = Obj(list=lambda: [])
+        instance_pools = Obj(list=lambda: [])
+        warehouses = Obj(list=lambda: [])
+        lakeview = Obj(list=lambda: [])
+        queries = Obj(list=lambda: [])
+        alerts = Obj(list=lambda: [])
+        repos = Obj(list=lambda: [])
+        groups = Obj(list=lambda: [])
+        service_principals = Obj(list=lambda: [])
+        secrets = Obj(list_scopes=lambda: [])
+        # No `apps`, `genie`, `vector_search_*`, `shares`, ... attributes at all.
+
+    inventory = collect_workspace_inventory(Client(), include_acls=False)
+    apps = next(r for r in inventory.results if r.asset_class == "apps")
+    assert apps.unavailable is True
+    assert apps.ok is True  # not a failure -- the API simply is not there
+    assert "check this class by hand" in apps.reason
+    # Distinct from a genuinely empty class.
+    pipelines = next(r for r in inventory.results if r.asset_class == "pipelines")
+    assert pipelines.unavailable is False
+
+
+def test_vector_search_index_records_whether_it_is_rebuildable():
+    class Client:
+        config = Obj(host="https://x")
+        jobs = Obj(list=lambda **k: [])
+        pipelines = Obj(list_pipelines=lambda: [])
+        clusters = Obj(list=lambda: [])
+        cluster_policies = Obj(list=lambda: [])
+        instance_pools = Obj(list=lambda: [])
+        warehouses = Obj(list=lambda: [])
+        lakeview = Obj(list=lambda: [])
+        queries = Obj(list=lambda: [])
+        alerts = Obj(list=lambda: [])
+        repos = Obj(list=lambda: [])
+        groups = Obj(list=lambda: [])
+        service_principals = Obj(list=lambda: [])
+        secrets = Obj(list_scopes=lambda: [])
+        vector_search_endpoints = Obj(list_endpoints=lambda: [Obj(name="ep")])
+        vector_search_indexes = Obj(
+            list_indexes=lambda endpoint_name: [
+                Obj(
+                    name="sync_idx",
+                    index_type=Obj(value="DELTA_SYNC"),
+                    delta_sync_index_spec=Obj(source_table="prod.sales.docs"),
+                ),
+                Obj(name="direct_idx", index_type=Obj(value="DIRECT_ACCESS")),
+            ]
+        )
+
+    inventory = collect_workspace_inventory(Client(), include_acls=False)
+    by_name = {i["name"]: i for i in inventory.rows("vector_search_indexes")}
+    assert by_name["sync_idx"]["rebuildable_from_source"] is True
+    assert by_name["sync_idx"]["source_table"] == "prod.sales.docs"
+    # A direct-access index has no source table: losing it is data loss.
+    assert by_name["direct_idx"]["rebuildable_from_source"] is False
+
+
+def test_recipients_are_flagged_as_needing_reactivation():
+    class Client:
+        config = Obj(host="https://x")
+        jobs = Obj(list=lambda **k: [])
+        pipelines = Obj(list_pipelines=lambda: [])
+        clusters = Obj(list=lambda: [])
+        cluster_policies = Obj(list=lambda: [])
+        instance_pools = Obj(list=lambda: [])
+        warehouses = Obj(list=lambda: [])
+        lakeview = Obj(list=lambda: [])
+        queries = Obj(list=lambda: [])
+        alerts = Obj(list=lambda: [])
+        repos = Obj(list=lambda: [])
+        groups = Obj(list=lambda: [])
+        service_principals = Obj(list=lambda: [])
+        secrets = Obj(list_scopes=lambda: [])
+        recipients = Obj(list=lambda: [Obj(name="acme", authentication_type=Obj(value="TOKEN"))])
+
+    inventory = collect_workspace_inventory(Client(), include_acls=False)
+    assert inventory.rows("recipients")[0]["needs_reactivation"] is True

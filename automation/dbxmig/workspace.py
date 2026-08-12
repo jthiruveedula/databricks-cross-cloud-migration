@@ -42,6 +42,18 @@ ASSET_CLASSES = (
     "groups",
     "service_principals",
     "object_acls",
+    # Surfaces that postdate a table-and-job-shaped estate. Collected last
+    # because they are the ones most often absent -- and an absence has to be
+    # distinguishable from "we never looked".
+    "apps",
+    "genie_spaces",
+    "vector_search_endpoints",
+    "vector_search_indexes",
+    "usage_policies",
+    "database_instances",
+    "shares",
+    "recipients",
+    "providers",
 )
 
 
@@ -58,6 +70,25 @@ def _enum(value: Any) -> str:
     return str(getattr(value, "value", value) or "")
 
 
+class _ApiUnavailable(RuntimeError):
+    """The SDK or workspace does not expose this API at all."""
+
+
+def _api(client: Any, path: str) -> Any:
+    """Resolve ``client.a.b``, or raise :class:`_ApiUnavailable`.
+
+    Newer surfaces move and get renamed. An older SDK, or a workspace without
+    the feature enabled, should degrade to "not checked" rather than to a
+    failure that looks like a permissions problem.
+    """
+    node = client
+    for part in path.split("."):
+        node = getattr(node, part, None)
+        if node is None:
+            raise _ApiUnavailable("client.{0} is not present".format(path))
+    return node
+
+
 @dataclass
 class CollectionResult:
     """What one asset class collection actually did.
@@ -71,6 +102,11 @@ class CollectionResult:
     collected: int = 0
     ok: bool = True
     reason: str = ""
+    #: True when the API is not present in this SDK version or not enabled on
+    #: this workspace. Distinct from both "empty" and "failed": there is
+    #: nothing wrong, but the class has NOT been checked and must be verified
+    #: by hand before discovery is signed off.
+    unavailable: bool = False
 
 
 @dataclass
@@ -106,6 +142,7 @@ class WorkspaceInventory:
                     "collected": r.collected,
                     "ok": r.ok,
                     "reason": r.reason,
+                    "unavailable": r.unavailable,
                 }
                 for r in self.results
             ],
@@ -126,6 +163,7 @@ class WorkspaceInventory:
                     collected=int(item.get("collected", 0)),
                     ok=bool(item.get("ok", True)),
                     reason=str(item.get("reason", "")),
+                    unavailable=bool(item.get("unavailable", False)),
                 )
             )
         return inventory
@@ -139,6 +177,18 @@ def _collect(
     """Run one collector, recording success, emptiness, or failure explicitly."""
     try:
         rows = fetch()
+    except _ApiUnavailable as exc:
+        inventory.assets[asset_class] = []
+        inventory.results.append(
+            CollectionResult(
+                asset_class,
+                0,
+                ok=True,
+                reason="API not available here ({0}) -- check this class by hand".format(exc),
+                unavailable=True,
+            )
+        )
+        return
     except Exception as exc:  # noqa: BLE001 - the reason must reach the report
         inventory.assets[asset_class] = []
         inventory.results.append(
@@ -418,6 +468,8 @@ def collect_workspace_inventory(
         lambda: [flatten_service_principal(s) for s in client.service_principals.list()],
     )
 
+    _collect_newer_surfaces(client, inventory)
+
     if include_acls:
         _collect(inventory, "object_acls", lambda: _collect_object_acls(client, inventory))
     else:
@@ -426,6 +478,161 @@ def collect_workspace_inventory(
             CollectionResult("object_acls", 0, ok=True, reason="skipped: --no-acls")
         )
     return inventory
+
+
+def _collect_newer_surfaces(client: Any, inventory: WorkspaceInventory) -> None:
+    """Apps, Genie, AI Search, Lakebase, and Delta Sharing objects.
+
+    Every one of these is invisible to an inventory shaped like a 2022 estate,
+    and each degrades to "not checked" rather than to a failure when the API is
+    absent -- so the report can say which of the three states applies.
+    """
+    _collect(
+        inventory,
+        "apps",
+        lambda: [
+            {
+                "name": str(_attr(a, "name", "")),
+                "description": str(_attr(a, "description", "")),
+                "url": str(_attr(a, "url", "")),
+                "service_principal_name": str(_attr(a, "service_principal_name", "")),
+                "service_principal_id": str(_attr(a, "service_principal_id", "")),
+                "state": _enum(_attr(_attr(a, "app_status"), "state")),
+            }
+            for a in _api(client, "apps").list()
+        ],
+    )
+
+    _collect(
+        inventory,
+        "genie_spaces",
+        lambda: [
+            {
+                "space_id": str(_attr(s, "space_id", "") or _attr(s, "id", "")),
+                "title": str(_attr(s, "title", "") or _attr(s, "name", "")),
+                "description": str(_attr(s, "description", "")),
+                "warehouse_id": str(_attr(s, "warehouse_id", "")),
+            }
+            for s in _api(client, "genie").list_spaces()
+        ],
+    )
+
+    _collect(
+        inventory,
+        "vector_search_endpoints",
+        lambda: [
+            {
+                "name": str(_attr(e, "name", "")),
+                "endpoint_type": _enum(_attr(e, "endpoint_type")),
+                "endpoint_status": _enum(_attr(_attr(e, "endpoint_status"), "state")),
+            }
+            for e in _api(client, "vector_search_endpoints").list_endpoints()
+        ],
+    )
+
+    def _indexes() -> List[Dict[str, Any]]:
+        api = _api(client, "vector_search_indexes")
+        rows: List[Dict[str, Any]] = []
+        for endpoint in inventory.rows("vector_search_endpoints"):
+            name = str(endpoint.get("name", ""))
+            if not name:
+                continue
+            for index in api.list_indexes(endpoint_name=name) or []:
+                index_type = _enum(_attr(index, "index_type"))
+                rows.append(
+                    {
+                        "name": str(_attr(index, "name", "")),
+                        "endpoint_name": name,
+                        "index_type": index_type,
+                        "primary_key": str(_attr(index, "primary_key", "")),
+                        "source_table": str(
+                            _attr(
+                                _attr(index, "delta_sync_index_spec"),
+                                "source_table",
+                                "",
+                            )
+                        ),
+                        # The distinction that decides whether losing this index
+                        # is an inconvenience or data loss.
+                        "rebuildable_from_source": index_type == "DELTA_SYNC",
+                    }
+                )
+        return rows
+
+    _collect(inventory, "vector_search_indexes", _indexes)
+
+    _collect(
+        inventory,
+        "usage_policies",
+        lambda: [
+            {
+                "policy_id": str(_attr(p, "policy_id", "")),
+                "name": str(_attr(p, "policy_name", "") or _attr(p, "name", "")),
+                # These tags are what lands in system.billing.usage.custom_tags,
+                # so they are the cost-attribution contract, not decoration.
+                "custom_tags": {
+                    str(_attr(tag, "key", "")): str(_attr(tag, "value", ""))
+                    for tag in (_attr(p, "custom_tags", []) or [])
+                },
+            }
+            for p in _api(client, "budget_policy").list()
+        ],
+    )
+
+    _collect(
+        inventory,
+        "database_instances",
+        lambda: [
+            {
+                "name": str(_attr(d, "name", "")),
+                "state": _enum(_attr(d, "state")),
+                "capacity": str(_attr(d, "capacity", "")),
+            }
+            for d in _api(client, "database").list_database_instances()
+        ],
+    )
+
+    _collect(
+        inventory,
+        "shares",
+        lambda: [
+            {
+                "name": str(_attr(s, "name", "")),
+                "owner": str(_attr(s, "owner", "")),
+                "comment": str(_attr(s, "comment", "")),
+            }
+            for s in _api(client, "shares").list()
+        ],
+    )
+
+    _collect(
+        inventory,
+        "recipients",
+        lambda: [
+            {
+                "name": str(_attr(r, "name", "")),
+                "authentication_type": _enum(_attr(r, "authentication_type")),
+                "owner": str(_attr(r, "owner", "")),
+                # Tokens are bound to the source metastore: every recipient
+                # needs a new activation link, which is a conversation with an
+                # organisation you do not control.
+                "needs_reactivation": True,
+            }
+            for r in _api(client, "recipients").list()
+        ],
+    )
+
+    _collect(
+        inventory,
+        "providers",
+        lambda: [
+            {
+                "name": str(_attr(p, "name", "")),
+                "authentication_type": _enum(_attr(p, "authentication_type")),
+            }
+            for p in _api(client, "providers").list()
+        ],
+    )
 
 
 def _collect_secret_scopes(client: Any) -> List[Dict[str, Any]]:
@@ -557,4 +764,13 @@ def owner_hint(asset_class: str) -> str:
         "groups": "Identity / IAM owner",
         "service_principals": "Identity / IAM owner",
         "object_acls": "Platform engineer + security",
+        "apps": "App owner + platform engineer",
+        "genie_spaces": "Business/domain owner",
+        "vector_search_endpoints": "ML engineering",
+        "vector_search_indexes": "ML engineering",
+        "usage_policies": "FinOps + platform engineer",
+        "database_instances": "Application team",
+        "shares": "Data product owner",
+        "recipients": "Data product owner + partner manager",
+        "providers": "Data product owner",
     }.get(asset_class, "Migration lead")

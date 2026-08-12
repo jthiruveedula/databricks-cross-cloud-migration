@@ -209,6 +209,8 @@ def workspace_summary(inventory: WorkspaceInventory) -> str:
             status = "not collected"
         elif not result.ok:
             status = "FAILED: " + result.reason
+        elif result.unavailable:
+            status = "NOT CHECKED -- api unavailable"
         elif result.collected == 0:
             status = "empty -- confirm"
         else:

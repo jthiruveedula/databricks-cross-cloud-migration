@@ -142,7 +142,7 @@ Deliberately out of scope, and reported as manual work rather than pretended:
 ## Tests
 
 ```bash
-pytest          # 184 tests, no credentials, no network
+pytest          # 195 tests, no credentials, no network
 ruff check .
 ```
 
