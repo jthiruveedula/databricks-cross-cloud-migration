@@ -27,7 +27,7 @@ from typing import List, Optional, Sequence
 
 from . import __version__
 from .config import ConfigError, MigrationConfig, load_config, load_principal_map
-from .crossrefs import coverage_gaps, scan, to_rows
+from .crossrefs import coverage_gaps, merge, scan, scan_source_tree, to_rows
 from .ddl import (
     create_catalog,
     create_external_location,
@@ -450,6 +450,11 @@ def cmd_crossrefs(config: MigrationConfig, args: argparse.Namespace) -> int:
     """Report what each workspace asset depends on, and what will break."""
     inventory = _load_workspace(args.workspace)
     report = scan(inventory, config.rewriter())
+    if args.source:
+        # Asset metadata cannot see a path hardcoded on line 88 of a notebook.
+        # Scanning the exported source closes that half, with a line number.
+        scopes = {str(r.get("scope", "")) for r in inventory.rows("secret_scopes")}
+        report = merge(report, scan_source_tree(args.source, config.rewriter(), scopes))
     if args.csv:
         with open(args.csv, "w", encoding="utf-8", newline="") as handle:
             csv.writer(handle).writerows(to_rows(report))
@@ -580,6 +585,11 @@ def build_parser() -> argparse.ArgumentParser:
         "crossrefs", help="what each workspace asset depends on, and what will break"
     )
     p.add_argument("-w", "--workspace", default="workspace.json", help="workspace inventory JSON")
+    p.add_argument(
+        "-s",
+        "--source",
+        help="also scan this directory of exported notebooks / repo source, with line numbers",
+    )
     p.add_argument("-o", "--out", help="write the report here instead of stdout")
     p.add_argument("--csv", help="also write the findings as CSV")
     p.set_defaults(func=cmd_crossrefs)

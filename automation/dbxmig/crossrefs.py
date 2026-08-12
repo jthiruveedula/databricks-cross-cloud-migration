@@ -17,6 +17,7 @@ no network, no model, no workspace.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -58,9 +59,14 @@ class CrossRef:
     reference: str
     severity: str
     breaks: str
+    #: Where inside the asset the reference was found -- "line 42" for a source
+    #: file, empty for a reference read out of structured API metadata.
+    location: str = ""
 
     def key(self) -> str:
-        return "|".join([self.asset_class, self.asset_id, self.kind, self.reference])
+        return "|".join(
+            [self.asset_class, self.asset_id, self.kind, self.reference, self.location]
+        )
 
 
 @dataclass
@@ -168,141 +174,213 @@ def scan(
             continue
         for row in rows:
             asset_id, asset_name = _asset_identity(asset_class, row)
-            blob = _texts_of(row)
-
-            for uri in (rewriter.find_uris(blob) if rewriter else _default_uris(blob)):
-                if uri.startswith("/Volumes/"):
-                    continue
-                if _MOUNT.search(uri):
-                    # Reported below as a dbfs_mount, which carries the more
-                    # useful instruction. Emitting both just doubles the row
-                    # count without adding a decision.
-                    continue
-                mapped = rewriter.rewrite_uri(uri).mapped if rewriter else False
-                report.add(
-                    CrossRef(
-                        asset_class,
-                        asset_id,
-                        asset_name,
-                        "storage_uri",
-                        uri,
-                        SEV_INFO if mapped else SEV_BLOCKER,
-                        "resolves to source-cloud storage in the target"
-                        if not mapped
-                        else "rewritten by a path rule",
-                    )
-                )
-
-            for match in _MOUNT.finditer(blob):
-                report.add(
-                    CrossRef(
-                        asset_class,
-                        asset_id,
-                        asset_name,
-                        "dbfs_mount",
-                        match.group(0),
-                        SEV_BLOCKER,
-                        "DBFS mounts do not migrate -- retire to a Volume or external location",
-                    )
-                )
-
-            for pattern in (_SECRET_CALL, _SECRET_REF):
-                for match in pattern.finditer(blob):
-                    scope, key = match.group(1).strip(), match.group(2).strip()
-                    known = scope in scope_names
-                    report.add(
-                        CrossRef(
-                            asset_class,
-                            asset_id,
-                            asset_name,
-                            "secret",
-                            "{0}/{1}".format(scope, key),
-                            SEV_ATTENTION if known else SEV_BLOCKER,
-                            "secret values cannot be exported -- re-source from the "
-                            "system of record"
-                            if known
-                            else "references a scope not present in the inventory",
-                        )
-                    )
-
-            for match in _INSTANCE_PROFILE.finditer(blob):
-                report.add(
-                    CrossRef(
-                        asset_class,
-                        asset_id,
-                        asset_name,
-                        "cloud_identity",
-                        match.group(0),
-                        SEV_BLOCKER,
-                        "AWS instance profile has no equivalent in the target cloud",
-                    )
-                )
-
-            for match in _WORKSPACE_URL.finditer(blob):
-                report.add(
-                    CrossRef(
-                        asset_class,
-                        asset_id,
-                        asset_name,
-                        "hardcoded_workspace_url",
-                        match.group(0),
-                        SEV_BLOCKER,
-                        "points at the source workspace after cutover",
-                    )
-                )
-
-            # An asset is not a dependency of itself: a cluster policy row
-            # naturally contains its own policy_id, and a warehouse row its own
-            # warehouse_id. Only cross-class references are dependencies.
-            policy_refs = _as_list(row.get("cluster_policy_ids")) + _as_list(row.get("policy_id"))
-            for policy_id in policy_refs:
-                if not policy_id or asset_class == "cluster_policies":
-                    continue
-                report.add(
-                    CrossRef(
-                        asset_class,
-                        asset_id,
-                        asset_name,
-                        "cluster_policy",
-                        str(policy_id),
-                        SEV_ATTENTION if policy_id in policy_ids else SEV_BLOCKER,
-                        "policy must exist in the target before this can be created"
-                        if policy_id in policy_ids
-                        else "references a policy absent from the inventory",
-                    )
-                )
-
-            warehouse_refs = _as_list(row.get("warehouse_ids")) + _as_list(row.get("warehouse_id"))
-            for warehouse_id in warehouse_refs:
-                if not warehouse_id or asset_class == "sql_warehouses":
-                    continue
-                report.add(
-                    CrossRef(
-                        asset_class,
-                        asset_id,
-                        asset_name,
-                        "sql_warehouse",
-                        str(warehouse_id),
-                        SEV_ATTENTION if warehouse_id in warehouse_ids else SEV_BLOCKER,
-                        "warehouse id changes in the target -- every reference needs rewriting",
-                    )
-                )
-
-            pool_id = str(row.get("instance_pool_id", "") or "")
-            if pool_id and asset_class != "instance_pools":
-                report.add(
-                    CrossRef(
-                        asset_class,
-                        asset_id,
-                        asset_name,
-                        "instance_pool",
-                        pool_id,
-                        SEV_ATTENTION if pool_id in pool_ids else SEV_BLOCKER,
-                        "pool must exist in the target before the cluster can start",
-                    )
-                )
+            _scan_blob(
+                report,
+                asset_class,
+                asset_id,
+                asset_name,
+                _texts_of(row),
+                rewriter,
+                scope_names,
+            )
+            _scan_structured_ids(
+                report, asset_class, asset_id, asset_name, row, policy_ids, warehouse_ids, pool_ids
+            )
 
     return _dedupe(report)
+
+
+def _scan_blob(
+    report: CrossRefReport,
+    asset_class: str,
+    asset_id: str,
+    asset_name: str,
+    blob: str,
+    rewriter: Optional[Rewriter],
+    scope_names: "set",
+    with_lines: bool = False,
+) -> None:
+    """Apply every pattern to one blob of text.
+
+    Shared by the metadata scan and the source-file scan so a hardcoded path is
+    described identically whether it was found in a job definition or on line
+    88 of a notebook -- the migration consequence is the same, and a reviewer
+    should not have to learn two vocabularies.
+    """
+    starts = _line_starts(blob) if with_lines else None
+
+    def at(offset: int) -> str:
+        return _line_of(starts, offset) if starts is not None else ""
+
+    for uri in (rewriter.find_uris(blob) if rewriter else _default_uris(blob)):
+        if uri.startswith("/Volumes/"):
+            continue
+        if _MOUNT.search(uri):
+            # Reported below as a dbfs_mount, which carries the more useful
+            # instruction. Emitting both doubles the row count without adding
+            # a decision.
+            continue
+        mapped = rewriter.rewrite_uri(uri).mapped if rewriter else False
+        report.add(
+            CrossRef(
+                asset_class,
+                asset_id,
+                asset_name,
+                "storage_uri",
+                uri,
+                SEV_INFO if mapped else SEV_BLOCKER,
+                "resolves to source-cloud storage in the target"
+                if not mapped
+                else "rewritten by a path rule",
+                at(blob.find(uri)),
+            )
+        )
+
+    for match in _MOUNT.finditer(blob):
+        report.add(
+            CrossRef(
+                asset_class,
+                asset_id,
+                asset_name,
+                "dbfs_mount",
+                match.group(0),
+                SEV_BLOCKER,
+                "DBFS mounts do not migrate -- retire to a Volume or external location",
+                at(match.start()),
+            )
+        )
+
+    for pattern in (_SECRET_CALL, _SECRET_REF):
+        for match in pattern.finditer(blob):
+            scope, key = match.group(1).strip(), match.group(2).strip()
+            known = scope in scope_names
+            report.add(
+                CrossRef(
+                    asset_class,
+                    asset_id,
+                    asset_name,
+                    "secret",
+                    "{0}/{1}".format(scope, key),
+                    SEV_ATTENTION if known else SEV_BLOCKER,
+                    "secret values cannot be exported -- re-source from the system of record"
+                    if known
+                    else "references a scope not present in the inventory",
+                    at(match.start()),
+                )
+            )
+
+    for match in _INSTANCE_PROFILE.finditer(blob):
+        report.add(
+            CrossRef(
+                asset_class,
+                asset_id,
+                asset_name,
+                "cloud_identity",
+                match.group(0),
+                SEV_BLOCKER,
+                "AWS instance profile has no equivalent in the target cloud",
+                at(match.start()),
+            )
+        )
+
+    for match in _WORKSPACE_URL.finditer(blob):
+        report.add(
+            CrossRef(
+                asset_class,
+                asset_id,
+                asset_name,
+                "hardcoded_workspace_url",
+                match.group(0),
+                SEV_BLOCKER,
+                "points at the source workspace after cutover",
+                at(match.start()),
+            )
+        )
+
+
+def _scan_structured_ids(
+    report: CrossRefReport,
+    asset_class: str,
+    asset_id: str,
+    asset_name: str,
+    row: Dict[str, Any],
+    policy_ids: "set",
+    warehouse_ids: "set",
+    pool_ids: "set",
+) -> None:
+    """References that come from typed fields rather than from free text.
+
+    An asset is not a dependency of itself: a cluster-policy row naturally
+    contains its own ``policy_id``. Only cross-class references are edges.
+    """
+    policy_refs = _as_list(row.get("cluster_policy_ids")) + _as_list(row.get("policy_id"))
+    for policy_id in policy_refs:
+        if not policy_id or asset_class == "cluster_policies":
+            continue
+        report.add(
+            CrossRef(
+                asset_class,
+                asset_id,
+                asset_name,
+                "cluster_policy",
+                str(policy_id),
+                SEV_ATTENTION if policy_id in policy_ids else SEV_BLOCKER,
+                "policy must exist in the target before this can be created"
+                if policy_id in policy_ids
+                else "references a policy absent from the inventory",
+            )
+        )
+
+    warehouse_refs = _as_list(row.get("warehouse_ids")) + _as_list(row.get("warehouse_id"))
+    for warehouse_id in warehouse_refs:
+        if not warehouse_id or asset_class == "sql_warehouses":
+            continue
+        report.add(
+            CrossRef(
+                asset_class,
+                asset_id,
+                asset_name,
+                "sql_warehouse",
+                str(warehouse_id),
+                SEV_ATTENTION if warehouse_id in warehouse_ids else SEV_BLOCKER,
+                "warehouse id changes in the target -- every reference needs rewriting",
+            )
+        )
+
+    pool_id = str(row.get("instance_pool_id", "") or "")
+    if pool_id and asset_class != "instance_pools":
+        report.add(
+            CrossRef(
+                asset_class,
+                asset_id,
+                asset_name,
+                "instance_pool",
+                pool_id,
+                SEV_ATTENTION if pool_id in pool_ids else SEV_BLOCKER,
+                "pool must exist in the target before the cluster can start",
+            )
+        )
+
+
+def _line_starts(text: str) -> List[int]:
+    starts = [0]
+    for index, char in enumerate(text):
+        if char == "\n":
+            starts.append(index + 1)
+    return starts
+
+
+def _line_of(starts: Optional[List[int]], offset: int) -> str:
+    if starts is None or offset < 0:
+        return ""
+    low, high = 0, len(starts) - 1
+    while low < high:
+        mid = (low + high + 1) // 2
+        if starts[mid] <= offset:
+            low = mid
+        else:
+            high = mid - 1
+    return "line {0}".format(low + 1)
 
 
 def _default_uris(text: str) -> List[str]:
@@ -326,6 +404,113 @@ def _dedupe(report: CrossRefReport) -> CrossRefReport:
         seen.add(finding.key())
         out.add(finding)
     return out
+
+
+#: File types a Databricks workspace export or a Repos checkout actually
+#: contains. Everything else in a repo (images, wheels, parquet) is skipped.
+SOURCE_EXTENSIONS = (
+    ".py",
+    ".sql",
+    ".scala",
+    ".r",
+    ".ipynb",
+    ".json",
+    ".yml",
+    ".yaml",
+    ".sh",
+    ".conf",
+    ".tf",
+)
+
+#: Directories never worth walking.
+SKIP_DIRS = frozenset(
+    {".git", "node_modules", ".venv", "venv", "__pycache__", ".terraform", "dist", "build"}
+)
+
+#: A single file bigger than this is data, not code.
+MAX_FILE_BYTES = 2_000_000
+
+
+def notebook_source(text: str, filename: str) -> str:
+    """Return scannable text for one file.
+
+    ``.ipynb`` is JSON with the code buried in ``cells[].source``; scanning the
+    raw JSON works but reports useless line numbers and matches metadata. This
+    extracts the source cells so a reported line means something to whoever has
+    to fix it.
+    """
+    if not filename.lower().endswith(".ipynb"):
+        return text
+    try:
+        import json as _json
+
+        notebook = _json.loads(text)
+    except ValueError:
+        return text
+    lines: List[str] = []
+    for cell in notebook.get("cells") or []:
+        source = cell.get("source")
+        if isinstance(source, list):
+            lines.extend(str(s).rstrip("\n") for s in source)
+        elif isinstance(source, str):
+            lines.extend(source.split("\n"))
+    return "\n".join(lines)
+
+
+def scan_source_tree(
+    root: str,
+    rewriter: Optional[Rewriter] = None,
+    known_scopes: Optional[Iterable[str]] = None,
+    extensions: Sequence[str] = SOURCE_EXTENSIONS,
+) -> CrossRefReport:
+    """Scan exported notebooks and source files for the same references.
+
+    ``scan()`` reads asset *metadata* -- a job's configured policy, a cluster's
+    init script path. It cannot see a storage path hardcoded on line 88 of a
+    notebook, and that is where most of them are. This closes that half: same
+    patterns, same vocabulary, plus a line number.
+
+    Point it at an unzipped workspace export, a Repos checkout, or the source
+    directory of an Asset Bundle.
+    """
+    report = CrossRefReport()
+    scope_names = {s for s in (known_scopes or [])}
+    lowered = tuple(e.lower() for e in extensions)
+
+    for directory, subdirs, filenames in os.walk(root):
+        subdirs[:] = [d for d in subdirs if d not in SKIP_DIRS and not d.startswith(".")]
+        for filename in sorted(filenames):
+            if not filename.lower().endswith(lowered):
+                continue
+            path = os.path.join(directory, filename)
+            try:
+                if os.path.getsize(path) > MAX_FILE_BYTES:
+                    continue
+                with open(path, "r", encoding="utf-8", errors="replace") as handle:
+                    text = handle.read()
+            except OSError:
+                continue
+            relative = os.path.relpath(path, root)
+            _scan_blob(
+                report,
+                "source_file",
+                relative,
+                relative,
+                notebook_source(text, filename),
+                rewriter,
+                scope_names,
+                with_lines=True,
+            )
+    return _dedupe(report)
+
+
+def merge(*reports: CrossRefReport) -> CrossRefReport:
+    """Combine metadata and source-file scans into one deduplicated report."""
+    out = CrossRefReport()
+    for report in reports:
+        for finding in report.findings:
+            out.add(finding)
+    return _dedupe(out)
 
 
 def coverage_gaps(inventory: WorkspaceInventory) -> List[str]:
@@ -362,7 +547,16 @@ def wave_hints(report: CrossRefReport, minimum: int = 2) -> List[str]:
 def to_rows(report: CrossRefReport) -> List[Sequence[str]]:
     """Header + rows, for CSV export into whatever tracker the programme uses."""
     out: List[Sequence[str]] = [
-        ["severity", "asset_class", "asset_name", "asset_id", "kind", "reference", "breaks"]
+        [
+            "severity",
+            "asset_class",
+            "asset_name",
+            "asset_id",
+            "location",
+            "kind",
+            "reference",
+            "breaks",
+        ]
     ]
     order = {SEV_BLOCKER: 0, SEV_ATTENTION: 1, SEV_INFO: 2}
     for finding in sorted(
@@ -375,6 +569,7 @@ def to_rows(report: CrossRefReport) -> List[Sequence[str]]:
                 finding.asset_class,
                 finding.asset_name,
                 finding.asset_id,
+                finding.location,
                 finding.kind,
                 finding.reference,
                 finding.breaks,

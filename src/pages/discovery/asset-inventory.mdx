@@ -172,7 +172,7 @@ Reference for everything, including the classes the toolkit does not collect.
 
 ## Pitfalls that cost a wave
 
-- **Hardcoded paths.** `dbfs:/mnt/...` and `abfss://...` inside notebooks, job parameters, spark conf, and view bodies. The crossrefs scan finds them in collected assets; notebook *bodies* need a separate grep of the exported workspace.
+- **Hardcoded paths.** `dbfs:/mnt/...` and `abfss://...` inside notebooks, job parameters, spark conf, and view bodies. `dbxmig crossrefs --source ./workspace-export` scans exported notebooks and repo source for the same patterns and reports a file and line number, so metadata and code are covered by one report.
 - **Implicit dependencies.** A job depending on a cluster policy, an init script, and a secret scope owned by three different teams — exactly what the shared-references table surfaces.
 - **Stale assets.** Old experiments, deleted tables, obsolete dashboards. They still hold grants and still cost storage, and every one migrated is migrated for nothing. Northwind retired 22% of its dashboards at this step.
 - **Believing an empty result.** Worth repeating: `0` and `403` are indistinguishable once written to JSON.

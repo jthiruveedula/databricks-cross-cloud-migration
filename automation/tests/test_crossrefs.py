@@ -9,7 +9,9 @@ from dbxmig.crossrefs import (
     SEV_ATTENTION,
     SEV_BLOCKER,
     coverage_gaps,
+    merge,
     scan,
+    scan_source_tree,
     to_rows,
     wave_hints,
 )
@@ -190,3 +192,128 @@ def test_scan_works_with_no_rewriter_at_all(workspace):
     assert report.findings
     # With no path rules, every storage URI is unmapped and therefore a blocker.
     assert all(f.severity == SEV_BLOCKER for f in findings_of(report, "storage_uri"))
+
+
+# ---- source-file scanning ------------------------------------------------
+
+
+def write(tmp_path, relative, text):
+    path = tmp_path / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_source_scan_reports_a_line_number(tmp_path, rewriter):
+    write(
+        tmp_path,
+        "etl/load.py",
+        "\n".join(
+            [
+                "import os",
+                "",
+                'ARCHIVE = "abfss://archive@legacy.dfs.core.windows.net/x"',
+            ]
+        ),
+    )
+    report = scan_source_tree(str(tmp_path), rewriter)
+    finding = findings_of(report, "storage_uri")[0]
+    assert finding.asset_class == "source_file"
+    assert finding.asset_id == os.path.join("etl", "load.py")
+    assert finding.location == "line 3"
+    assert finding.severity == SEV_BLOCKER
+
+
+def test_source_scan_honours_the_path_rules(tmp_path, rewriter):
+    write(tmp_path, "a.py", 'p = "abfss://raw@prodstorage.dfs.core.windows.net/x"')
+    finding = findings_of(scan_source_tree(str(tmp_path), rewriter), "storage_uri")[0]
+    assert finding.severity != SEV_BLOCKER
+
+
+def test_source_scan_finds_both_secret_spellings_with_lines(tmp_path, rewriter):
+    write(
+        tmp_path,
+        "b.py",
+        '\n'.join(
+            [
+                'a = dbutils.secrets.get(scope="known", key="k1")',
+                'conf = "{{secrets/known/k2}}"',
+            ]
+        ),
+    )
+    report = scan_source_tree(str(tmp_path), rewriter, known_scopes=["known"])
+    found = {f.reference: f.location for f in findings_of(report, "secret")}
+    assert found == {"known/k1": "line 1", "known/k2": "line 2"}
+
+
+def test_ipynb_source_cells_are_extracted_not_raw_json(tmp_path, rewriter):
+    notebook = {
+        "cells": [
+            {"cell_type": "code", "source": ["import os\n", "\n"]},
+            {"cell_type": "code", "source": ['p = "dbfs:/mnt/legacy/x"\n']},
+        ],
+        "metadata": {"note": "dbfs:/mnt/should-not-be-scanned"},
+    }
+    write(tmp_path, "nb.ipynb", json.dumps(notebook))
+    report = scan_source_tree(str(tmp_path), rewriter)
+    refs = {f.reference for f in findings_of(report, "dbfs_mount")}
+    assert refs == {"dbfs:/mnt/legacy/x"}  # metadata was not scanned
+    assert findings_of(report, "dbfs_mount")[0].location == "line 3"
+
+
+def test_malformed_ipynb_falls_back_to_raw_text(tmp_path, rewriter):
+    write(tmp_path, "broken.ipynb", '{"cells": [ truncated')
+    # Must not raise; the file simply yields whatever the raw text matches.
+    assert scan_source_tree(str(tmp_path), rewriter) is not None
+
+
+def test_vendored_and_hidden_directories_are_skipped(tmp_path, rewriter):
+    write(tmp_path, ".git/config", 'url = "dbfs:/mnt/x"')
+    write(tmp_path, "node_modules/p/i.js", 'const p = "dbfs:/mnt/y"')
+    write(tmp_path, "real.py", 'p = "dbfs:/mnt/z"')
+    refs = {f.reference for f in scan_source_tree(str(tmp_path), rewriter).findings}
+    assert refs == {"dbfs:/mnt/z"}
+
+
+def test_binary_and_unlisted_extensions_are_ignored(tmp_path, rewriter):
+    write(tmp_path, "data.parquet", "dbfs:/mnt/ignored")
+    write(tmp_path, "notes.md", "dbfs:/mnt/also-ignored")
+    assert scan_source_tree(str(tmp_path), rewriter).findings == []
+
+
+def test_merge_links_a_notebook_to_the_asset_sharing_its_dependency(
+    tmp_path, workspace, rewriter
+):
+    write(tmp_path, "etl.py", 'k = dbutils.secrets.get(scope="prod-etl", key="adls_account_key")')
+    combined = merge(
+        scan(workspace, rewriter),
+        scan_source_tree(str(tmp_path), rewriter, known_scopes=["prod-etl"]),
+    )
+    shared = combined.shared_references()["secret=prod-etl/adls_account_key"]
+    assert "clusters:shared-analytics" in shared
+    assert any(h.startswith("source_file:") for h in shared)
+
+
+def test_merge_deduplicates_across_reports(workspace, rewriter):
+    once = scan(workspace, rewriter)
+    assert len(merge(once, once).findings) == len(once.findings)
+
+
+def test_location_is_empty_for_metadata_findings(workspace, rewriter):
+    assert all(f.location == "" for f in scan(workspace, rewriter).findings)
+
+
+def test_csv_includes_the_location_column(tmp_path, rewriter):
+    write(tmp_path, "a.py", 'p = "dbfs:/mnt/x"')
+    rows = to_rows(scan_source_tree(str(tmp_path), rewriter))
+    assert rows[0] == [
+        "severity",
+        "asset_class",
+        "asset_name",
+        "asset_id",
+        "location",
+        "kind",
+        "reference",
+        "breaks",
+    ]
+    assert rows[1][4] == "line 1"
