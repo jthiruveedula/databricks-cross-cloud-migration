@@ -115,9 +115,11 @@ Re-log the model with `mlflow.pyfunc.log_model(..., artifacts={...})` using arti
 
 ## Validation
 
-- Confirm migrated runs' metrics and params exactly match source for a sample of runs, not just that "a run exists."
-- Verify parent-child run relationships (e.g. hyperparameter sweep parent runs and their child runs) survived the migration correctly.
+- **Compare run counts per experiment, source against target.** This is the one check that catches the 1000-run pagination cap, and it takes seconds. A sample-based check will not find it, because the runs that did migrate are all perfectly correct.
+- For a sample of runs, confirm metrics and params match — and specifically that a metric with history has **the same number of points**, not just the same final value. A truncated curve and a complete one look identical if you only compare the last value.
+- Verify parent-child run relationships (hyperparameter sweeps and their children) survived, and that child runs point at the *migrated* parent rather than a dead source ID.
 - Confirm logged model artifacts can actually be loaded and produce the same predictions as the source-logged model on a fixed test input.
+- Keep the run ID map — [model registry](/ml/model-registry) migration needs it, and regenerating it later means re-walking both sides.
 
 ## Rollback
 
