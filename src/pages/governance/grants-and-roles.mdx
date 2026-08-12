@@ -25,17 +25,40 @@ SHOW GRANTS ON CATALOG source_catalog;
 SHOW GRANTS ON SCHEMA source_catalog.sales;
 SHOW GRANTS ON TABLE source_catalog.sales.orders;
 
--- Or query the information_schema for a full, exportable inventory
-SELECT grantee, privilege_type, object_type, object_name
-FROM system.information_schema.grants
-WHERE object_catalog = 'source_catalog';
+-- Or query the information_schema for a full, exportable inventory. There is
+-- no single "grants" view -- privileges live in one view per securable type,
+-- so a complete export unions them.
+SELECT 'CATALOG' AS object_type, catalog_name AS object_name, grantee, privilege_type
+FROM system.information_schema.catalog_privileges
+WHERE catalog_name = 'source_catalog'
+UNION ALL
+SELECT 'SCHEMA', concat_ws('.', catalog_name, schema_name), grantee, privilege_type
+FROM system.information_schema.schema_privileges
+WHERE catalog_name = 'source_catalog'
+UNION ALL
+SELECT 'TABLE', concat_ws('.', table_catalog, table_schema, table_name), grantee, privilege_type
+FROM system.information_schema.table_privileges
+WHERE table_catalog = 'source_catalog'
+UNION ALL
+SELECT 'VOLUME', concat_ws('.', volume_catalog, volume_schema, volume_name), grantee, privilege_type
+FROM system.information_schema.volume_privileges
+WHERE volume_catalog = 'source_catalog'
+UNION ALL
+SELECT 'FUNCTION', concat_ws('.', specific_catalog, specific_schema, specific_name),
+       grantee, privilege_type
+FROM system.information_schema.routine_privileges
+WHERE specific_catalog = 'source_catalog';
 `} />
+
+<Callout client:visible variant="warning" title="Run the export as a metastore admin, or you will export a subset and not know it">
+  `information_schema` **automatically filters** its results to the objects the querying principal has privileges on. A data engineer running this export gets a clean-looking result containing only the grants they can already see, migrates it, and finds the gaps when other teams start filing access tickets weeks later. Sanity-check the exported grant count against the object count before trusting it. (`MANAGE` on an object is also not currently sufficient to see all of that object's grants here.)
+</Callout>
 
 ## Grant migration pattern
 
 | Step | Action |
 |------|--------|
-| 1 | Export source grants via `information_schema.grants` or `SHOW GRANTS` |
+| 1 | Export source grants via the `*_PRIVILEGES` information_schema views or `SHOW GRANTS`, as a metastore admin |
 | 2 | Translate source principal names to target account-level group names |
 | 3 | Generate target `GRANT` statements from the translated mapping |
 | 4 | Apply grants at catalog/schema level first, table-level exceptions second |
@@ -93,3 +116,8 @@ Grants are additive and low-risk to fix forward — if a grant is missing or wro
   { id: 'diff', label: 'Target grants diffed against source export with zero gaps' },
   { id: 'real-user-test', label: 'Access validated with real (non-admin) user credentials' },
 ]} />
+
+## Sources
+
+- Databricks — [Information schema](https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-information-schema) (the full view list; there is no single `grants` view, and results are automatically filtered by the caller's privileges)
+- Databricks — [`TABLE_PRIVILEGES`](https://docs.databricks.com/aws/en/sql/language-manual/information-schema/table_privileges), [`SCHEMA_PRIVILEGES`](https://docs.databricks.com/aws/en/sql/language-manual/information-schema/schema_privileges), [`CATALOG_PRIVILEGES`](https://docs.databricks.com/aws/en/sql/language-manual/information-schema/catalog_privileges)

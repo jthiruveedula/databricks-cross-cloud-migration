@@ -19,3 +19,10 @@ databricks-cross-cloud-migration-docs
 .claude/
 .venv-crawl4ai/
 .firecrawl
+# Python automation toolkit
+automation/.venv/
+automation/**/__pycache__/
+automation/*.egg-info/
+automation/.pytest_cache/
+automation/.ruff_cache/
+automation/.dbxmig/

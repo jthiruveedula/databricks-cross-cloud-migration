@@ -1,0 +1,71 @@
+# Example dbxmig configuration: Azure (ADLS Gen2) -> GCP (GCS).
+#
+# This file is the contract for the whole run. Everything environment-specific
+# lives here so the commands themselves are identical on every machine.
+#
+# Validate it before doing anything else:
+#     dbxmig -c migration.yaml validate
+
+source:
+  host: https://adb-1234567890123456.7.azuredatabricks.net
+  warehouse_id: abc123def456
+  # The token is read from this environment variable, never stored in the file.
+  token_env: DBX_SOURCE_TOKEN
+  cloud: azure
+  # Only these catalogs are in scope. Leave empty to inventory everything the
+  # metastore admin can see.
+  catalogs:
+    - prod
+
+target:
+  host: https://1234567890123456.7.gcp.databricks.com
+  warehouse_id: fed789cba321
+  token_env: DBX_TARGET_TOKEN
+  cloud: gcp
+
+# Catalog renames applied on the way across. Omit a catalog to keep its name.
+catalog_map:
+  prod: prod_gcp
+
+# Storage path rules. Longest prefix wins regardless of the order declared here,
+# so a specific rule always beats a general one.
+#
+# Anything NOT covered by a rule is reported by `dbxmig gaps` rather than being
+# silently carried into the target still pointing at source-cloud storage.
+path_rules:
+  - from: abfss://raw@prodstorage.dfs.core.windows.net/
+    to: gs://acme-prod-raw/
+  - from: dbfs:/mnt/legacy/
+    to: /Volumes/prod_gcp/sales/legacy/
+    note: Legacy mount retired into a Volume rather than remapped to another mount.
+
+# MANAGED LOCATION for target catalogs and schemas. Keyed by *target* name.
+# Without these, managed data lands in the metastore-level default, which is
+# usually not what a multi-domain estate wants.
+managed_locations:
+  prod_gcp: gs://acme-prod-managed/catalogs/prod
+  prod_gcp.sales: gs://acme-prod-managed/catalogs/prod/sales
+
+# Explicit target LOCATION overrides for individual external tables, keyed by
+# the SOURCE full name. Only needed where the path rules cannot work it out.
+table_locations: {}
+
+# Source principal -> target principal. Required: principals are account-scoped,
+# so a source group name is meaningless in the target account.
+principal_map_file: principal_map.json
+
+# LLM assist is off by default. When enabled it is used only for objects the
+# deterministic rewriter could not finish, and every output passes a mechanical
+# validation gate before it is allowed into the generated DDL.
+llm:
+  enabled: false
+  endpoint: databricks-meta-llama-3-3-70b-instruct
+  max_tokens: 2048
+
+# Resumable run journal. Re-running `apply` skips statements already recorded
+# as done, so recovery from an interrupted run is the same command again.
+state_file: .dbxmig/journal.jsonl
+
+# Reconciliation settings.
+row_count_tolerance: 0
+lineage_days: 90

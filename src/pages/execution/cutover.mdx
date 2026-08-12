@@ -25,9 +25,14 @@ Cutover is the moment the target environment becomes the system of record. It re
   { id: 'business', label: 'Business: stakeholders have signed off per business validation' },
   { id: 'operational', label: 'Operational: support roster, rollback plan, and hypercare severity matrix are in place' },
   { id: 'communication', label: 'Communication: cutover window and contact channel sent to affected users' },
+  { id: 'preservation', label: 'Preservation: everything on what does not migrate is exported and read back from the target' },
 ]} />
 
 If any domain is not signed off, the answer is no-go — reschedule rather than proceed on a partial gate.
+
+<Callout client:visible variant="warning" title="The preservation gate is the only one with no rollback">
+  Audit history, job run history, workspace object ACLs, and notebook revisions are destroyed by the move rather than migrated by it, and none of it is recoverable once the source is gone. Everything else on this gate can be fixed forward after cutover — see [what does not migrate](/execution/what-does-not-migrate).
+</Callout>
 
 ## Cutover sequence
 

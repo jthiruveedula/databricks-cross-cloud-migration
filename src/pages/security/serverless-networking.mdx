@@ -1,0 +1,129 @@
+---
+title: 'Serverless networking and egress'
+layout: ../../layouts/Layout.astro
+description: 'Network connectivity configurations, serverless egress control, private endpoints, and stable IPs — the network layer that classic VNet/VPC planning does not cover.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import Tabs from '../../components/Tabs.tsx';
+import Accordion from '../../components/Accordion.tsx';
+
+# Serverless networking and egress
+
+[Network security](/security/network-security) covers the classic compute plane — the VNet, VPC, or subnet your clusters run in. Serverless compute does not run there. It runs in a Databricks-managed network, and every control you built for the classic plane has a different name, a different scope, and a different owner.
+
+This matters more on a cross-cloud move than it looks, for a reason nobody plans for: **serverless is on by default in new workspaces.** A target workspace stood up in 2026 will happily run SQL warehouses, jobs, and pipelines on serverless compute while the migration team is still building the VNet they assumed everything would use.
+
+## The one-paragraph version
+
+Serverless egress is governed by a **network connectivity configuration (NCC)** — an *account-level, regional* object created by an account admin and attached to one or more workspaces in that region. Every private endpoint rule on the NCC applies to every workspace attached to it. That is three properties your classic networking does not have: account-level, regional, and shared.
+
+<Callout client:visible variant="warning" title="Account-level and regional means it is not the workspace team's to create">
+  A platform engineer with workspace admin cannot create an NCC. It needs an **account admin**, and one NCC serves every attached workspace in the region — so its rules are a shared blast radius. On a migration this is a scheduling dependency, not a technical one: if your account admin is a different team in a different timezone, put the NCC request in during discovery, not the week of cutover.
+</Callout>
+
+## What differs from the classic plane
+
+| | Classic compute | Serverless compute |
+|---|---|---|
+| Runs in | Your VNet / VPC | Databricks-managed network |
+| Egress controlled by | Your route tables, NAT, firewall | **NCC** + network policies |
+| Private connectivity via | VNet injection, PrivateLink, PSC | **NCC private endpoint rules** |
+| Scope of the control | Per workspace | **Per NCC, shared by attached workspaces** |
+| Created by | Cloud/network team | **Account admin** |
+| Source IPs seen by your firewall | Your NAT gateway | **NCC stable IPs** |
+
+## The four things to do, in order
+
+<Accordion client:visible items={[
+  {
+    title: '1. Decide whether serverless is in scope at all — before the landing zone is built',
+    content: 'This is an architecture decision, not a runtime one. If the target estate will use serverless SQL warehouses, serverless jobs, Lakeflow pipelines, Model Serving, Databricks Apps, or AI Search, then the NCC is part of the landing zone and belongs in the same design pass as the VNet. Deciding later means retrofitting egress controls onto workloads already running, and discovering that a private endpoint rule you now need is shared with a workspace someone else owns.'
+  },
+  {
+    title: '2. Create the NCC and attach it, per region',
+    content: 'One NCC per region, attached to the workspaces in that region. If the migration lands workspaces in two target regions, that is two NCCs with two sets of rules to keep consistent -- an easy source of "it works in one region" defects. Record the NCC id alongside the workspace id in your workspace inventory; it is a workspace attribute the runbook\'s inventory table should carry.'
+  },
+  {
+    title: '3. Add private endpoint rules for every private destination',
+    content: 'Anything serverless must reach privately -- the target storage account or bucket, an internal database, a network load balancer in front of an on-prem system -- needs a private endpoint rule on the NCC. Note the ordering constraint: the target resource must exist before you can create a rule pointing at it, so this comes after storage is provisioned and before the first serverless workload runs against it. Some private endpoints also require approval on the resource side, which is another team and another elapsed day.'
+  },
+  {
+    title: '4. Allow-list the NCC stable IPs on every firewall that filters by source',
+    content: 'Storage account firewalls, database firewalls, and partner allow-lists that currently contain your NAT gateway IPs need the NCC stable IPs added. This is the item most likely to be missed, because it is configured outside Databricks -- often by a team that was never told the migration was happening -- and its failure mode is a serverless workload that hangs rather than errors clearly.'
+  }
+]} />
+
+<Callout client:visible variant="warning" title="If you copied stable IPs from the NCC UI before mid-2026, that list is already gone">
+  Databricks decommissioned the legacy Public Preview stable-IP list on **25 May 2026**; after that date it is no longer available through the NCC UI or the Network Connectivity API, and any allow-list still built from it is stale. Re-derive the IP ranges from the current method rather than from a runbook, a wiki page, or a firewall rule someone wrote in 2025 — and check the firewall rules you are *migrating*, since a copied allow-list carries the stale values into the target. See the [serverless networking documentation](https://docs.databricks.com/aws/en/security/network/serverless-network-security/) for the current source of truth.
+</Callout>
+
+## Per-cloud shape
+
+<Tabs client:visible tabs={[
+  {
+    label: 'Azure',
+    content: 'NCC private endpoint rules create Azure Private Endpoints to your resources — storage accounts, and other supported targets. Each private endpoint needs approval on the target resource, which is a separate action by whoever owns that resource, so build the approval step into the plan rather than assuming creation is completion. If the source estate used service endpoints plus storage firewall rules rather than private endpoints, that is a design change on the way across, not a translation.'
+  },
+  {
+    label: 'AWS',
+    content: 'Private connectivity from serverless uses PrivateLink to your VPC — typically fronted by a network load balancer for anything that is not natively an endpoint service. An S3 bucket policy that restricts by aws:SourceVpce or by source IP will reject serverless traffic until it is updated, and the rejection reads as an access-denied on the storage side rather than as a networking problem.'
+  },
+  {
+    label: 'GCP',
+    content: 'Private Service Connect is the equivalent primitive. Note that this is one of the areas where cross-cloud feature parity is genuinely uneven — confirm which serverless products support private connectivity in your target region before committing a design that assumes they all do, rather than after the workspace exists.'
+  }
+]} />
+
+## Where this bites on a migration, specifically
+
+| Symptom | Cause |
+|---|---|
+| Serverless SQL warehouse cannot read target storage; classic clusters can | Storage firewall allows the VNet/VPC but not the NCC stable IPs |
+| Works in target region A, fails in region B | Two NCCs, rules added to one |
+| Job hangs rather than fails | Egress silently blackholed rather than refused |
+| Worked in the pilot, fails at scale | Pilot ran on classic compute; production defaults to serverless |
+| Partner integration stops after cutover | Their allow-list still holds the source cloud's NAT IPs |
+
+<Callout client:visible variant="tip" title="Test with serverless explicitly during the pilot">
+  A pilot that runs everything on a classic cluster proves nothing about serverless egress. Run at least one job and one SQL warehouse query on serverless compute against target storage during the [pilot](/execution/pilot), while there is still time for an account admin to add a rule.
+</Callout>
+
+## Validation
+
+- Every target region has an NCC, attached to every workspace in that region, and the NCC id is recorded against each workspace in the inventory.
+- A serverless SQL warehouse query and a serverless job both succeed against target storage, from each target region.
+- Every firewall that filters by source IP has been updated with the current NCC stable IPs — re-derived, not copied from a pre-mid-2026 list.
+- Private endpoint rules exist and are **approved** on the resource side for every private destination.
+- The classic-plane and serverless-plane controls have been reviewed together, so a destination reachable by one and not the other is a deliberate choice.
+
+## Rollback
+
+Networking changes are configuration and are reversible, with one caveat worth stating: removing a private endpoint rule or an NCC affects **every workspace attached to that NCC**, not just the one you were working on. Before changing a shared NCC during hypercare, check what else is attached.
+
+## Automation opportunity
+
+- Record the NCC id as a workspace attribute in the [workspace inventory](/discovery/workspace-inventory), so "which workspaces share egress rules" is a query rather than an investigation.
+- Add a serverless smoke test to the post-cutover validation job — one serverless query against target storage per region — rather than relying on classic-compute tests to cover it.
+- Treat firewall allow-lists as code. A stable-IP list that lives in a wiki is the one that goes stale.
+
+<Checklist client:visible title="Serverless networking" items={[
+  { id: 'scope', label: 'Decided during design whether serverless is in scope — not discovered at runtime' },
+  { id: 'ncc', label: 'NCC created per target region by an account admin, attached to every workspace' },
+  { id: 'inventory', label: 'NCC id recorded against each workspace in the inventory' },
+  { id: 'endpoints', label: 'Private endpoint rules created AND approved on the resource side' },
+  { id: 'ips', label: 'Stable IPs re-derived from the current method and allow-listed on every filtering firewall' },
+  { id: 'stale', label: 'Migrated firewall rules checked for stale pre-mid-2026 stable IPs' },
+  { id: 'pilot', label: 'Pilot exercised serverless compute explicitly, not only classic clusters' },
+  { id: 'regions', label: 'Validated from every target region, not just the first one built' },
+  { id: 'partners', label: 'External partners told their allow-lists need the new source IPs' },
+]} />
+
+## Sources
+
+- Databricks — [Serverless compute plane networking](https://docs.databricks.com/aws/en/security/network/serverless-network-security/)
+- Databricks — [Manage network policies for serverless egress control](https://docs.databricks.com/aws/en/security/network/serverless-network-security/manage-network-policies)
+- Databricks — [Configure private connectivity to resources in your VPC](https://docs.databricks.com/aws/en/security/network/serverless-network-security/pl-to-internal-network)
+- Azure Databricks — [Configure private connectivity to Azure resources](https://learn.microsoft.com/en-us/azure/databricks/security/network/serverless-network-security/serverless-private-link)

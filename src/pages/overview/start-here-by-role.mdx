@@ -1,0 +1,209 @@
+---
+title: 'Start here — by role'
+layout: ../../layouts/Layout.astro
+description: 'What you own, your first week, the decisions only you can make, and your reading path — for the architect, the platform engineer, the project manager, and the domain owner.'
+---
+
+import Callout from '../../components/Callout.tsx';
+import Tabs from '../../components/Tabs.tsx';
+import Checklist from '../../components/Checklist.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
+
+# Start here — by role
+
+Fifteen sections in the sidebar, and maybe four of them are yours. This page says which.
+
+Pick your role. Each tab is a first week, a decision list, and a reading path — not a summary of the runbook.
+
+<Callout client:visible variant="decision" title="Before anyone reads anything: is this migration necessary?">
+  The cheapest cross-cloud migration is the one you do not do. If the driver is "a consumer in another cloud needs this data", Unity Catalog federation and Delta Sharing can satisfy it without moving anything — sometimes permanently. Settle that first: [remote governance vs. migration](/overview/remote-governance-and-when-not-to-migrate). Everything below assumes the answer was "we are moving."
+</Callout>
+
+<Tabs client:visible tabs={[
+  {
+    label: 'Architect',
+    content: 'You own the target design and the decisions that are expensive to reverse. Nobody else can make them, and most of them are due before the first table moves.'
+  },
+  {
+    label: 'Platform engineer',
+    content: 'You own collection, the target foundation, and execution. Your first week is mostly discovery, and the quality of it decides whether the rest of the project is planned or guessed.'
+  },
+  {
+    label: 'Project manager',
+    content: 'You own sequencing, owners, and the gates. Your risk is not technical — it is an asset with no owner and a gate signed off by "everyone was busy so we assumed it was fine".'
+  },
+  {
+    label: 'Domain / data owner',
+    content: 'You own knowing whether the target is right. You are the only person who can tell the difference between a dashboard that renders and a dashboard that is correct.'
+  }
+]} />
+
+---
+
+## Architect
+
+**You own:** the target platform design, and every decision below. **You are accountable for:** the ones that cannot be undone cheaply.
+
+### The eight decisions that are expensive to reverse
+
+Make these in this order. Each one constrains the next.
+
+| # | Decision | Reverse cost if wrong | Where |
+|---|---|---|---|
+| 0 | Whether residency law or contracts permit the target cloud at all | **Whole project, and it cannot be engineered around** | [Data residency](/security/data-residency) |
+| 1 | Migrate at all, or govern remotely | Whole project | [Remote governance](/overview/remote-governance-and-when-not-to-migrate) |
+| 2 | Migration archetype — lift, re-platform, or rebuild | Whole project | [Archetypes](/overview/migration-archetypes), [decision framework](/overview/decision-framework) |
+| 3 | Identity model in the target — group design, federation | Every grant, re-issued | [IAM mapping](/security/iam-mapping), [identity federation](/security/identity-federation) |
+| 4 | Catalog and schema layout, and `MANAGED LOCATION` per catalog/schema | Re-clone every managed table | [UC strategy](/governance/unity-catalog-strategy), [metastore migration](/governance/metastore-migration) |
+| 5 | Network topology — private connectivity, serverless egress | Rebuild the landing zone | [Network security](/security/network-security) |
+| 6 | Per-table strategy — clone, CTAS, share, or recreate | Table history, permanently | [Metastore migration](/governance/metastore-migration) |
+| 7 | Cutover model — big bang, wave, or dual-run | Timeline and risk profile | [Wave planning](/execution/wave-planning), [cutover](/execution/cutover) |
+
+<Callout client:visible variant="warning" title="Decisions 4 and 6 are the ones that get deferred and shouldn't be">
+  `MANAGED LOCATION` is set when a catalog is created; changing it later means moving data. Choosing CTAS over deep clone discards table history permanently, and it reconciles clean on row count — so nothing will tell you it was wrong. Both feel like implementation details during planning. Neither is.
+</Callout>
+
+### Your first week
+
+| Day | Do | Output |
+|---|---|---|
+| 1 | Ask the residency question, and confirm the driver | Decisions 0 and 1, written down |
+| 2 | Read the [equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix) and your specific [cloud pairing](/cloud-mappings/azure-to-gcp) | Construct-by-construct target map |
+| 3 | Review the [cross-reference report](/discovery/asset-inventory) the platform engineer produced | The real blocker list, not the assumed one |
+| 4 | Design identity and storage layout | Decisions 3 and 4 |
+| 5 | Set the per-table strategy rules and the wave-scoring weights | Decisions 6 and 7 |
+
+### Your reading path
+
+[Decision framework](/overview/decision-framework) → [equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix) → [your cloud pairing](/cloud-mappings/aws-to-gcp) → [UC strategy](/governance/unity-catalog-strategy) → [metastore migration](/governance/metastore-migration) → [IAM mapping](/security/iam-mapping) → [network security](/security/network-security) → [known limitations](/troubleshooting/known-limitations)
+
+---
+
+## Platform engineer
+
+**You own:** collection, the target foundation, and execution. **Your first week is discovery**, and how well you do it decides whether waves are planned or guessed.
+
+### Day 1–3, concretely
+
+<CodeBlock client:visible language="bash" filename="week-1.sh" code={`git clone https://github.com/jthiruveedula/databricks-cross-cloud-migration
+cd databricks-cross-cloud-migration/automation
+python -m venv .venv && source .venv/bin/activate
+pip install -e '.[databricks]'
+
+cp examples/migration.example.yaml migration.yaml   # edit: hosts, catalogs, path rules
+export DBX_SOURCE_TOKEN=...                          # metastore-admin token
+dbxmig -c migration.yaml validate
+
+# Day 1 -- metastore plane
+dbxmig -c migration.yaml inventory -o metastore.json
+
+# Day 2 -- workspace plane, per workspace, plus CSVs for the PM
+dbxmig -c migration.yaml workspace -o workspace-prod.json --csv-dir inventory-csv/
+
+# Day 3 -- the report the architect and PM both need
+dbxmig -c migration.yaml crossrefs -w workspace-prod.json --csv crossrefs.csv
+dbxmig -c migration.yaml gaps      -i metastore.json -o gaps.md`} />
+
+Both `gaps` and `crossrefs` exit non-zero when something needs a human. That is deliberate — they work as pipeline gates, not just reports.
+
+### What you are accountable for that nobody will ask about until it is too late
+
+| Thing | Why it lands on you |
+|---|---|
+| The target IAM identity and storage credential | The one part of the metastore migration with no automated path |
+| Workspace-local groups converted to account groups | UC grants misbehave otherwise, and the symptom is confusing |
+| `MANAGED LOCATION` actually set at catalog creation | Silently defaults, and reversing it means re-cloning |
+| Workspace bindings reproduced | An `ISOLATED` catalog recreated without its binding defaults to `OPEN` |
+| Ownership transferred off your own account after cutover | Otherwise you personally own the entire estate |
+| Everything on [what does not migrate](/execution/what-does-not-migrate), exported | Irrecoverable once the source is deleted |
+
+### Your reading path
+
+[Asset inventory](/discovery/asset-inventory) → [automation toolkit](/templates/automation-toolkit) → [metastore migration](/governance/metastore-migration) → [grants and roles](/governance/grants-and-roles) → [cluster migration](/compute/cluster-migration) → [what does not migrate](/execution/what-does-not-migrate) → [common errors](/troubleshooting/common-errors)
+
+---
+
+## Project manager
+
+**You own:** sequencing, owners, and gates. **Your risk is organisational**, not technical: an asset with no owner, and a gate nobody actually verified.
+
+### The four artifacts you need, and who owes them to you
+
+| Artifact | From | By | Without it |
+|---|---|---|---|
+| Asset inventory with counts per class | Platform engineer | End of week 1 | You are planning a scope you cannot size |
+| Cross-reference / blocker list | Platform engineer + architect | End of week 1 | Waves will be built on wishful sequencing |
+| Owner per asset, decision per asset | You, chasing | End of week 2 | Cutover night has unowned failures |
+| Wave plan scored, not argued | Architect + you | End of week 2 | Wave order becomes a negotiation |
+
+The CSVs from `dbxmig workspace --csv-dir` open directly in a spreadsheet — one file per asset class, one row per asset, with an owner column already suggested. That is your tracker's starting content, not something to retype.
+
+### The four questions that find real problems
+
+Ask these in every weekly. They are more effective than a status column.
+
+1. **"Which asset classes came back empty, and did we confirm each one?"** An empty class and a permissions failure look identical in a report. The toolkit distinguishes them; make someone read that column aloud.
+2. **"Which assets still have no named owner?"** Not a team — a person. Unowned assets become cutover-night failures with nobody to call.
+3. **"What did we decide to retire?"** If the answer is "nothing", discovery is not finished. A real estate always has stale dashboards and jobs paused for a year. Northwind retired 22% of its dashboards.
+4. **"What are we going to lose, and who signed off?"** Audit history, job run history, notebook revisions, workspace ACLs — [all of it](/execution/what-does-not-migrate), gone the moment the source is deleted, and the pressure at that point is all toward deleting the source.
+
+### Gates you must not let through
+
+<Checklist client:visible title="Non-negotiable gates" items={[
+  { id: 'discovery', label: 'Discovery: every asset class has a count, an owner, and a decision — no FAILED collections' },
+  { id: 'pilot', label: 'Pilot: one full dependency chain migrated end to end, not one table' },
+  { id: 'recon', label: 'Cutover: reconciliation at 0% variance — not a negotiated tolerance' },
+  { id: 'preservation', label: 'Cutover: everything that does not migrate is exported AND read back from the target' },
+  { id: 'nonadmin', label: 'Cutover: a real non-admin user ran their real workload against the target' },
+  { id: 'decom', label: 'Decommission: blocked on export sign-off, not on a calendar date' },
+]} />
+
+### Your reading path
+
+[Executive brief](/overview/executive-brief) → [wave planning](/execution/wave-planning) → [RACI](/templates/raci) → [risk register](/templates/risk-register) → [cutover](/execution/cutover) → [hypercare](/execution/hypercare) → [what does not migrate](/execution/what-does-not-migrate)
+
+Plus the [timeline estimator](/tools/timeline-estimator) and [RACI builder](/tools/raci-builder) — browser-only, nothing leaves the page.
+
+---
+
+## Domain / data owner
+
+**You own:** knowing whether the target is actually right. You will be asked for perhaps three days of effort across the project, and they are the three days that decide whether anyone trusts the result.
+
+### What is genuinely being asked of you
+
+| When | Ask | Time |
+|---|---|---|
+| Discovery | Look at the inventory of your domain. What is missing? What is dead? | Half a day |
+| Discovery | Name a person per asset — not a team | An hour |
+| Pre-cutover | Define what "correct" means for your top 3 reports: which numbers, what tolerance | Half a day |
+| Cutover | Run your real workload against the target, with **your own** credentials | Half a day |
+| Hypercare | Confirm the numbers still match a week later | An hour |
+
+<Callout client:visible variant="warning" title="Only you can catch a silently wrong answer">
+  A migrated query that runs and returns a plausible number is the worst failure mode there is. Reconciliation catches missing rows; it does not catch a dropped filter or a join that changed meaning. Compare an actual figure you already know — last quarter's revenue for your region — not just "the dashboard loads."
+</Callout>
+
+Two things worth insisting on: test with **your own non-admin credentials**, because an admin token proves nothing about your grants; and say out loud if you need to query pre-migration data, because [table history does not survive a clone](/validation/data-reconciliation#delta-table-history-reconciliation) and preserving it is a separate decision that has to be taken *before* cutover.
+
+### Your reading path
+
+[Business validation](/validation/business-validation) → [data reconciliation](/validation/data-reconciliation) → [BI tool reconnection](/analytics/bi-tool-reconnection) → [hypercare](/execution/hypercare)
+
+---
+
+## The whole thing in one table
+
+| Phase | Architect | Platform engineer | Project manager | Domain owner |
+|---|---|---|---|---|
+| Decide | **Owns** | Consulted | Informed | Consulted |
+| Discover | Reviews | **Owns** | Chases owners | **Validates scope** |
+| Design target | **Owns** | Builds | Tracks | Consulted |
+| Wave plan | Scores | Inputs | **Owns** | Confirms priority |
+| Pilot | Reviews | **Owns** | Gates | **Signs off** |
+| Bulk migrate | Consulted | **Owns** | Tracks | Informed |
+| Cutover | On call | **Owns** | **Gates** | **Signs off** |
+| Hypercare | Consulted | **Owns** | Tracks | Reports issues |
+| Decommission | Approves | Executes | **Gates on exports** | Confirms nothing needed |
+
+Full detail, including the roles this page collapses: [RACI](/templates/raci).

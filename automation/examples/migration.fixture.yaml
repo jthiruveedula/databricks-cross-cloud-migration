@@ -1,0 +1,29 @@
+# Offline configuration used by the test suite and by the walkthrough in
+# README.md. It points at no workspace at all -- every command runs against the
+# JSON fixture, which is what makes the whole pipeline reviewable before anyone
+# has credentials for a target account.
+
+source:
+  cloud: azure
+  catalogs:
+    - prod
+
+target:
+  cloud: gcp
+
+catalog_map:
+  prod: prod_gcp
+
+path_rules:
+  - from: abfss://raw@prodstorage.dfs.core.windows.net/
+    to: gs://acme-prod-raw/
+
+managed_locations:
+  prod_gcp: gs://acme-prod-managed/catalogs/prod
+
+principal_map_file: examples/principal_map.example.json
+
+llm:
+  enabled: false
+
+state_file: .dbxmig/fixture-journal.jsonl
