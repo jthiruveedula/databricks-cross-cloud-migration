@@ -56,6 +56,7 @@
       "slug": "security",
       "items": [
         { "title": "IAM mapping", "slug": "security/iam-mapping" },
+        { "title": "Target storage credentials", "slug": "security/target-storage-credentials" },
         { "title": "Identity federation", "slug": "security/identity-federation" },
         { "title": "Secrets and KMS", "slug": "security/secrets-and-kms" },
         { "title": "Network security", "slug": "security/network-security" },
@@ -113,6 +114,7 @@
         { "title": "Wave planning", "slug": "execution/wave-planning" },
         { "title": "Pilot", "slug": "execution/pilot" },
         { "title": "Large-scale data transfer", "slug": "execution/large-scale-data-transfer" },
+        { "title": "Storage transfer runbooks", "slug": "execution/storage-transfer-runbooks" },
         { "title": "Bulk migration", "slug": "execution/bulk-migration" },
         { "title": "What does not migrate", "slug": "execution/what-does-not-migrate" },
         { "title": "Cutover", "slug": "execution/cutover" },
