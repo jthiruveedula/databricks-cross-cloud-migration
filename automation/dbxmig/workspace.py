@@ -14,9 +14,11 @@ Three design choices make this useful to a person rather than just complete:
   ``collected: 0`` with the reason, because "we have no cluster policies" and
   "the token could not read cluster policies" look identical in a JSON file and
   mean very different things three weeks later.
-* **Secret values are never read.** Scope and key *names* are inventoried;
-  values are write-only in Databricks and are not something this code should be
-  able to exfiltrate even if it could.
+* **Secret values are never read.** Scope and key *names* are inventoried, and
+  nothing here calls the get-secret API. Note that this is a deliberate choice
+  rather than a limitation: for a Databricks-backed scope a caller with READ
+  *can* retrieve values. A collector that hoovers up every production
+  credential is not something to point at an estate, so it does not.
 """
 
 from __future__ import annotations
@@ -638,10 +640,11 @@ def _collect_newer_surfaces(client: Any, inventory: WorkspaceInventory) -> None:
 def _collect_secret_scopes(client: Any) -> List[Dict[str, Any]]:
     """Scope and key names only. Secret values are never read.
 
-    Databricks secrets are write-only by design; there is no export. The value
-    of this inventory is the dependency map -- which scope, which key, used by
+    ``get-secret`` is deliberately not called. For a Databricks-backed scope a
+    caller with READ can retrieve values, so this restraint is a choice: the
+    useful artifact is the dependency map -- which scope, which key, used by
     what -- so the target can be populated from whatever system of record
-    issued the secret in the first place.
+    issued the secret, rather than from a credential dump this tool created.
     """
     rows: List[Dict[str, Any]] = []
     for scope in client.secrets.list_scopes() or []:

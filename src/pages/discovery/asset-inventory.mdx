@@ -97,7 +97,7 @@ Not "everything the API returns." Each field below is either an identifier neede
   },
   {
     title: 'Secret scopes — names only, never values',
-    content: 'Keep: scope name, backend type, key names, key count. Why: this is a dependency map, not a data export. Databricks secrets are write-only and no one can read a value back. What you need is "which scope, which key, used by which job, sourced from where", built while the people who created them are still reachable. Watch for: Key Vault-backed scopes — a cloud resource that does not cross clouds and needs a target equivalent designed, not copied.'
+    content: 'Keep: scope name, backend type, key names, key count. Why: what you need is the dependency map -- "which scope, which key, used by which job, sourced from where" -- built while the people who created them are still reachable. The toolkit never reads values, deliberately: for a Databricks-backed scope a caller with READ can retrieve them through the Secrets API, and a collector that hoovers up every production credential is not something to point at an estate. Watch for: Key Vault-backed scopes, where Databricks holds only a pointer and the backing vault is a cloud resource that does not cross clouds at all.'
   },
   {
     title: 'Object ACLs — the permission system nobody exports',
