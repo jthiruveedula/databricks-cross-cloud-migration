@@ -154,7 +154,7 @@ Three behaviours that bite on a real estate:
   },
   {
     label: 'GCS → Azure',
-    content: 'AzCopy handles GCS as a source with `--from-to=GCPBlob`, authorized by a service-account key via GOOGLE_APPLICATION_CREDENTIALS plus the GCP project id. As with S3, it is a server-to-server copy. Verify current support for your object sizes and any composite objects before planning around it.'
+    content: 'AzCopy, server-to-server like the S3 path. Authorize with a service-account key by pointing GOOGLE_APPLICATION_CREDENTIALS at the key file, and use the storage.cloud.google.com URL form: azcopy copy \'https://storage.cloud.google.com/<bucket>/<prefix>\' \'https://<account>.blob.core.windows.net/<container>/<prefix>\' --recursive=true --from-to=GCPBlob. GOOGLE_CLOUD_PROJECT is only needed when copying all or a wildcard subset of buckets in a project, not for a single named bucket. Name mangling is worse here than from S3: on top of periods and consecutive hyphens, AzCopy also replaces UNDERSCORES with hyphens, so my_bucket becomes my-bucket -- and underscores are common in GCS bucket names. Trailing dots in object names are trimmed. Copy bucket-by-bucket with explicit destination names so the mapping is yours.'
   },
   {
     label: 'GCS → S3',
@@ -266,6 +266,7 @@ Transfers are additive: the source is untouched and a failed or partial transfer
 ## Sources
 
 - Microsoft — [Copy data from Amazon S3 to Azure Storage by using AzCopy](https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-s3) (`Put Block From URL` server-to-server copy, `--from-to=S3Blob`, bucket-name rewriting, `s2s-handle-invalid-metadata`, HNS via the blob endpoint)
+- Microsoft — [Copy from Google Cloud Storage to Azure Storage with AzCopy](https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-google-cloud) (`--from-to=GCPBlob`, `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT` only for multi-bucket copies, and underscore-to-hyphen bucket renaming on top of the S3 rules)
 - Google Cloud — [Transfer from Microsoft Azure Blob Storage](https://cloud.google.com/storage-transfer/docs/source-microsoft-azure) (SAS needs Read + List, resource types Container **and** Object, HTTPS only, and no IP restriction; default expiry is 8 hours)
 - Google Cloud — [Event-driven transfers from Azure Blob Storage or Data Lake Storage Gen2](https://cloud.google.com/storage-transfer/docs/event-driven-azure)
 - Google Cloud — [Known limitations](https://cloud.google.com/storage-transfer/docs/known-limitations-transfer) (Cloud Storage is a flat namespace; hierarchical structure is not reproduced in the destination)
