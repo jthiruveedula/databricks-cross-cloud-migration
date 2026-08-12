@@ -42,6 +42,9 @@ def test_bundle_emits_the_expected_file_set(workspace, rewriter):
         "databricks.yml",
         "resources/jobs.yml",
         "resources/pipelines.yml",
+        "resources/sql_warehouses.yml",
+        "resources/cluster_policies.yml",
+        "resources/instance_pools.yml",
         "REVIEW.md",
     }
 
@@ -50,7 +53,8 @@ def test_root_file_is_valid_yaml_with_a_target(workspace, rewriter):
     root = yaml.safe_load(generate_bundle(workspace, rewriter=rewriter).files["databricks.yml"])
     assert root["bundle"]["name"] == "migrated-estate"
     assert "target" in root["targets"]
-    assert root["include"] == ["resources/jobs.yml", "resources/pipelines.yml"]
+    assert "resources/jobs.yml" in root["include"]
+    assert root["include"] == sorted(root["include"])
 
 
 def test_server_owned_fields_are_stripped(workspace, rewriter):
@@ -165,3 +169,70 @@ def test_target_host_is_written_when_configured(workspace, rewriter):
     result = generate_bundle(workspace, rewriter=rewriter, target_host="https://x.gcp.databricks.com")
     root = yaml.safe_load(result.files["databricks.yml"])
     assert root["targets"]["target"]["workspace"]["host"] == "https://x.gcp.databricks.com"
+
+
+# ---- dependency resources ------------------------------------------------
+
+
+def resources_of(result, filename, kind):
+    return yaml.safe_load(result.files["resources/{0}.yml".format(filename)])["resources"][kind]
+
+
+def test_warehouses_policies_and_pools_are_emitted(workspace, rewriter):
+    result = generate_bundle(workspace, rewriter=rewriter)
+    assert "resources/sql_warehouses.yml" in result.files
+    assert "resources/cluster_policies.yml" in result.files
+    assert "resources/instance_pools.yml" in result.files
+
+
+def test_pool_node_type_is_variabilized_like_a_cluster_node_type(workspace, rewriter):
+    pools = resources_of(
+        generate_bundle(workspace, rewriter=rewriter), "instance_pools", "instance_pools"
+    )
+    node_type = pools["warm_ds4"]["node_type_id"]
+    assert node_type.startswith("${var.node_type_")
+    assert "Standard_DS4_v2" not in node_type
+
+
+def test_warehouse_channel_becomes_a_nested_object(workspace, rewriter):
+    warehouses = resources_of(
+        generate_bundle(workspace, rewriter=rewriter), "sql_warehouses", "sql_warehouses"
+    )
+    assert warehouses["finance_bi"]["channel"] == {"name": "CHANNEL_NAME_CURRENT"}
+
+
+def test_warehouse_fields_are_renamed_to_bundle_names(workspace, rewriter):
+    warehouses = resources_of(
+        generate_bundle(workspace, rewriter=rewriter), "sql_warehouses", "sql_warehouses"
+    )
+    body = warehouses["finance_bi"]
+    assert body["min_num_clusters"] == 1 and body["max_num_clusters"] == 4
+    assert "min_clusters" not in body
+    # The source warehouse id must never appear -- the target assigns its own.
+    assert "warehouse_id" not in body
+
+
+def test_pool_name_uses_the_bundle_field_name(workspace, rewriter):
+    pools = resources_of(
+        generate_bundle(workspace, rewriter=rewriter), "instance_pools", "instance_pools"
+    )
+    assert pools["warm_ds4"]["instance_pool_name"] == "warm-ds4"
+
+
+def test_include_list_covers_every_generated_resource_file(workspace, rewriter):
+    result = generate_bundle(workspace, rewriter=rewriter)
+    root = yaml.safe_load(result.files["databricks.yml"])
+    generated = sorted(f for f in result.files if f.startswith("resources/"))
+    assert root["include"] == generated
+
+
+def test_review_explains_the_deploy_order_dependency(workspace, rewriter):
+    review = generate_bundle(workspace, rewriter=rewriter).files["REVIEW.md"]
+    assert "Deploy order" in review
+    assert "before the jobs" in review
+
+
+def test_include_filter_limits_what_is_generated(workspace, rewriter):
+    result = generate_bundle(workspace, rewriter=rewriter, include=("jobs",))
+    assert "resources/sql_warehouses.yml" not in result.files
+    assert "resources/jobs.yml" in result.files

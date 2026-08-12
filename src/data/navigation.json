@@ -60,6 +60,7 @@
         { "title": "Secrets and KMS", "slug": "security/secrets-and-kms" },
         { "title": "Network security", "slug": "security/network-security" },
         { "title": "Serverless networking and egress", "slug": "security/serverless-networking" },
+        { "title": "Data residency and classification", "slug": "security/data-residency" },
         { "title": "Audit and compliance", "slug": "security/audit-and-compliance" }
       ]
     },
@@ -117,6 +118,7 @@
         { "title": "Cutover", "slug": "execution/cutover" },
         { "title": "Rollback", "slug": "execution/rollback" },
         { "title": "Hypercare", "slug": "execution/hypercare" },
+        { "title": "Cost and tagging continuity", "slug": "execution/cost-and-tagging-continuity" },
         { "title": "Decommissioning the source", "slug": "execution/decommissioning" }
       ]
     },

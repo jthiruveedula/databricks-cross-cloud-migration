@@ -255,6 +255,64 @@ def pipeline_resource(
     return key, body, None
 
 
+def simple_resource(
+    row: Dict[str, Any],
+    fields: Sequence[str],
+    rewriter: Optional[Rewriter],
+    variables: Dict[str, BundleVariable],
+    renames: Optional[Dict[str, str]] = None,
+) -> Tuple[str, Dict[str, Any]]:
+    """Build a bundle resource from selected flattened fields.
+
+    Warehouses, cluster policies, and instance pools do not need the full raw
+    payload: their bundle shape is small and the flattened inventory already
+    holds every field that matters. Emitting them matters because they are the
+    objects everything else depends on -- a job bundle that references
+    ``${var.policy_x}`` is only deployable once the policy itself exists.
+    """
+    renames = renames or {}
+    body: Dict[str, Any] = {}
+    for source_field in fields:
+        value = row.get(source_field)
+        if value in (None, "", 0, [], {}):
+            continue
+        # Route through the dict form so the key-based rules apply: an
+        # instance pool's node_type_id is as cloud-specific as a cluster's and
+        # must not survive into the target as a literal.
+        cleaned = _strip_and_rewrite({source_field: value}, rewriter, variables)
+        if source_field not in cleaned:
+            continue
+        target_field = renames.get(source_field, source_field)
+        body[target_field] = cleaned[source_field]
+    if "channel" in body and isinstance(body["channel"], str):
+        # A warehouse channel is a nested object in bundle configuration, not
+        # the bare enum the API returns.
+        body["channel"] = {"name": body["channel"]}
+    return _resource_key(str(row.get("name") or "unnamed")), body
+
+
+#: Bundle resource shapes for the objects everything else depends on. The
+#: field lists are deliberately short: anything the target should choose for
+#: itself (ids, state, current size) is left out rather than carried over.
+SIMPLE_RESOURCES = {
+    "sql_warehouses": (
+        "sql_warehouses",
+        ("name", "cluster_size", "min_clusters", "max_clusters", "auto_stop_mins", "channel"),
+        {"min_clusters": "min_num_clusters", "max_clusters": "max_num_clusters"},
+    ),
+    "cluster_policies": (
+        "cluster_policies",
+        ("name", "definition", "max_clusters_per_user"),
+        {},
+    ),
+    "instance_pools": (
+        "instance_pools",
+        ("name", "node_type_id", "min_idle_instances", "max_capacity"),
+        {"name": "instance_pool_name"},
+    ),
+}
+
+
 def _resource_key(name: str) -> str:
     slug = re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_").lower()
     return slug or "unnamed"
@@ -274,7 +332,13 @@ def generate_bundle(
     target_name: str = "target",
     target_host: str = "",
     rewriter: Optional[Rewriter] = None,
-    include: Sequence[str] = ("jobs", "pipelines"),
+    include: Sequence[str] = (
+        "jobs",
+        "pipelines",
+        "sql_warehouses",
+        "cluster_policies",
+        "instance_pools",
+    ),
     pause_schedules: bool = True,
 ) -> GeneratedBundle:
     """Build the full set of bundle files from a workspace inventory."""
@@ -308,6 +372,20 @@ def generate_bundle(
                 {"resources": {"pipelines": pipelines}}
             )
         result.resource_counts["pipelines"] = len(pipelines)
+
+    for asset_class, (resource_type, fields, renames) in sorted(SIMPLE_RESOURCES.items()):
+        if asset_class not in include:
+            continue
+        resources: Dict[str, Any] = {}
+        for row in inventory.rows(asset_class):
+            key, body = simple_resource(row, fields, rewriter, variables, renames)
+            if body:
+                resources[_unique(resources, key)] = body
+        if resources:
+            result.files["resources/{0}.yml".format(asset_class)] = _yaml(
+                {"resources": {resource_type: resources}}
+            )
+        result.resource_counts[asset_class] = len(resources)
 
     result.variables = variables
     root: Dict[str, Any] = {
@@ -401,8 +479,12 @@ def _review_markdown(result: GeneratedBundle, inventory: WorkspaceInventory) -> 
             "",
             "The bundle carries configuration. It does not carry:",
             "",
-            "- **Permissions.** Job and pipeline ACLs are a separate system; replay them",
-            "  from the object-ACL inventory.",
+            "- **Permissions.** Job, pipeline, warehouse, policy, and pool ACLs are a",
+            "  separate system; replay them from the object-ACL inventory.",
+            "- **Deploy order.** Policies, pools, and warehouses must exist before the jobs",
+            "  that reference them, and their target ids are what the variables above",
+            "  expect. Deploy the dependency resources first, read back their new ids,",
+            "  then deploy the jobs with those values.",
             "- **Secrets.** Scopes and values must exist in the target before first run.",
             "- **Schedules.** Every generated job is emitted with `pause_status: PAUSED`,",
             "  because otherwise the whole estate starts firing the moment the bundle",

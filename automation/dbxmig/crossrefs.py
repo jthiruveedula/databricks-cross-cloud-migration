@@ -170,7 +170,13 @@ def scan(
     pool_ids = {str(r.get("instance_pool_id", "")) for r in inventory.rows("instance_pools")}
 
     for asset_class, rows in inventory.assets.items():
-        if asset_class in ("object_acls", "groups", "service_principals"):
+        if asset_class in (
+            "object_acls",
+            "groups",
+            "service_principals",
+            "recipients",
+            "providers",
+        ):
             continue
         for row in rows:
             asset_id, asset_name = _asset_identity(asset_class, row)
@@ -525,6 +531,11 @@ def coverage_gaps(inventory: WorkspaceInventory) -> List[str]:
             gaps.append(
                 "{0}: collection FAILED ({1}) -- this is a permissions or API problem, "
                 "not an empty estate".format(result.asset_class, result.reason)
+            )
+        elif getattr(result, "unavailable", False):
+            gaps.append(
+                "{0}: NOT CHECKED -- {1}. Absence here means nobody looked, which is "
+                "not the same as zero".format(result.asset_class, result.reason)
             )
         elif result.collected == 0:
             gaps.append(

@@ -44,12 +44,13 @@ Pick your role. Each tab is a first week, a decision list, and a reading path �
 
 **You own:** the target platform design, and every decision below. **You are accountable for:** the ones that cannot be undone cheaply.
 
-### The seven decisions that are expensive to reverse
+### The eight decisions that are expensive to reverse
 
 Make these in this order. Each one constrains the next.
 
 | # | Decision | Reverse cost if wrong | Where |
 |---|---|---|---|
+| 0 | Whether residency law or contracts permit the target cloud at all | **Whole project, and it cannot be engineered around** | [Data residency](/security/data-residency) |
 | 1 | Migrate at all, or govern remotely | Whole project | [Remote governance](/overview/remote-governance-and-when-not-to-migrate) |
 | 2 | Migration archetype — lift, re-platform, or rebuild | Whole project | [Archetypes](/overview/migration-archetypes), [decision framework](/overview/decision-framework) |
 | 3 | Identity model in the target — group design, federation | Every grant, re-issued | [IAM mapping](/security/iam-mapping), [identity federation](/security/identity-federation) |
@@ -66,7 +67,7 @@ Make these in this order. Each one constrains the next.
 
 | Day | Do | Output |
 |---|---|---|
-| 1 | Confirm the driver, and that federation does not already satisfy it | Decision 1, written down |
+| 1 | Ask the residency question, and confirm the driver | Decisions 0 and 1, written down |
 | 2 | Read the [equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix) and your specific [cloud pairing](/cloud-mappings/azure-to-gcp) | Construct-by-construct target map |
 | 3 | Review the [cross-reference report](/discovery/asset-inventory) the platform engineer produced | The real blocker list, not the assumed one |
 | 4 | Design identity and storage layout | Decisions 3 and 4 |
