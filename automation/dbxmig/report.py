@@ -231,11 +231,11 @@ def workspace_summary(inventory: WorkspaceInventory) -> str:
 def crossref_summary(inventory: WorkspaceInventory, report: CrossRefReport) -> str:
     """What each asset depends on, what breaks, and what must move together."""
     blocker_rows = [
-        [f.asset_class, f.asset_name or f.asset_id, f.kind, f.reference, f.breaks]
+        [f.asset_class, f.asset_name or f.asset_id, f.location, f.kind, f.reference, f.breaks]
         for f in report.blockers
     ]
     attention_rows = [
-        [f.asset_class, f.asset_name or f.asset_id, f.kind, f.reference, f.breaks]
+        [f.asset_class, f.asset_name or f.asset_id, f.location, f.kind, f.reference, f.breaks]
         for f in report.findings
         if f.severity == "attention"
     ]
@@ -252,10 +252,12 @@ def crossref_summary(inventory: WorkspaceInventory, report: CrossRefReport) -> s
         _table(["Reference kind", "Count"], kind_rows),
         "### Blockers — fix before scheduling a wave",
         "",
-        _table(["Asset class", "Asset", "Kind", "Reference", "What breaks"], blocker_rows),
+        _table(
+            ["Asset class", "Asset", "Where", "Kind", "Reference", "What breaks"], blocker_rows
+        ),
         "### Needs attention — carry into the wave plan",
         "",
-        _table(["Asset class", "Asset", "Kind", "Reference", "Note"], attention_rows),
+        _table(["Asset class", "Asset", "Where", "Kind", "Reference", "Note"], attention_rows),
         "### Shared references — these assets must move together",
         "",
         _table(["Shared dependency"], [[h] for h in hints]),

@@ -291,3 +291,21 @@ def test_crossrefs_csv_is_written_when_asked(tmp_path):
     lines = open(csv_path, encoding="utf-8").read().splitlines()
     assert lines[0].startswith("severity,asset_class")
     assert len(lines) > 5
+
+
+def test_crossrefs_source_scan_adds_notebook_findings_with_lines(tmp_path, capsys):
+    src = tmp_path / "src"
+    (src / "etl").mkdir(parents=True)
+    (src / "etl" / "load.py").write_text(
+        'p = "abfss://archive@legacystorage.dfs.core.windows.net/x"\n', encoding="utf-8"
+    )
+    code = main(
+        [
+            "-c", write_config(tmp_path), "crossrefs",
+            "-w", WORKSPACE_FIXTURE, "-s", str(src),
+        ]
+    )
+    assert code == EXIT_FINDINGS
+    out = capsys.readouterr().out
+    assert "source_file" in out
+    assert "line 1" in out
