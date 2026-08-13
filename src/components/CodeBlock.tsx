@@ -14,6 +14,10 @@ interface Props {
 }
 
 const EXTENSIONS: Record<string, string> = {
+  text: 'txt',
+  txt: 'txt',
+  markdown: 'md',
+  md: 'md',
   bash: 'sh',
   sh: 'sh',
   shell: 'sh',
@@ -44,6 +48,13 @@ const LANG_LABELS: Record<string, string> = {
   js: 'JavaScript',
   ts: 'TypeScript',
   py: 'Python',
+  markdown: 'Markdown',
+  md: 'Markdown',
+  // Sample output rather than source. Pair with showLineNumbers={false} --
+  // numbering a report a reader is meant to read, not edit, makes it look
+  // like something to copy into a file.
+  text: 'Output',
+  txt: 'Output',
 };
 
 function downloadFilename(language: string, filename?: string): string {
@@ -177,6 +188,12 @@ export default function CodeBlock({
       <Highlight theme={themes.nightOwl} code={code.trimEnd()} language={language}>
         {({ tokens, getLineProps, getTokenProps }) => (
           <pre
+            // Marks this <pre> as React-owned. Layout.astro injects a copy
+            // button into every other <pre> on the page (Shiki-rendered fenced
+            // blocks, which are not islands); doing that here would mutate the
+            // DOM before hydration and produce a mismatch, and this component
+            // already has its own Copy button in the title bar.
+            data-react-codeblock="true"
             className={`m-0 overflow-x-auto bg-[#0f172a] p-4 text-[13px] leading-[1.65] ${
               wrapEnabled ? 'whitespace-pre-wrap break-words' : ''
             }`}

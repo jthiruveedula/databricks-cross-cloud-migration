@@ -26,3 +26,6 @@ automation/*.egg-info/
 automation/.pytest_cache/
 automation/.ruff_cache/
 automation/.dbxmig/
+
+# Playwright MCP session artifacts (screenshots, snapshots, console logs)
+.playwright-mcp/
