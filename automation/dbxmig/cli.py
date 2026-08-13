@@ -31,6 +31,8 @@ from .acls import diff as acl_diff
 from .acls import summary as acl_summary
 from .acls import to_rows as acl_rows
 from .bundle import generate_bundle
+from .collisions import detect as detect_collisions
+from .collisions import render as render_collisions
 from .config import ConfigError, MigrationConfig, load_config, load_principal_map
 from .crossrefs import coverage_gaps, merge, scan, scan_source_tree, to_rows
 from .ddl import (
@@ -202,12 +204,38 @@ def cmd_gaps(config: MigrationConfig, args: argparse.Namespace) -> int:
         inventory.grants, principal_map, config.catalog_map, strict=False
     )
     content = gap_report(plan, config.rewriter(), inventory, translation)
+
+    # The target metastore is shared by every workspace in its region, so the
+    # names this plan intends to create may already belong to someone else.
+    # Optional because a greenfield region has nothing to compare against, but
+    # skipping it is a choice the report records rather than a silent default.
+    collisions = None
+    if args.target_inventory:
+        collisions = detect_collisions(
+            inventory,
+            _load_inventory(args.target_inventory),
+            config.rewriter(),
+            config.catalog_map,
+        )
+        content = content.rstrip("\n") + "\n\n" + render_collisions(collisions)
+    else:
+        content = content.rstrip("\n") + (
+            "\n\n## Target collisions\n\n"
+            "Not checked -- no `--target-inventory` was supplied. Every `CREATE` this "
+            "toolkit emits is `IF NOT EXISTS`, so a name already taken in the target "
+            "metastore produces no error: a colliding catalog is silently migrated "
+            "*into*, and a colliding table is silently not migrated at all. Run "
+            "`dbxmig inventory` against the target and pass it here before generating "
+            "DDL.\n"
+        )
+
     _write(args.out, content)
     has_gaps = bool(
         plan.blocked_steps
         or plan.dangling_references
         or plan.cycles
         or translation.unmapped_principals
+        or (collisions is not None and collisions.fatal)
     )
     return EXIT_FINDINGS if has_gaps else EXIT_OK
 
@@ -741,6 +769,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("gaps", help="report what will not migrate without a decision")
     add_common(p)
+    p.add_argument(
+        "--target-inventory",
+        help=(
+            "inventory of the TARGET metastore, to detect names already taken there. "
+            "A metastore is shared per region, so another team's catalog can absorb "
+            "this migration without raising an error"
+        ),
+    )
     p.set_defaults(func=cmd_gaps)
 
     p = sub.add_parser("ddl", help="emit target DDL in dependency order")
