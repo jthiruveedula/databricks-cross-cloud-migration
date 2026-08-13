@@ -11,9 +11,13 @@ so a half-finished run can be re-executed from the top without manual cleanup.
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional
+import re
+from typing import Callable, Dict, Iterable, List, Optional
 
 from .models import Catalog, Column, Function, Schema, Table, Volume
+
+_REFERENCES_SPLIT = re.compile(r"\bREFERENCES\b", re.IGNORECASE)
+_PARENT_REF = re.compile(r"^(?P<name>[A-Za-z0-9_.`]+)\s*(?P<cols>\(.*\))?\s*$")
 
 
 def quote_ident(name: str) -> str:
@@ -77,8 +81,7 @@ def create_external_location(
     name: str, url: str, credential_name: str, read_only: bool = False
 ) -> str:
     statement = (
-        "CREATE EXTERNAL LOCATION IF NOT EXISTS {0} URL {1} "
-        "WITH (STORAGE CREDENTIAL {2})".format(
+        "CREATE EXTERNAL LOCATION IF NOT EXISTS {0} URL {1} WITH (STORAGE CREDENTIAL {2})".format(
             quote_ident(name), quote_literal(url), quote_ident(credential_name)
         )
     )
@@ -215,7 +218,65 @@ def set_table_properties(table_full_name: str, properties: Dict[str, str]) -> Op
     return "ALTER TABLE {0} SET TBLPROPERTIES ({1});".format(quote_name(table_full_name), pairs)
 
 
-def add_constraint(table_full_name: str, name: str, kind: str, definition: str) -> Optional[str]:
+def column_list(definition: str) -> str:
+    """Normalize a key's column list to the parenthesized form UC requires.
+
+    Inventories report a primary key's columns either bare (``order_id``) or
+    already parenthesized (``(order_id)``) depending on how they were exported.
+    ``PRIMARY KEY order_id`` is a syntax error, so normalize instead of trusting
+    whichever shape the export happened to produce.
+    """
+    definition = definition.strip()
+    if definition.startswith("(") and definition.endswith(")"):
+        return definition
+    return "({0})".format(definition)
+
+
+def _foreign_key(
+    table_full_name: str,
+    name: str,
+    definition: str,
+    rewrite_name: Optional[Callable[[str], str]] = None,
+) -> str:
+    """Emit a FOREIGN KEY, rewriting the parent table onto its target name.
+
+    The referenced table is a *three-part name in the source metastore*. Left
+    alone it points at a catalog that does not exist in the target -- and on a
+    cross-cloud move, at another cloud entirely.
+    """
+    parts = _REFERENCES_SPLIT.split(definition, maxsplit=1)
+    columns = column_list(parts[0])
+    if len(parts) == 1:
+        return "-- BLOCKED constraint {0} on {1}: FOREIGN KEY has no REFERENCES clause".format(
+            name, table_full_name
+        )
+
+    matched = _PARENT_REF.match(parts[1].strip())
+    if matched is None:
+        return "-- BLOCKED constraint {0} on {1}: cannot parse REFERENCES {2!r}".format(
+            name, table_full_name, parts[1].strip()
+        )
+
+    parent = matched.group("name").replace("`", "")
+    if rewrite_name is not None:
+        parent = rewrite_name(parent)
+    parent_columns = matched.group("cols")
+    return "ALTER TABLE {0} ADD CONSTRAINT {1} FOREIGN KEY {2} REFERENCES {3}{4};".format(
+        quote_name(table_full_name),
+        quote_ident(name),
+        columns,
+        quote_name(parent),
+        " " + parent_columns if parent_columns else "",
+    )
+
+
+def add_constraint(
+    table_full_name: str,
+    name: str,
+    kind: str,
+    definition: str,
+    rewrite_name: Optional[Callable[[str], str]] = None,
+) -> Optional[str]:
     """Emit a constraint. NOT NULL is a column alteration, not a constraint clause."""
     kind = kind.upper()
     if kind == "NOT_NULL":
@@ -226,11 +287,12 @@ def add_constraint(table_full_name: str, name: str, kind: str, definition: str) 
         return "ALTER TABLE {0} ADD CONSTRAINT {1} CHECK ({2});".format(
             quote_name(table_full_name), quote_ident(name), definition
         )
-    if kind in ("PRIMARY_KEY", "FOREIGN_KEY"):
-        clause = "PRIMARY KEY" if kind == "PRIMARY_KEY" else "FOREIGN KEY"
-        return "ALTER TABLE {0} ADD CONSTRAINT {1} {2} {3};".format(
-            quote_name(table_full_name), quote_ident(name), clause, definition
+    if kind == "PRIMARY_KEY":
+        return "ALTER TABLE {0} ADD CONSTRAINT {1} PRIMARY KEY {2};".format(
+            quote_name(table_full_name), quote_ident(name), column_list(definition)
         )
+    if kind == "FOREIGN_KEY":
+        return _foreign_key(table_full_name, name, definition, rewrite_name)
     return None
 
 
@@ -278,6 +340,13 @@ def table_ddl_bundle(
     if tags:
         statements.append(tags)
     for constraint in table.constraints:
+        # FOREIGN KEY is deliberately not emitted here. It names another table,
+        # which the bundle cannot assume exists yet, and Unity Catalog requires
+        # the parent's PRIMARY KEY (or UNIQUE) constraint to already be defined.
+        # Foreign keys are emitted at TIER_CONSTRAINT instead, after every table
+        # and every table-local key has been created.
+        if constraint.kind.upper() == "FOREIGN_KEY":
+            continue
         statement = add_constraint(
             target_full_name, constraint.name, constraint.kind, constraint.definition
         )

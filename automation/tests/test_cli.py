@@ -122,6 +122,50 @@ def test_gaps_reports_a_catalog_already_owned_by_another_team(tmp_path, capsys):
     assert "warehouse-team" in out
 
 
+def test_foreign_key_is_emitted_after_the_parent_table_and_its_primary_key(tmp_path):
+    """The ordering bug a per-statement unit test cannot see.
+
+    Constraints used to be emitted inside their own table's bundle, so a table
+    sorting before its parent got a FOREIGN KEY referencing a table that did not
+    exist yet -- and whose PRIMARY KEY had certainly not been declared.
+    """
+    with open(FIXTURE, encoding="utf-8") as handle:
+        raw = json.load(handle)
+    template = next(t for t in raw["tables"] if t["name"] == "orders")
+
+    parent = dict(template, name="customers")
+    parent["constraints"] = [
+        {"name": "pk_customers", "kind": "PRIMARY_KEY", "definition": "customer_id"}
+    ]
+    # Sorts before "customers", so a naive emission order puts the FK first.
+    child = dict(template, name="alpha_orders")
+    child["constraints"] = [
+        {
+            "name": "fk_orders_cust",
+            "kind": "FOREIGN_KEY",
+            "definition": "(customer_id) REFERENCES prod.sales.customers",
+        }
+    ]
+    raw["tables"] = [child, parent]
+
+    inventory = tmp_path / "fk_inventory.json"
+    inventory.write_text(json.dumps(raw), encoding="utf-8")
+    out = str(tmp_path / "target.sql")
+    main(["-c", write_config(tmp_path), "ddl", "-i", str(inventory), "-o", out])
+
+    with open(out, encoding="utf-8") as handle:
+        sql = handle.read()
+
+    parent_created = sql.index("CREATE TABLE IF NOT EXISTS `prod_gcp`.`sales`.`customers`")
+    parent_key = sql.index("ADD CONSTRAINT `pk_customers`")
+    foreign_key = sql.index("ADD CONSTRAINT `fk_orders_cust`")
+    assert parent_created < parent_key < foreign_key
+
+    # And the parent is named in the target catalog, not the source one.
+    assert "REFERENCES `prod_gcp`.`sales`.`customers`" in sql
+    assert "REFERENCES `prod`.`sales`" not in sql
+
+
 def test_ddl_is_generated_in_order_and_flags_blocked_objects(tmp_path):
     out = str(tmp_path / "target.sql")
     code = main(["-c", write_config(tmp_path), "ddl", "-i", FIXTURE, "-o", out])
@@ -159,9 +203,7 @@ def test_grants_are_translated_and_retired_principals_are_noted(tmp_path):
 
 def test_apply_dry_run_prints_statements_and_writes_no_journal_entries(tmp_path, capsys):
     state = str(tmp_path / "journal.jsonl")
-    code = main(
-        ["-c", write_config(tmp_path), "apply", "-i", FIXTURE, "--state", state]
-    )
+    code = main(["-c", write_config(tmp_path), "apply", "-i", FIXTURE, "--state", state])
     assert code == EXIT_OK
     out = capsys.readouterr().out
     assert "CREATE CATALOG IF NOT EXISTS `prod_gcp`" in out
@@ -174,9 +216,7 @@ def migrated_target(tmp_path) -> str:
     """The fixture as it should look after a correct migration."""
     with open(FIXTURE, encoding="utf-8") as handle:
         text = handle.read()
-    text = text.replace(
-        "abfss://raw@prodstorage.dfs.core.windows.net/", "gs://acme-prod-raw/"
-    )
+    text = text.replace("abfss://raw@prodstorage.dfs.core.windows.net/", "gs://acme-prod-raw/")
     path = str(tmp_path / "target.json")
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(text)
@@ -282,8 +322,13 @@ def test_workspace_collect_from_fixture_writes_manifest_and_summary(tmp_path, ca
     out = str(tmp_path / "workspace.json")
     code = main(
         [
-            "-c", write_config(tmp_path), "workspace",
-            "--fixture", WORKSPACE_FIXTURE, "-o", out,
+            "-c",
+            write_config(tmp_path),
+            "workspace",
+            "--fixture",
+            WORKSPACE_FIXTURE,
+            "-o",
+            out,
         ]
     )
     assert code == EXIT_OK
@@ -298,9 +343,15 @@ def test_workspace_csv_export_gives_one_file_per_asset_class(tmp_path):
     csv_dir = str(tmp_path / "csv")
     main(
         [
-            "-c", write_config(tmp_path), "workspace",
-            "--fixture", WORKSPACE_FIXTURE, "-o", str(tmp_path / "w.json"),
-            "--csv-dir", csv_dir,
+            "-c",
+            write_config(tmp_path),
+            "workspace",
+            "--fixture",
+            WORKSPACE_FIXTURE,
+            "-o",
+            str(tmp_path / "w.json"),
+            "--csv-dir",
+            csv_dir,
         ]
     )
     files = sorted(os.listdir(csv_dir))
@@ -323,9 +374,15 @@ def test_crossrefs_csv_is_written_when_asked(tmp_path):
     csv_path = str(tmp_path / "crossrefs.csv")
     main(
         [
-            "-c", write_config(tmp_path), "crossrefs",
-            "-w", WORKSPACE_FIXTURE, "--csv", csv_path,
-            "-o", str(tmp_path / "r.md"),
+            "-c",
+            write_config(tmp_path),
+            "crossrefs",
+            "-w",
+            WORKSPACE_FIXTURE,
+            "--csv",
+            csv_path,
+            "-o",
+            str(tmp_path / "r.md"),
         ]
     )
     lines = open(csv_path, encoding="utf-8").read().splitlines()
@@ -341,8 +398,13 @@ def test_crossrefs_source_scan_adds_notebook_findings_with_lines(tmp_path, capsy
     )
     code = main(
         [
-            "-c", write_config(tmp_path), "crossrefs",
-            "-w", WORKSPACE_FIXTURE, "-s", str(src),
+            "-c",
+            write_config(tmp_path),
+            "crossrefs",
+            "-w",
+            WORKSPACE_FIXTURE,
+            "-s",
+            str(src),
         ]
     )
     assert code == EXIT_FINDINGS
@@ -353,9 +415,7 @@ def test_crossrefs_source_scan_adds_notebook_findings_with_lines(tmp_path, capsy
 
 def test_bundle_command_writes_a_deployable_tree(tmp_path, capsys):
     out = str(tmp_path / "bundle")
-    code = main(
-        ["-c", write_config(tmp_path), "bundle", "-w", WORKSPACE_FIXTURE, "-o", out]
-    )
+    code = main(["-c", write_config(tmp_path), "bundle", "-w", WORKSPACE_FIXTURE, "-o", out])
     # Non-zero because the fixture deliberately contains a job collected
     # without --raw, which must be reported rather than silently dropped.
     assert code == EXIT_FINDINGS
@@ -411,9 +471,13 @@ def translated_target_workspace(tmp_path) -> str:
 def test_verify_passes_when_the_target_holds_the_translated_acls(tmp_path, capsys):
     code = main(
         [
-            "-c", write_config(tmp_path), "verify",
-            "-w", WORKSPACE_FIXTURE,
-            "--target-workspace", translated_target_workspace(tmp_path),
+            "-c",
+            write_config(tmp_path),
+            "verify",
+            "-w",
+            WORKSPACE_FIXTURE,
+            "--target-workspace",
+            translated_target_workspace(tmp_path),
         ]
     )
     assert code == EXIT_OK
@@ -429,8 +493,13 @@ def test_verify_names_the_acl_that_did_not_land(tmp_path, capsys):
 
     code = main(
         [
-            "-c", write_config(tmp_path), "verify",
-            "-w", WORKSPACE_FIXTURE, "--target-workspace", target,
+            "-c",
+            write_config(tmp_path),
+            "verify",
+            "-w",
+            WORKSPACE_FIXTURE,
+            "--target-workspace",
+            target,
         ]
     )
     assert code == EXIT_FINDINGS
@@ -449,9 +518,7 @@ def test_verify_names_the_grant_that_did_not_land(tmp_path, capsys):
     with open(target_path, "w", encoding="utf-8") as handle:
         json.dump(target, handle)
 
-    code = main(
-        ["-c", write_config(tmp_path), "verify", "-i", FIXTURE, "-t", target_path]
-    )
+    code = main(["-c", write_config(tmp_path), "verify", "-i", FIXTURE, "-t", target_path])
     assert code == EXIT_FINDINGS
     out = capsys.readouterr().out
     assert "Grants missing in target" in out

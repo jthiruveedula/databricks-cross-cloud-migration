@@ -109,7 +109,40 @@ def test_not_null_constraint_is_a_column_alteration():
 
 def test_check_and_primary_key_constraints():
     assert "CHECK (amount >= 0)" in add_constraint("c.s.t", "chk", "CHECK", "amount >= 0")
-    assert "PRIMARY KEY id" in add_constraint("c.s.t", "pk", "PRIMARY_KEY", "id")
+    # `PRIMARY KEY id` is a syntax error. The column list has to be parenthesized
+    # whether or not the inventory exported it that way.
+    assert "PRIMARY KEY (id)" in add_constraint("c.s.t", "pk", "PRIMARY_KEY", "id")
+    assert "PRIMARY KEY (a, b)" in add_constraint("c.s.t", "pk", "PRIMARY_KEY", "(a, b)")
+
+
+def test_foreign_key_rewrites_the_parent_onto_its_target_name():
+    """Left alone the parent names a catalog that does not exist in the target."""
+    statement = add_constraint(
+        "prod_gcp.sales.orders",
+        "fk_cust",
+        "FOREIGN_KEY",
+        "(customer_id) REFERENCES prod.sales.customers",
+        lambda name: name.replace("prod.", "prod_gcp.", 1),
+    )
+    assert "FOREIGN KEY (customer_id)" in statement
+    assert "REFERENCES `prod_gcp`.`sales`.`customers`" in statement
+    assert "`prod`.`sales`" not in statement
+
+
+def test_foreign_key_keeps_the_parent_column_list_and_normalizes_its_own():
+    statement = add_constraint(
+        "c.s.t",
+        "fk",
+        "FOREIGN_KEY",
+        "customer_id REFERENCES c.s.customers (customer_id)",
+    )
+    assert "FOREIGN KEY (customer_id) REFERENCES `c`.`s`.`customers` (customer_id);" in statement
+
+
+def test_foreign_key_without_a_references_clause_is_blocked_not_dropped():
+    statement = add_constraint("c.s.t", "fk", "FOREIGN_KEY", "(customer_id)")
+    assert statement.startswith("-- BLOCKED constraint fk")
+    assert "no REFERENCES clause" in statement
 
 
 def test_view_ddl_replaces_and_strips_trailing_semicolon():
@@ -129,6 +162,6 @@ def test_table_bundle_emits_clone_then_metadata_in_order(inventory: Inventory):
     assert "COMMENT ON TABLE" in joined
     assert "COMMENT ON COLUMN `prod_gcp`.`sales`.`orders`.`order_id`" in joined
     assert "SET TAGS" in joined
-    assert "ADD CONSTRAINT `pk_orders` PRIMARY KEY order_id" in joined
+    assert "ADD CONSTRAINT `pk_orders` PRIMARY KEY (order_id)" in joined
     # The source's Delta protocol pins must not be replayed onto the target.
     assert "minWriterVersion" not in joined
