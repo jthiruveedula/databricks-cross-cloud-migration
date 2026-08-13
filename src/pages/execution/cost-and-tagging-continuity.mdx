@@ -8,6 +8,7 @@ import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Accordion from '../../components/Accordion.tsx';
+import MigrationCostCurve from '../../components/diagrams/MigrationCostCurve.tsx';
 
 # Cost and tagging continuity
 
@@ -34,6 +35,8 @@ Northwind Retail, using the timeline from [decommissioning](/execution/decommiss
 | Wind-down | 20–22 | 1.4× | Source jobs paused; storage and licences remain |
 | Retention | 23–35 | 1.05× | Archived storage only |
 | Steady state | 36+ | 1.0× | Source gone |
+
+<MigrationCostCurve />
 
 **Roughly 5–7 months of elevated cost for a six-week cutover.** The peak is not the expensive part; the tail is. A programme that budgets "two months of double running" is under by a factor of two or three, and the overrun lands exactly when the pressure to delete the source is highest — which is how the [export step](/execution/what-does-not-migrate) gets rushed.
 
