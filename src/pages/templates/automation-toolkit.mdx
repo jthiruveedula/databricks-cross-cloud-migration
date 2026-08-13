@@ -76,6 +76,7 @@ dbxmig -c examples/migration.fixture.yaml gaps -i tests/fixtures/source_metastor
 | `acls` | Replays **workspace object ACLs** — the permission system Unity Catalog grants do not cover | no |
 | `bundle` | Generates Declarative Automation Bundle YAML for jobs and pipelines, with every workspace-scoped id turned into a variable | no |
 | `apply` | Executes, resumably — dry-run unless `--execute` | yes (target) |
+| `verify` | Proves the target holds the grants and object ACLs the migration intended | no |
 | `reconcile` | Compares target against source, exits non-zero on a blocker | no |
 | `report` | Rolls inventory, plan, gaps, and reconciliation into one markdown file | no |
 
