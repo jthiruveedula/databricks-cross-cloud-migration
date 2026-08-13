@@ -81,12 +81,18 @@ Objects have to be created in this order. The right-hand column is what you get 
 | 4 | Schema | Table creation fails |
 | 5 | Volume | Jobs that read from a Volume path fail at runtime, long after the migration "succeeded" |
 | 6 | Table | Views compile against nothing |
-| 7 | Constraints, tags, comments | Silent loss — nothing fails, the metadata is just absent |
+| 7 | Constraints, tags, comments | Silent loss — nothing fails, the metadata is just absent. **Except foreign keys**, which fail loudly; see below |
 | 8 | View | A view on a view fails until its dependency exists |
 | 9 | Function | Column masks referencing the function cannot bind |
 | 10 | Registered model | — |
 | 11 | Row filters / column masks | **Data exposure**: the table is readable before its filter is bound |
 | 12 | Grants | A table grant before its schema grant returns a confusing permission error |
+
+<Callout client:visible variant="warning" title="A foreign key is the one tier-7 item with a dependency outside its own table">
+  Every other constraint is table-local, which is why tier 7 sits with the table that owns it. A foreign key names a *second* table, and Databricks requires that parent to already have a primary key or unique constraint: *"Foreign keys must reference a primary key or unique constraint in another table."*
+
+  So foreign keys cannot be emitted alongside their own table's `CREATE` — at that point the parent may not exist and its primary key certainly is not declared. They belong after **every** table and every table-local key, and their `REFERENCES` clause names a three-part name that has to be rewritten onto the target catalog like any other. Left alone it points at the source metastore, which on a cross-cloud move is in another cloud entirely.
+</Callout>
 
 <Callout client:visible variant="warning" title="Tier 11 is a security ordering, not a convenience one">
   A cloned table exists and is queryable the moment the clone completes. Its row filter and column mask do **not** come with it. Between tier 6 and tier 11 the target table is unfiltered and unmasked. Either withhold the grants until the policies are bound (grants are tier 12 for exactly this reason), or migrate restricted tables in their own wave with the filter applied before anyone can see the catalog.

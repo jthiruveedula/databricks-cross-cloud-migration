@@ -36,6 +36,7 @@ from .collisions import render as render_collisions
 from .config import ConfigError, MigrationConfig, load_config, load_principal_map
 from .crossrefs import coverage_gaps, merge, scan, scan_source_tree, to_rows
 from .ddl import (
+    add_constraint,
     create_catalog,
     create_external_location,
     create_function,
@@ -184,9 +185,7 @@ def cmd_plan(config: MigrationConfig, args: argparse.Namespace) -> int:
         for step in plan.steps:
             marker = "BLOCKED" if step.blocked else step.strategy
             lines.append(
-                "{0:<6} {1:<16} {2:<40} {3}".format(
-                    step.tier, marker, step.source_name, step.id
-                )
+                "{0:<6} {1:<16} {2:<40} {3}".format(step.tier, marker, step.source_name, step.id)
             )
         _write(args.out, "\n".join(lines))
     if problems:
@@ -334,9 +333,29 @@ def _ddl_statements(config: MigrationConfig, inventory: Inventory, plan: Plan) -
                 continue
             statements.append(create_view(step.target_name, translation.sql, view.comment))
         elif step.tier == TIER_CONSTRAINT:
-            # Constraints are emitted as part of their table's bundle, which
-            # keeps them adjacent to the CREATE they depend on.
-            continue
+            # Table-local constraints ride along in their table's bundle, which
+            # keeps them adjacent to the CREATE they depend on. A FOREIGN KEY
+            # cannot: it names a parent table that the bundle cannot assume
+            # exists yet, and UC requires that parent's PRIMARY KEY to already
+            # be defined. Tier 65 runs after every table, the earliest safe point.
+            if str(step.detail.get("kind", "")).upper() != "FOREIGN_KEY":
+                continue
+            table_name, _, constraint_name = step.source_name.rpartition(".")
+            table = tables.get(table_name)
+            if table is None:
+                continue
+            constraint = next((c for c in table.constraints if c.name == constraint_name), None)
+            if constraint is None:
+                continue
+            statements.append(
+                add_constraint(
+                    rewriter.rewrite_full_name(table.full_name),
+                    constraint.name,
+                    constraint.kind,
+                    constraint.definition,
+                    rewriter.rewrite_full_name,
+                )
+            )
         elif step.tier == TIER_FUNCTION:
             function = functions.get(step.source_name)
             if function is None or not function.routine_definition:
@@ -524,9 +543,7 @@ def cmd_bundle(config: MigrationConfig, args: argparse.Namespace) -> int:
             os.makedirs(directory, exist_ok=True)
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(content)
-    counts = ", ".join(
-        "{0}={1}".format(k, v) for k, v in sorted(result.resource_counts.items())
-    )
+    counts = ", ".join("{0}={1}".format(k, v) for k, v in sorted(result.resource_counts.items()))
     print(
         "wrote {0} file(s) to {1} ({2}); {3} variable(s); {4} item(s) need review".format(
             len(result.files), out_dir, counts, len(result.variables), len(result.review)
