@@ -9,7 +9,7 @@ attached to a change record as evidence.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from .crossrefs import CrossRefReport, coverage_gaps, wave_hints
 from .depgraph import Plan
@@ -273,6 +273,91 @@ def crossref_summary(inventory: WorkspaceInventory, report: CrossRefReport) -> s
                 _table(["Asset class"], [[g] for g in gaps]),
             ]
         )
+    return "\n".join(sections)
+
+
+def verify_summary(
+    grant_diff: Optional[GrantDiff] = None,
+    acl_missing: Optional[List[Any]] = None,
+    acl_extra: Optional[List[Any]] = None,
+) -> str:
+    """Post-cutover proof: does the target actually hold what was intended?
+
+    Every other report in this toolkit describes what *will* happen. This one
+    looks at the target after the fact and says whether it matches -- the
+    difference between "the migration ran" and "the migration worked".
+    """
+    sections: List[str] = ["## Verification", ""]
+    total = 0
+
+    if grant_diff is not None:
+        total += len(grant_diff.missing_in_target) + len(grant_diff.extra_in_target)
+        sections.extend(
+            [
+                "### Grants missing in target ({0})".format(len(grant_diff.missing_in_target)),
+                "",
+                "Each row is a principal who held access on the source and does not hold it",
+                "now. This is the failure that surfaces as an access ticket weeks later.",
+                "",
+                _table(
+                    ["Securable", "Object", "Principal", "Privilege"],
+                    [
+                        [g.object_type, g.full_name, g.principal, g.privilege]
+                        for g in grant_diff.missing_in_target
+                    ],
+                ),
+                "### Grants in target that were not expected ({0})".format(
+                    len(grant_diff.extra_in_target)
+                ),
+                "",
+                "Not necessarily wrong -- target-only grants are legitimate. But each should",
+                "be a decision somebody made, not a surprise.",
+                "",
+                _table(
+                    ["Securable", "Object", "Principal", "Privilege"],
+                    [
+                        [g.object_type, g.full_name, g.principal, g.privilege]
+                        for g in grant_diff.extra_in_target
+                    ],
+                ),
+            ]
+        )
+
+    if acl_missing is not None or acl_extra is not None:
+        missing = acl_missing or []
+        extra = acl_extra or []
+        total += len(missing) + len(extra)
+        sections.extend(
+            [
+                "### Workspace object ACLs missing in target ({0})".format(len(missing)),
+                "",
+                "Unity Catalog grants and workspace permissions are separate systems, so a",
+                "clean grant diff says nothing about whether a team can restart its cluster.",
+                "",
+                _table(
+                    ["Object type", "Object", "Principal", "Level"],
+                    [
+                        [e.object_type, e.object_name, e.principal, e.permission_level]
+                        for e in missing
+                    ],
+                ),
+                "### Workspace object ACLs not expected in target ({0})".format(len(extra)),
+                "",
+                _table(
+                    ["Object type", "Object", "Principal", "Level"],
+                    [
+                        [e.object_type, e.object_name, e.principal, e.permission_level]
+                        for e in extra
+                    ],
+                ),
+            ]
+        )
+
+    verdict = (
+        "PASS -- target matches intent" if total == 0 else "FAIL -- {0} difference(s)".format(total)
+    )
+    sections.insert(2, "Verdict: **{0}**".format(verdict))
+    sections.insert(3, "")
     return "\n".join(sections)
 
 

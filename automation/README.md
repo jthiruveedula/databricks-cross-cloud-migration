@@ -65,6 +65,7 @@ CI gate on the migration itself, not just a report you read once.
 | `grants` | Emit translated `GRANT` and `SET OWNER` statements | no |
 | `acls` | Replay **workspace object ACLs** — jobs, clusters, pools, warehouses, pipelines, policies — as a name-resolved script | no |
 | `apply` | Execute the plan, resumably (dry-run unless `--execute`) | yes (target) |
+| `verify` | Prove the target holds the **grants and object ACLs** the migration intended — diffs expected against actual | no |
 | `reconcile` | Prove the target matches the source | no |
 | `report` | One markdown file covering all of the above | no |
 
@@ -143,7 +144,7 @@ Deliberately out of scope, and reported as manual work rather than pretended:
 ## Tests
 
 ```bash
-pytest          # 211 tests, no credentials, no network
+pytest          # 215 tests, no credentials, no network
 ruff check .
 ```
 

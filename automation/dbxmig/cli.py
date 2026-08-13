@@ -26,7 +26,8 @@ import sys
 from typing import List, Optional, Sequence
 
 from . import __version__
-from .acls import build_acl_plan, replay_script
+from .acls import build_acl_plan, entries_from_inventory, replay_script
+from .acls import diff as acl_diff
 from .acls import summary as acl_summary
 from .acls import to_rows as acl_rows
 from .bundle import generate_bundle
@@ -59,7 +60,12 @@ from .depgraph import (
     validate_plan,
 )
 from .gateway import DatabricksGateway, FixtureGateway, Gateway
-from .grants import PrincipalMap, translate_grants
+from .grants import (
+    PrincipalMap,
+    diff_grants,
+    expected_grants_after_translation,
+    translate_grants,
+)
 from .llm import Assistant, NullLlmClient
 from .models import Inventory
 from .reconcile import reconcile_inventories
@@ -69,6 +75,7 @@ from .report import (
     gap_report,
     plan_summary,
     reconciliation_summary,
+    verify_summary,
     workspace_summary,
 )
 from .state import STATUS_BLOCKED, STATUS_DONE, STATUS_FAILED, Journal
@@ -518,6 +525,51 @@ def cmd_acls(config: MigrationConfig, args: argparse.Namespace) -> int:
     return EXIT_OK if plan.ok else EXIT_FINDINGS
 
 
+def cmd_verify(config: MigrationConfig, args: argparse.Namespace) -> int:
+    """Prove the target holds what the migration intended.
+
+    Every other command describes what will happen. This one reads the target
+    after the fact. It closes the loop the runbook keeps asking for -- "diff
+    target grants against the source export" -- which until now had no command
+    behind it.
+    """
+    principal_map = _principal_map(config)
+    grant_diff = None
+    acl_missing = None
+    acl_extra = None
+
+    if args.inventory and args.target_inventory:
+        source = _load_inventory(args.inventory)
+        target = _load_inventory(args.target_inventory)
+        expected = expected_grants_after_translation(
+            source.grants, principal_map, config.catalog_map
+        )
+        grant_diff = diff_grants(expected, target.grants)
+
+    if args.workspace and args.target_workspace:
+        source_ws = _load_workspace(args.workspace)
+        target_ws = _load_workspace(args.target_workspace)
+        # Expected ACLs are the source set translated and filtered the same way
+        # `dbxmig acls` would replay them -- comparing raw source entries would
+        # flag IS_OWNER and retired principals as missing every time.
+        plan = build_acl_plan(source_ws, principal_map, strict=False)
+        result = acl_diff(plan.entries, entries_from_inventory(target_ws))
+        acl_missing = result["missing_in_target"]
+        acl_extra = result["extra_in_target"]
+
+    if grant_diff is None and acl_missing is None:
+        raise ConfigError(
+            "nothing to verify: pass -i/-t for grants, -w/--target-workspace for ACLs, or both"
+        )
+
+    _write(args.out, verify_summary(grant_diff, acl_missing, acl_extra))
+    drift = 0
+    if grant_diff is not None:
+        drift += len(grant_diff.missing_in_target) + len(grant_diff.extra_in_target)
+    drift += len(acl_missing or []) + len(acl_extra or [])
+    return EXIT_FINDINGS if drift else EXIT_OK
+
+
 def cmd_apply(config: MigrationConfig, args: argparse.Namespace) -> int:
     inventory = _load_inventory(args.inventory)
     plan = _plan_from(config, inventory)
@@ -715,6 +767,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="keep going after a failed statement instead of stopping",
     )
     p.set_defaults(func=cmd_apply)
+
+    p = sub.add_parser(
+        "verify", help="prove the target holds the grants and ACLs the migration intended"
+    )
+    p.add_argument("-i", "--inventory", help="source metastore inventory JSON")
+    p.add_argument("-t", "--target-inventory", help="target metastore inventory JSON")
+    p.add_argument("-w", "--workspace", help="source workspace inventory JSON")
+    p.add_argument("--target-workspace", help="target workspace inventory JSON")
+    p.add_argument("-o", "--out", help="write the report here instead of stdout")
+    p.set_defaults(func=cmd_verify)
 
     p = sub.add_parser("reconcile", help="compare a target inventory against the source")
     add_common(p)

@@ -62,7 +62,7 @@ WHERE specific_catalog = 'source_catalog';
 | 2 | Translate source principal names to target account-level group names |
 | 3 | Generate target `GRANT` statements from the translated mapping |
 | 4 | Apply grants at catalog/schema level first, table-level exceptions second |
-| 5 | Diff target `SHOW GRANTS` output against the source export |
+| 5 | Diff target grants against the source export — `dbxmig verify -i source.json -t target.json` |
 
 <p className="text-xs text-[var(--ink-subtle)]">Illustrative — adapt the CSV schema and error handling to your export format before running against production.</p>
 

@@ -327,3 +327,99 @@ def test_bundle_command_writes_a_deployable_tree(tmp_path, capsys):
     jobs = open(os.path.join(out, "resources", "jobs.yml"), encoding="utf-8").read()
     assert "${var." in jobs
     assert "prodstorage.dfs.core.windows.net" not in jobs
+
+
+# ---- verify: does the target hold what the migration intended? -------------
+
+
+def translated_target_workspace(tmp_path) -> str:
+    """The workspace as it should look after `dbxmig acls` replayed correctly."""
+    from dbxmig.acls import build_acl_plan
+    from dbxmig.grants import PrincipalMap
+    from dbxmig.workspace import WorkspaceInventory
+
+    source = WorkspaceInventory.from_dict(json.load(open(WORKSPACE_FIXTURE, encoding="utf-8")))
+    pmap = PrincipalMap.from_dict(
+        json.load(
+            open(
+                os.path.join(ROOT, "examples", "principal_map.example.json"),
+                encoding="utf-8",
+            )
+        )
+    )
+    plan = build_acl_plan(source, pmap, strict=False)
+    data = {
+        "assets": {
+            "object_acls": [
+                {
+                    "object_type": e.object_type,
+                    "object_id": "target-" + e.object_name,
+                    "object_name": e.object_name,
+                    "principal": e.principal,
+                    "permission_level": e.permission_level,
+                }
+                for e in plan.entries
+            ]
+        }
+    }
+    path = str(tmp_path / "target-workspace.json")
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(data, handle)
+    return path
+
+
+def test_verify_passes_when_the_target_holds_the_translated_acls(tmp_path, capsys):
+    code = main(
+        [
+            "-c", write_config(tmp_path), "verify",
+            "-w", WORKSPACE_FIXTURE,
+            "--target-workspace", translated_target_workspace(tmp_path),
+        ]
+    )
+    assert code == EXIT_OK
+    assert "PASS -- target matches intent" in capsys.readouterr().out
+
+
+def test_verify_names_the_acl_that_did_not_land(tmp_path, capsys):
+    target = translated_target_workspace(tmp_path)
+    data = json.load(open(target, encoding="utf-8"))
+    dropped = data["assets"]["object_acls"].pop()
+    with open(target, "w", encoding="utf-8") as handle:
+        json.dump(data, handle)
+
+    code = main(
+        [
+            "-c", write_config(tmp_path), "verify",
+            "-w", WORKSPACE_FIXTURE, "--target-workspace", target,
+        ]
+    )
+    assert code == EXIT_FINDINGS
+    out = capsys.readouterr().out
+    assert "FAIL" in out
+    assert dropped["object_name"] in out
+
+
+def test_verify_names_the_grant_that_did_not_land(tmp_path, capsys):
+    with open(FIXTURE, encoding="utf-8") as handle:
+        source = json.load(handle)
+    # A target that received none of the grants at all.
+    target = dict(source)
+    target["grants"] = []
+    target_path = str(tmp_path / "target-metastore.json")
+    with open(target_path, "w", encoding="utf-8") as handle:
+        json.dump(target, handle)
+
+    code = main(
+        ["-c", write_config(tmp_path), "verify", "-i", FIXTURE, "-t", target_path]
+    )
+    assert code == EXIT_FINDINGS
+    out = capsys.readouterr().out
+    assert "Grants missing in target" in out
+    # Reported under the TARGET principal name, since that is what to grant.
+    assert "sales-engineering" in out
+
+
+def test_verify_refuses_to_run_with_nothing_to_compare(tmp_path, capsys):
+    code = main(["-c", write_config(tmp_path), "verify"])
+    assert code == EXIT_USAGE
+    assert "nothing to verify" in capsys.readouterr().err
