@@ -36,13 +36,17 @@ Check target region availability for:
 
 ## Recommended topology
 
-### One metastore per region
+### One metastore per region — a limit, not a preference
 
-Create one metastore per target region. Workspaces in that region attach to it. This is the simplest and most common model.
+Every workspace in a target region attaches to the one metastore that region has. This is not the simplest option among several; it is the only one. Databricks is explicit: *"You can create only one metastore per region."*
+
+The scope of that limit is the **Databricks account**, which sits above every Azure subscription in the Entra ID tenant, every AWS account, and every GCP project. Separate cloud subscriptions do not buy separate metastores in the same region.
 
 - Clear data-residency boundaries.
 - Reduces cross-region network latency.
 - Easier to align with cloud IAM and networking.
+
+What it costs: you cannot use metastore boundaries to isolate business units that share a region. Isolation there is catalogs plus grants, and the catalog namespace is shared by everyone who lands in that region — so catalog naming is an account-wide decision made before the first migration, not a per-team one. See [metastore migration](/governance/metastore-migration) for the collision this causes when a second team arrives.
 
 ### Multi-region replication
 
