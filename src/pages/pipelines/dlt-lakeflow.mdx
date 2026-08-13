@@ -30,12 +30,23 @@ Applies to any Lakeflow/DLT pipeline being moved to a new workspace, whether or 
 
 ## Recreating a pipeline
 
-<CodeBlock client:visible language="bash" code={`# Export pipeline definition
-databricks pipelines get --pipeline-id <PIPELINE_ID> --output json > pipeline.json
+<CodeBlock client:visible language="bash" code={`# Export the pipeline definition. The id is POSITIONAL in the current CLI --
+# there is no --pipeline-id flag.
+databricks pipelines get <PIPELINE_ID> -o json > pipeline.json
 
-# Edit target_catalog, target_schema, storage, cluster, and expectations
-# Then create in target
-databricks pipelines create --json-file pipeline-target.json`} />
+# Strip the server-owned fields before re-creating: pipeline_id, state,
+# creator_user_name, and last_modified belong to the source workspace.
+jq '.spec | del(.id)' pipeline.json > pipeline-target.json
+
+# Edit catalog, target schema, storage, cluster, and expectations, then create.
+# The flag is --json with an @path, not --json-file.
+databricks pipelines create --json @pipeline-target.json`} />
+
+<Callout client:visible variant="warning" title="The new pipeline ID breaks whatever referenced the old one">
+  A recreated pipeline gets a new ID. Any job with a `pipeline_task`, any external orchestrator triggering it, and any dashboard keyed on it are all still pointing at the source ID — which is valid in the target and refers to nothing, or worse, to something else.
+
+  Keep a source-to-target pipeline ID map from this step. It is the same artifact the [job](/pipelines/workflows-jobs), [query](/analytics/sql-queries), and [model](/ml/model-registry) migrations each need for their own IDs, and the reason [`dbxmig bundle`](/templates/automation-toolkit) turns workspace-scoped IDs into variables rather than copying them.
+</Callout>
 
 ## Source and target differences
 
