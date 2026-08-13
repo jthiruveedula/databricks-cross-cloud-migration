@@ -79,14 +79,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run regression job on target runtime
+      # One step, not two: each \`run:\` block is its own shell, so a RUN_ID
+      # captured in an earlier step is gone by the next one.
+      - name: Run regression job and gate on its result
         run: |
-          databricks jobs run-now --job-id "$TARGET_REGRESSION_JOB_ID" \\
-            --python-params '["--baseline", "s3://target-bucket/regression/baseline.json"]'
-      - name: Fail on drift
-        run: |
-          databricks jobs runs get-output --run-id "$RUN_ID" \\
+          set -euo pipefail
+          RUN_ID=$(databricks jobs run-now --json "{
+              \\"job_id\\": \${TARGET_REGRESSION_JOB_ID},
+              \\"python_params\\": [\\"--baseline\\", \\"s3://target-bucket/regression/baseline.json\\"]
+            }" -o json | jq -r '.run_id')
+
+          # get-run-output takes the run id POSITIONALLY. There is no
+          # \`jobs runs get-output\` subcommand.
+          databricks jobs get-run-output "$RUN_ID" \\
             | jq -e '.notebook_output.result == "PASS"'`} />
+
+<Callout client:visible variant="warning" title="A gate that cannot fail correctly is worse than no gate">
+  Three things make the difference between this snippet and one that looks right in a pull request and never runs: the run id has to be **captured**, the two steps have to be **one shell**, and `set -euo pipefail` has to be present or a failing `databricks` call still leaves the step green because `jq` exits zero on the empty input it receives.
+
+  Worth checking on any regression gate you inherit — the failure mode is a check that reports success for months and was never actually asserting anything.
+</Callout>
 
 ## Evidence to capture
 
