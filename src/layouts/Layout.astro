@@ -172,7 +172,13 @@ const pageTitle = title === siteName ? title : `${title} | ${siteName}`;
     <script is:inline>
       (function () {
         function setupCopyButtons() {
-          const pres = document.querySelectorAll('pre:not(:has(.copy-btn))');
+          // Shiki-rendered fenced blocks only. The React CodeBlock island marks
+          // its own <pre> with data-react-codeblock and ships its own Copy
+          // button -- injecting into it mutates the DOM before hydration and
+          // makes React discard and re-render the whole tree.
+          const pres = document.querySelectorAll(
+            'pre:not(:has(.copy-btn)):not([data-react-codeblock])'
+          );
           pres.forEach((pre) => {
             const btn = document.createElement('button');
             btn.type = 'button';

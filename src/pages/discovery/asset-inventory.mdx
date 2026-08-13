@@ -60,7 +60,7 @@ dbxmig -c migration.yaml crossrefs -w workspace-prod.json --csv crossrefs.csv -o
 
 The `workspace` command prints a status table as it goes. Read the right-hand column, not the counts:
 
-<CodeBlock client:visible language="markdown" code={`| Asset class        | Count | Usually owned by                     | Status           |
+<CodeBlock client:visible language="text" showLineNumbers={false} code={`| Asset class        | Count | Usually owned by                     | Status           |
 |--------------------|-------|--------------------------------------|------------------|
 | jobs               | 412   | Platform engineer + owning data team | ok               |
 | pipelines          | 23    | Data engineering                     | ok               |
@@ -117,7 +117,7 @@ Not "everything the API returns." Each field below is either an identifier neede
 
 `dbxmig crossrefs` reads the workspace inventory and extracts every reference from an asset to something it needs.
 
-<CodeBlock client:visible language="markdown" code={`### Blockers -- fix before scheduling a wave
+<CodeBlock client:visible language="text" showLineNumbers={false} code={`### Blockers -- fix before scheduling a wave
 
 | Asset class | Asset                 | Kind           | Reference                          | What breaks                                    |
 |-------------|-----------------------|----------------|------------------------------------|------------------------------------------------|
