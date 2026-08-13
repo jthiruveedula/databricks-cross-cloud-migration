@@ -63,14 +63,29 @@ dbxmig -c examples/migration.fixture.yaml gaps -i tests/fixtures/source_metastor
 
 `gaps` exits non-zero when anything is listed, which makes it usable as a gate in the migration pipeline rather than a report someone reads once.
 
-## The nine commands, in the order you run them
+### The collision the idempotency hides
+
+Every `CREATE` the toolkit emits is `IF NOT EXISTS`. That is what makes `apply` resumable, and it is also why a name already taken in the target produces no error at all. On a shared target metastore — and every Unity Catalog metastore is shared by every workspace in its region — that cuts two ways, both silent:
+
+| What already exists | What `IF NOT EXISTS` does | What you see |
+|---|---|---|
+| Another team's catalog under your target name | Succeeds | The migration lands inside their catalog, under their owner and their grants |
+| A table at your target name | No-op | That table never migrates, and `apply` still reports success |
+
+So `gaps` takes `--target-inventory` and compares intended names against what the target already holds *before* any DDL is generated. An owner mismatch on a catalog, schema, or volume is fatal; an existing table is fatal regardless of owner, because your own table is just as invisible as someone else's. External locations are checked by URL overlap as well as by name, since Unity Catalog rejects a location whose path is nested inside an existing one whatever it is called.
+
+Omitting the flag is allowed, because a genuinely greenfield region has nothing to compare against — but the report then says the check did not run rather than staying quiet about it.
+
+## The fourteen commands, in the order you run them
 
 | Command | Does | Needs a workspace |
 |---|---|---|
 | `validate` | Rejects a broken config before anything runs | no |
 | `inventory` | Exports the source metastore to JSON | yes (source) |
+| `workspace` | Collects the *workspace* plane — jobs, clusters, dashboards, object ACLs — which the metastore inventory does not cover | yes (source) |
+| `crossrefs` | Scans a source tree for references to objects that are moving, so the code changes land in the same wave as the data | no |
 | `plan` | Orders every object by dependency into executable steps | no |
-| `gaps` | Everything with no automated path — **read this first** | no |
+| `gaps` | Everything with no automated path, plus names already taken in the target — **read this first** | no |
 | `ddl` | Emits idempotent target SQL, in dependency order | no |
 | `grants` | Emits translated `GRANT` and `SET OWNER` statements | no |
 | `acls` | Replays **workspace object ACLs** — the permission system Unity Catalog grants do not cover | no |
@@ -84,16 +99,24 @@ dbxmig -c examples/migration.fixture.yaml gaps -i tests/fixtures/source_metastor
 
 dbxmig -c migration.yaml validate
 dbxmig -c migration.yaml inventory -o inventory.json
-dbxmig -c migration.yaml gaps      -i inventory.json -o gaps.md       # fix these first
+
+# Capture the target BEFORE generating anything. A Unity Catalog metastore is
+# shared by every workspace in its region, so the names below may be taken.
+# 'inventory' reads whatever workspace its config points at, so the target
+# needs its own config -- there is no --target switch.
+dbxmig -c target.yaml    inventory -o target-before.json
+dbxmig -c migration.yaml gaps      -i inventory.json -o gaps.md \\
+                                   --target-inventory target-before.json
+
 dbxmig -c migration.yaml ddl       -i inventory.json -o target.sql    # review as a diff
 dbxmig -c migration.yaml grants    -i inventory.json -o grants.sql
 dbxmig -c migration.yaml apply     -i inventory.json                  # dry run, prints SQL
 dbxmig -c migration.yaml apply     -i inventory.json --execute
-dbxmig -c migration.yaml inventory -o target-inventory.json           # now against the target
+dbxmig -c target.yaml    inventory -o target-inventory.json           # the target, after
 dbxmig -c migration.yaml reconcile -i inventory.json -t target-inventory.json`} />
 
-<Callout client:visible variant="tip" title="Only two of the nine need credentials">
-  Planning, DDL generation, grant translation, and reconciliation all run against a JSON inventory. That means the entire migration can be generated, reviewed, and signed off before anyone holds a token for the target account — which is usually the long pole in a regulated environment, not the technical work.
+<Callout client:visible variant="tip" title="Only three of the fourteen need credentials">
+  `inventory` and `workspace` read the source; `apply` writes to the target. Everything else — planning, collision detection, DDL generation, grant translation, bundle output, verification, reconciliation — runs against JSON on disk. The entire migration can be generated, reviewed, and signed off before anyone holds a token for the target account, which in a regulated environment is usually the long pole rather than the technical work.
 </Callout>
 
 ## One config file is the whole contract

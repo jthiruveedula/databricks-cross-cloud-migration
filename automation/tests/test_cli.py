@@ -82,6 +82,46 @@ def test_gaps_exits_nonzero_when_something_needs_a_human(tmp_path, capsys):
     assert "abfss://archive@legacystorage.dfs.core.windows.net" in out
 
 
+def test_gaps_records_that_the_target_was_never_checked(tmp_path, capsys):
+    """Not checking is a stated outcome, not an omission the report stays quiet about."""
+    main(["-c", write_config(tmp_path), "gaps", "-i", FIXTURE])
+    out = capsys.readouterr().out
+    assert "## Target collisions" in out
+    assert "Not checked" in out
+    assert "IF NOT EXISTS" in out
+
+
+def test_gaps_reports_a_catalog_already_owned_by_another_team(tmp_path, capsys):
+    target = tmp_path / "target_metastore.json"
+    target.write_text(
+        json.dumps(
+            {
+                "metastore_id": "99999999-0000-0000-0000-000000000000",
+                "metastore_name": "prod-us-central1",
+                "cloud": "gcp",
+                "region": "us-central1",
+                "catalogs": [{"name": "prod_gcp", "owner": "warehouse-team"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    code = main(
+        [
+            "-c",
+            write_config(tmp_path),
+            "gaps",
+            "-i",
+            FIXTURE,
+            "--target-inventory",
+            str(target),
+        ]
+    )
+    assert code == EXIT_FINDINGS
+    out = capsys.readouterr().out
+    assert "**FATAL**" in out
+    assert "warehouse-team" in out
+
+
 def test_ddl_is_generated_in_order_and_flags_blocked_objects(tmp_path):
     out = str(tmp_path / "target.sql")
     code = main(["-c", write_config(tmp_path), "ddl", "-i", FIXTURE, "-o", out])

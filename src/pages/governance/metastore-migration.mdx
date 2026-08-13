@@ -54,6 +54,8 @@ This matters more than an ownership formality, because the three-level namespace
 
 <Callout client:visible variant="warning" title="Reserve catalog names across the region before the first team migrates, not after the second one collides">
   `northwind_prod` costs nothing to choose on day one and is effectively unfixable on day 400. Renaming a catalog breaks every fully-qualified reference in every notebook, job, view definition, and grant that names it — and the second team through the door is the one forced to pay, having done nothing wrong. Agree the naming convention at the account level, covering every team that will *ever* migrate into the region.
+
+  `dbxmig gaps --target-inventory` checks this mechanically before any DDL is generated — see [the automation toolkit](/templates/automation-toolkit). It is worth running even when you are confident the region is yours, because the failure mode is silence rather than an error.
 </Callout>
 
 ## Inputs required
