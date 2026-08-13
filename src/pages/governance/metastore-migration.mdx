@@ -34,13 +34,32 @@ Northwind Retail, Azure East US → GCP `us-central1`. One metastore, three cata
 | Registered models | 4 | 61 versions of artifacts, not metadata |
 | Grants | 1,847 | Across 62 account groups, none of which exist in GCP yet |
 
-<Callout client:visible variant="warning" title="A metastore is region-scoped — you are always creating a new one, never moving the source">
-  A Unity Catalog metastore is bound to one cloud account/subscription/project **and** one region, and a workspace can only attach to a metastore in its own region. Cross-cloud migration therefore always means standing up a **brand-new metastore** in the target and attaching the target workspace to it — there is no "move" or "clone" operation for the metastore object itself. What migrates is the *content*. Source and target metastores coexist independently throughout; they are never the same object at two points in time.
+<Callout client:visible variant="warning" title="A metastore is scoped to a Databricks account and a region — not to a subscription or project">
+  The binding unit is the **Databricks account**, and the limit is absolute: *"You can create only one metastore per region."* That account sits above every Azure subscription in the Entra ID tenant, every AWS account, and every GCP project underneath it. Four subscriptions migrating into `us-central1` therefore do not get four metastores — they get one, shared, and a workspace can only attach to the metastore in its own region.
+
+  There is no "move" or "clone" operation for the metastore object itself. What migrates is the *content*; source and target metastores coexist independently throughout and are never the same object at two points in time.
+</Callout>
+
+## Who already owns the metastore you are migrating into
+
+Step zero is usually written as "create the target metastore." Verify that first, because two things make it likely you are *attaching* to one rather than creating it: Databricks has enabled new workspaces for Unity Catalog automatically since November 2023, and if any other team reached this region before you, the metastore is already there and it is theirs.
+
+<CodeBlock client:visible language="bash" code={`# Needs account admin. Empty result for the target region means you create it;
+# anything else means you attach, and 'owner' is a person you need to talk to.
+databricks account metastores list -o json \\
+  | jq -r '.[] | select(.region == "us-central1")
+           | "\\(.name)  \\(.metastore_id)  owner=\\(.owner)"'`} />
+
+This matters more than an ownership formality, because the three-level namespace is **metastore-wide**. Northwind Retail is taking `prod`, `staging`, and `sandbox` into `us-central1`. If a second business unit migrates into that region afterwards, they land in this same metastore, and their `prod` collides with ours — and there is no second metastore in the region to escape into.
+
+<Callout client:visible variant="warning" title="Reserve catalog names across the region before the first team migrates, not after the second one collides">
+  `northwind_prod` costs nothing to choose on day one and is effectively unfixable on day 400. Renaming a catalog breaks every fully-qualified reference in every notebook, job, view definition, and grant that names it — and the second team through the door is the one forced to pay, having done nothing wrong. Agree the naming convention at the account level, covering every team that will *ever* migrate into the region.
 </Callout>
 
 ## Inputs required
 
-- Target metastore created and target workspace attached — this is step zero, not part of the table work.
+- Target metastore confirmed — created if the region has none, attached to if it already has one, with its metastore admin identified either way.
+- A catalog naming convention agreed account-wide, not just for this migration's three catalogs.
 - Account-level groups and service principals created in the target account, with a source→target name mapping written down.
 - Target IAM identity built (GCP service account here), and a storage credential wrapping it.
 - A path mapping from every source storage prefix to its target equivalent.

@@ -15,7 +15,7 @@ Databricks abstracts the control plane, but the underlying cloud primitives diff
 
 ## Metastore
 
-A Unity Catalog metastore is region-scoped, one per cloud account/subscription/project per region — moving cloud always means creating a **new** metastore in the target, never relocating the source one. See [metastore migration](/governance/metastore-migration) for what that actually means for sequencing and what content migrates versus what's simply recreated, and [disaster recovery](/governance/disaster-recovery) for designing a *second* target-region metastore once the primary move is done.
+A Unity Catalog metastore is region-scoped, and the limit is one per region per **Databricks account** — not per cloud subscription, AWS account, or GCP project, all of which sit *below* the Databricks account. Every workspace your organization runs in a given target region shares that single metastore. Moving cloud always means a **new** metastore in the target, never relocating the source one. See [metastore migration](/governance/metastore-migration) for what that actually means for sequencing and what content migrates versus what's simply recreated, and [disaster recovery](/governance/disaster-recovery) for designing a *second* target-region metastore once the primary move is done.
 
 Moving the underlying data at multi-TB to multi-PB scale is a network and throughput planning problem in its own right — see [large-scale data transfer](/execution/large-scale-data-transfer) before committing a cutover date based on storage-and-path-rewrite mechanics alone.
 
