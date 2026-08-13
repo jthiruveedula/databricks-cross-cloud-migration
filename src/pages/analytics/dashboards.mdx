@@ -28,12 +28,24 @@ Dashboards sit on top of the [SQL queries](/analytics/sql-queries) and [SQL ware
 
 ## Migration steps
 
-<CodeBlock client:visible language="bash" filename="export_dashboard.sh" code={`# Export a Lakeview dashboard definition
-databricks lakeview export <dashboard-id> --output dashboard.json
+<CodeBlock client:visible language="bash" filename="export_dashboard.sh" code={`# Export from SOURCE. Profiles select the workspace -- there is no
+# --workspace flag on these commands.
+databricks lakeview get <dashboard-id> -p source -o json > dashboard.json
 
-# After rewriting dataset/query references inside dashboard.json:
-databricks lakeview create --json-file dashboard.json --workspace <target-host>
+# Rewrite the embedded dataset/query references and the warehouse id, then
+# strip the server-owned fields the target assigns itself.
+jq 'del(.dashboard_id, .create_time, .update_time, .etag, .lifecycle_state)' \\
+  dashboard.json > dashboard-target.json
+
+# Create in TARGET. The flag is --json with an @path, not --json-file.
+databricks lakeview create --json @dashboard-target.json -p target
 `} />
+
+<Callout client:visible variant="warning" title="The warehouse ID is embedded in the dashboard, not attached to it">
+  A Lakeview dashboard carries its datasets and the warehouse they run against inside its own definition. Recreating it without rewriting that `warehouse_id` produces a dashboard that imports cleanly, renders its layout, and fails on every query — or, if a warehouse with that ID happens to exist in the target, quietly runs against the wrong one.
+
+  It is the same workspace-scoped-ID problem as [queries](/analytics/sql-queries), [jobs](/pipelines/workflows-jobs), and [pipelines](/pipelines/dlt-lakeflow): resolve the target ID, do not carry the source one.
+</Callout>
 
 ## Visual parity validation
 

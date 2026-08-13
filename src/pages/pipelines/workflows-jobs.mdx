@@ -29,11 +29,24 @@ Databricks Workflows is the native orchestrator for notebooks, Python, SQL, and 
 
 ## Export and import
 
-<CodeBlock client:visible language="bash" code={`# Export all jobs from source workspace
-databricks jobs list --output json | jq '.jobs[] | {job_id, settings}' > jobs.json
+<CodeBlock client:visible language="bash" code={`# Export all jobs from source workspace.
+# List endpoints paginate -- always check the count against the workspace UI
+# before trusting the export, or you migrate a page and report success.
+databricks jobs list -o json > jobs-raw.json
+jq 'if type=="array" then . else .jobs end | length' jobs-raw.json
 
-# Create a job in target workspace after editing JSON
-databricks jobs create --json-file job-target.json`} />
+jq 'if type=="array" then . else .jobs end | .[] | {job_id, settings}' \\
+  jobs-raw.json > jobs.json
+
+# Create a job in the target workspace after editing the JSON.
+# The flag is --json with an @path, not --json-file.
+databricks jobs create --json @job-target.json`} />
+
+<Callout client:visible variant="warning" title="Strip the server-owned fields before re-creating, or the create fails">
+  A job exported from source carries `job_id`, `created_time`, and `creator_user_name`. Those belong to the source workspace: the target assigns its own. Post the `settings` object, not the whole exported record.
+
+  And the new `job_id` is what breaks things downstream — every [external orchestrator](/pipelines/external-orchestrators) reference, every `run-now` call, and anything pinned to the old number. Keep a source-to-target job ID map from this step; it is the same artifact the model and query migrations need for their own IDs. [`dbxmig bundle`](/templates/automation-toolkit) does this transformation for you, including turning the workspace-scoped IDs into variables.
+</Callout>
 
 ## Task reference rewrites
 
