@@ -9,6 +9,7 @@ import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Tabs from '../../components/Tabs.tsx';
 import Accordion from '../../components/Accordion.tsx';
+import MetastoreDependencyStack from '../../components/diagrams/MetastoreDependencyStack.tsx';
 
 # Metastore migration
 
@@ -48,6 +49,8 @@ Northwind Retail, Azure East US → GCP `us-central1`. One metastore, three cata
 ## The dependency order, and what each violation actually looks like
 
 Objects have to be created in this order. The right-hand column is what you get if you skip ahead.
+
+<MetastoreDependencyStack />
 
 | # | Tier | Skip it and you see |
 |---|---|---|
