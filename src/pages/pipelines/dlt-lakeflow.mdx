@@ -7,6 +7,7 @@ description: 'Migrate Delta Live Tables and Lakeflow pipelines across clouds.'
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # DLT and Lakeflow
 
@@ -70,6 +71,14 @@ For pipelines with streaming sources, checkpoint handling is not a copy-the-file
 <Callout client:visible variant="warning" title="Checkpoints are not portable across a source-connector change">
   If the migration changes the streaming source (not just its cloud location), plan for a fresh-start checkpoint as the default assumption, not an edge case — the old checkpoint's offsets have no meaning against a different source connector. Validate this decision explicitly per pipeline rather than assuming a uniform strategy across all streaming pipelines in the wave.
 </Callout>
+
+<ArchifyDiagram
+  client:visible
+  name="event-bridge.sequence"
+  type="sequence"
+  title="One event crossing from Event Hubs to Pub/Sub and landing in Delta"
+  caption="Follow a single message through the bridge. The streaming job acks only after the Delta commit, and redelivery past the ack deadline is absorbed by a MERGE on event id — which is what makes an at-least-once source safe to land in an exactly-once table."
+/>
 
 ## Validation
 

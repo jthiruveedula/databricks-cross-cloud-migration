@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Databricks Cutover Runbook: Azure to GCP",
+    "output": "cutover-runbook.workflow.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "prepare",
+        "label": "Assess and provision",
+        "focus": [
+          "assess",
+          "provision",
+          "jobs"
+        ],
+        "note": "Nothing moves until the estate is inventoried and the GCP workspace exists as code."
+      },
+      {
+        "id": "move",
+        "label": "Copy and dual-run",
+        "focus": [
+          "bulk",
+          "jobs",
+          "dual"
+        ],
+        "note": "Bulk copy and dual-run overlap while Azure stays authoritative."
+      },
+      {
+        "id": "switch",
+        "label": "Freeze, verify, switch",
+        "focus": [
+          "gate",
+          "cutover",
+          "rollback"
+        ],
+        "note": "The only irreversible step is repointing consumers, and it happens after reconciliation."
+      }
+    ],
+    "viewBox": [
+      1240,
+      660
+    ],
+    "animation": "trace"
+  },
+  "lanes": [
+    {
+      "id": "platform",
+      "label": "Platform as code"
+    },
+    {
+      "id": "data",
+      "label": "Data + catalog"
+    },
+    {
+      "id": "verify",
+      "label": "Freeze + verification"
+    },
+    {
+      "id": "exceptions",
+      "label": "Rollback",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "prepare",
+      "label": "Prepare",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "migrate",
+      "label": "Migrate + dual-run",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "switch",
+      "label": "Freeze + cutover",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "dual_window",
+      "label": "Dual-run window",
+      "lane": "data",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": [
+    "assess",
+    "provision",
+    "jobs",
+    "dual",
+    "gate",
+    "cutover"
+  ],
+  "nodes": [
+    {
+      "id": "assess",
+      "lane": "platform",
+      "col": 0,
+      "type": "frontend",
+      "label": "Assess estate",
+      "sublabel": "UCX inventory"
+    },
+    {
+      "id": "provision",
+      "lane": "platform",
+      "col": 1,
+      "type": "security",
+      "label": "Provision GCP",
+      "sublabel": "Terraform",
+      "tag": "as code"
+    },
+    {
+      "id": "jobs",
+      "lane": "platform",
+      "col": 3,
+      "type": "backend",
+      "label": "Deploy bundles",
+      "sublabel": "jobs + ML"
+    },
+    {
+      "id": "bulk",
+      "lane": "data",
+      "col": 2,
+      "type": "cloud",
+      "label": "Bulk copy",
+      "sublabel": "ADLS to GCS"
+    },
+    {
+      "id": "dual",
+      "lane": "data",
+      "col": 3,
+      "type": "backend",
+      "label": "Dual-run",
+      "sublabel": "DEEP CLONE",
+      "tag": "Azure primary"
+    },
+    {
+      "id": "gate",
+      "lane": "verify",
+      "col": 4,
+      "type": "security",
+      "label": "Freeze + check",
+      "sublabel": "read-only, diff",
+      "tag": "blocking"
+    },
+    {
+      "id": "cutover",
+      "lane": "verify",
+      "col": 5,
+      "type": "cloud",
+      "label": "Repoint",
+      "sublabel": "BI, apps, models"
+    },
+    {
+      "id": "rollback",
+      "lane": "exceptions",
+      "col": 5,
+      "type": "messagebus",
+      "label": "Roll back",
+      "sublabel": "unfreeze Azure",
+      "tag": "on-call"
+    }
+  ],
+  "edges": [
+    {
+      "from": "assess",
+      "to": "provision",
+      "variant": "emphasis"
+    },
+    {
+      "from": "provision",
+      "to": "jobs",
+      "variant": "emphasis"
+    },
+    {
+      "from": "provision",
+      "to": "bulk",
+      "label": "buckets ready",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        260,
+        81
+      ]
+    },
+    {
+      "from": "jobs",
+      "to": "dual",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "bulk",
+      "to": "dual",
+      "label": "incremental",
+      "role": "branch",
+      "labelAt": [
+        365,
+        205
+      ]
+    },
+    {
+      "from": "dual",
+      "to": "gate",
+      "variant": "emphasis"
+    },
+    {
+      "from": "gate",
+      "to": "cutover",
+      "label": "diff empty",
+      "variant": "emphasis",
+      "labelAt": [
+        563,
+        329
+      ]
+    },
+    {
+      "from": "gate",
+      "to": "rollback",
+      "label": "diff fails",
+      "variant": "security",
+      "role": "error",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        563,
+        415
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Reversible until freeze",
+      "items": [
+        "Bulk copy and dual-run run for days while Azure still serves traffic",
+        "Jobs, notebooks and MLflow models ship as Databricks Asset Bundles"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Blocking gates",
+      "items": [
+        "Reconciliation must return an empty diff before consumers are repointed",
+        "Grants are compared against the exported Azure ACL set"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "After cutover",
+      "items": [
+        "Azure workspace stays read-only for one billing cycle",
+        "Decommission only after GCP carries a full month of jobs"
+      ]
+    }
+  ]
+}

@@ -8,10 +8,19 @@ import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Tabs from '../../components/Tabs.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Azure → GCP
 
 Entra ID federation, ADLS Gen2 paths, and VNet Private Link have no direct GCP equivalent — identity, storage, and networking are rebuilt against Google Cloud IAM, Cloud Storage, and VPC with Private Service Connect. See the [cross-cloud equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix) for the full reference; this page sequences the Azure → GCP-specific work.
+
+<ArchifyDiagram
+  client:visible
+  name="estate-migration.architecture"
+  type="architecture"
+  title="What sits on each side, and what crosses between them"
+  caption="Four independent lanes — events, compute, storage, catalog — each with its own source, its own migration mechanism, and its own target. Nothing is 'moved': the GCP side is provisioned from code and then loaded. Use the guided views to isolate one lane at a time."
+/>
 
 ## Sequencing
 
