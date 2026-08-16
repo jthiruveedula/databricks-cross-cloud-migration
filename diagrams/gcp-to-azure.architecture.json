@@ -1,0 +1,360 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Databricks Platform Reset: GCP to Azure",
+    "output": "gcp-to-azure.architecture.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "storage-lane",
+        "label": "Storage lane",
+        "focus": [
+          "src_storage",
+          "transfer",
+          "dst_storage"
+        ],
+        "note": "GCS buckets objects move to ADLS Gen2 by bulk copy plus incremental catch-up."
+      },
+      {
+        "id": "catalog-lane",
+        "label": "Catalog and schema lane",
+        "focus": [
+          "src_catalog",
+          "catalog_sync",
+          "dst_catalog",
+          "dst_storage"
+        ],
+        "note": "Metastore, schemas, tables and grants are replayed onto Unity Catalog on Azure."
+      },
+      {
+        "id": "event-lane",
+        "label": "Event lane",
+        "focus": [
+          "src_events",
+          "bridge",
+          "dst_events",
+          "dst_compute"
+        ],
+        "note": "GCP event traffic is bridged onto Event Hubs + Event Grid."
+      },
+      {
+        "id": "compute-lane",
+        "label": "Compute, jobs and ML",
+        "focus": [
+          "src_compute",
+          "iac",
+          "dst_compute"
+        ],
+        "note": "Clusters, jobs, notebooks and MLflow models are redeployed as code."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "src_events",
+      "type": "messagebus",
+      "label": "Pub/Sub",
+      "sublabel": "topics and subscriptions",
+      "pos": [
+        60,
+        70
+      ],
+      "size": [
+        200,
+        56
+      ]
+    },
+    {
+      "id": "src_compute",
+      "type": "backend",
+      "label": "Databricks on GCP",
+      "sublabel": "GKE clusters, jobs, MLflow",
+      "pos": [
+        60,
+        200
+      ],
+      "size": [
+        200,
+        56
+      ]
+    },
+    {
+      "id": "src_storage",
+      "type": "cloud",
+      "label": "GCS buckets",
+      "sublabel": "Delta lakehouse",
+      "pos": [
+        60,
+        330
+      ],
+      "size": [
+        200,
+        56
+      ]
+    },
+    {
+      "id": "src_catalog",
+      "type": "database",
+      "label": "Unity Catalog (GCP)",
+      "sublabel": "external locations",
+      "pos": [
+        60,
+        460
+      ],
+      "size": [
+        200,
+        56
+      ]
+    },
+    {
+      "id": "bridge",
+      "type": "messagebus",
+      "label": "Event bridge",
+      "sublabel": "Functions relay",
+      "pos": [
+        520,
+        70
+      ],
+      "size": [
+        200,
+        56
+      ]
+    },
+    {
+      "id": "iac",
+      "type": "security",
+      "label": "Terraform + Asset Bundles",
+      "sublabel": "workspace as code",
+      "pos": [
+        520,
+        200
+      ],
+      "size": [
+        200,
+        56
+      ]
+    },
+    {
+      "id": "transfer",
+      "type": "cloud",
+      "label": "AzCopy / Storage Mover",
+      "sublabel": "bulk then incremental",
+      "pos": [
+        520,
+        330
+      ],
+      "size": [
+        200,
+        56
+      ]
+    },
+    {
+      "id": "catalog_sync",
+      "type": "backend",
+      "label": "UCX + DEEP CLONE",
+      "sublabel": "metastore replay",
+      "pos": [
+        520,
+        460
+      ],
+      "size": [
+        200,
+        56
+      ]
+    },
+    {
+      "id": "dst_events",
+      "type": "messagebus",
+      "label": "Event Hubs + Event Grid",
+      "sublabel": "ingest and file events",
+      "pos": [
+        980,
+        70
+      ],
+      "size": [
+        200,
+        56
+      ]
+    },
+    {
+      "id": "dst_compute",
+      "type": "backend",
+      "label": "Azure Databricks",
+      "sublabel": "clusters, jobs, MLflow",
+      "pos": [
+        980,
+        200
+      ],
+      "size": [
+        200,
+        56
+      ]
+    },
+    {
+      "id": "dst_storage",
+      "type": "cloud",
+      "label": "ADLS Gen2",
+      "sublabel": "Delta and Parquet",
+      "pos": [
+        980,
+        330
+      ],
+      "size": [
+        200,
+        56
+      ]
+    },
+    {
+      "id": "dst_catalog",
+      "type": "database",
+      "label": "Unity Catalog (Azure)",
+      "sublabel": "schemas, tables, grants",
+      "pos": [
+        980,
+        460
+      ],
+      "size": [
+        200,
+        56
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "GCP / us-central1 (source, read-only at cutover)",
+      "wraps": [
+        "src_events",
+        "src_compute",
+        "src_storage",
+        "src_catalog"
+      ],
+      "pad": 30
+    },
+    {
+      "kind": "security-group",
+      "label": "migration control plane",
+      "wraps": [
+        "bridge",
+        "iac",
+        "transfer",
+        "catalog_sync"
+      ],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "Azure / East US 2 (target)",
+      "wraps": [
+        "dst_events",
+        "dst_compute",
+        "dst_storage",
+        "dst_catalog"
+      ],
+      "pad": 30
+    }
+  ],
+  "connections": [
+    {
+      "from": "src_events",
+      "to": "bridge",
+      "label": "capture stream"
+    },
+    {
+      "from": "bridge",
+      "to": "dst_events",
+      "label": "publish",
+      "variant": "emphasis"
+    },
+    {
+      "from": "src_compute",
+      "to": "iac",
+      "label": "export workspace state"
+    },
+    {
+      "from": "iac",
+      "to": "dst_compute",
+      "label": "provision clusters and jobs",
+      "variant": "emphasis"
+    },
+    {
+      "from": "src_storage",
+      "to": "transfer",
+      "label": "read over Private Service Connect",
+      "variant": "security"
+    },
+    {
+      "from": "transfer",
+      "to": "dst_storage",
+      "label": "copy objects",
+      "variant": "emphasis"
+    },
+    {
+      "from": "src_catalog",
+      "to": "catalog_sync",
+      "label": "export schemas and grants"
+    },
+    {
+      "from": "catalog_sync",
+      "to": "dst_catalog",
+      "label": "recreate tables",
+      "variant": "emphasis"
+    },
+    {
+      "from": "dst_events",
+      "to": "dst_compute",
+      "label": "streaming ingest",
+      "variant": "dashed",
+      "labelAt": [
+        1080,
+        163
+      ]
+    },
+    {
+      "from": "dst_compute",
+      "to": "dst_storage",
+      "label": "read and write Delta",
+      "labelAt": [
+        1080,
+        293
+      ]
+    },
+    {
+      "from": "dst_catalog",
+      "to": "dst_storage",
+      "label": "governs paths",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Move as code, not by hand",
+      "items": [
+        "Terraform provider defines workspaces, pools, policies and metastore",
+        "Databricks Asset Bundles carry jobs, notebooks and pipelines",
+        "Service accounts become Azure-native identities"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Data and catalog",
+      "items": [
+        "AzCopy / Storage Mover does the bulk pass, then incremental deltas",
+        "DEEP CLONE rebuilds managed Delta tables on ADLS Gen2 with history",
+        "External locations and grants are replayed, never recreated by hand"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Cutover safety",
+      "items": [
+        "GCP workspace goes read-only before the final incremental pass",
+        "Row counts, checksums and MLflow model versions are diffed",
+        "Event bridge keeps both clouds fed until target consumers are verified"
+      ]
+    }
+  ]
+}

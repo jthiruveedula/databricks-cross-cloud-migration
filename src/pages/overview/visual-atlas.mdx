@@ -1,16 +1,18 @@
 ---
 title: 'Visual atlas'
 layout: ../../layouts/Layout.astro
-description: 'Five interactive views of one Azure to GCP migration — architecture, data flow, runbook, event path, and per-table state.'
+description: 'Interactive diagrams for the migration: architecture, data flow, runbook, event path, per-table state, and all six cloud-pair topologies.'
 hideToc: true
 ---
 
 import Callout from '../../components/Callout.tsx';
+import Card from '../../components/Card.tsx';
 import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
+import { withBase } from '../../lib/paths';
 
 # Visual atlas
 
-Five views of the same migration, each answering a question the others cannot. The worked example throughout is **Azure → GCP**, but the shapes hold for any cross-cloud pair — swap ADLS Gen2 for S3, Pub/Sub for Kinesis, and the lanes, gates, and states are unchanged.
+Five views of the same migration, each answering a question the others cannot. The worked example throughout is **Azure → GCP**, but the shapes hold for any cross-cloud pair — swap ADLS Gen2 for S3, Pub/Sub for Kinesis, and the lanes, gates, and states are unchanged. All six cloud-pair architecture diagrams are at the bottom of this page.
 
 Each diagram is interactive: switch light/dark, play the guided views, trace a route between two nodes, or export the current state as PNG, SVG, or WebM. Every diagram also appears inline on the page that owns its subject, linked below.
 
@@ -23,7 +25,7 @@ Each diagram is interactive: switch light/dark, play the guided views, trace a r
 <ArchifyDiagram
   client:visible
   height={920}
-  name="estate-migration.architecture"
+  name="azure-to-gcp.architecture"
   type="architecture"
   title="Estate lift-and-shift: source, migration control plane, target"
   caption="Four independent lanes — events, compute, storage, catalog. The middle column is the migration machinery itself, which is temporary and should be deleted after decommissioning."
@@ -82,6 +84,21 @@ Owned by [DLT / Lakeflow pipelines](/pipelines/dlt-lakeflow), where the checkpoi
 />
 
 Owned by [data reconciliation](/validation/data-reconciliation). Mismatch triage is in the same page's *Handling mismatches* section.
+
+## 6. Every cloud pair, same shape
+
+The four-lane architecture above is not Azure→GCP-specific — it is the shape of a Databricks platform reset between *any* two clouds. Each pair below swaps in that cloud's own storage, events, identity, and transfer mechanism; the lanes, the migration-control-plane column, and the cutover-safety cards stay structurally identical. Open a pair inline on its own page, where the diagram sits beside the identity-federation table and path-rewrite examples it corresponds to.
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <Card href={withBase('/cloud-mappings/azure-to-gcp')} title="Azure → GCP" description="ADLS Gen2 → GCS, Event Hubs → Pub/Sub, Entra ID → Google Cloud Identity." />
+  <Card href={withBase('/cloud-mappings/aws-to-azure')} title="AWS → Azure" description="S3 → ADLS Gen2, EventBridge → Event Hubs, IAM Identity Center → Entra ID." />
+  <Card href={withBase('/cloud-mappings/azure-to-aws')} title="Azure → AWS" description="ADLS Gen2 → S3, Event Hubs → EventBridge, Entra ID → IAM Identity Center." />
+  <Card href={withBase('/cloud-mappings/aws-to-gcp')} title="AWS → GCP" description="S3 → GCS, EventBridge → Pub/Sub, IAM Identity Center → Google Cloud Identity." />
+  <Card href={withBase('/cloud-mappings/gcp-to-azure')} title="GCP → Azure" description="GCS → ADLS Gen2, Pub/Sub → Event Hubs, Google Cloud Identity → Entra ID." />
+  <Card href={withBase('/cloud-mappings/gcp-to-aws')} title="GCP → AWS" description="GCS → S3, Pub/Sub → EventBridge, Google Cloud Identity → IAM Identity Center." />
+</div>
+
+The full [cross-cloud equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix) is the construct-by-construct reference these six diagrams are drawn from.
 
 ## Editing these diagrams
 

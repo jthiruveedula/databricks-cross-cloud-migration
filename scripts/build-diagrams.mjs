@@ -27,7 +27,12 @@ const ARCHIFY_BIN = path.join(ARCHIFY_HOME, 'bin', 'archify.mjs');
 // Diagram type is not derivable from the file name alone -- keep the mapping explicit
 // so a renamed spec fails loudly here instead of being rendered as the wrong type.
 const SPECS = [
-  { type: 'architecture', name: 'estate-migration.architecture' },
+  { type: 'architecture', name: 'azure-to-gcp.architecture' },
+  { type: 'architecture', name: 'aws-to-azure.architecture' },
+  { type: 'architecture', name: 'azure-to-aws.architecture' },
+  { type: 'architecture', name: 'aws-to-gcp.architecture' },
+  { type: 'architecture', name: 'gcp-to-azure.architecture' },
+  { type: 'architecture', name: 'gcp-to-aws.architecture' },
   { type: 'dataflow', name: 'table-migration.dataflow' },
   { type: 'workflow', name: 'cutover-runbook.workflow' },
   { type: 'sequence', name: 'event-bridge.sequence' },

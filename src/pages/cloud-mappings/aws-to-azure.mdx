@@ -8,10 +8,19 @@ import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Tabs from '../../components/Tabs.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # AWS → Azure
 
 AWS IAM roles, S3 paths, and VPC PrivateLink connections do not carry over to Azure — identity, storage, and networking are rebuilt against Entra ID, ADLS Gen2, and VNet Private Link. See the [cross-cloud equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix) for the full reference; this page sequences the AWS → Azure-specific work.
+
+<ArchifyDiagram
+  client:visible
+  name="aws-to-azure.architecture"
+  type="architecture"
+  title="What sits on each side, and what crosses between them"
+  caption="Four independent lanes — events, compute, storage, catalog — each with its own source, its own migration mechanism, and its own target on Azure. Nothing is 'moved': the Azure side is provisioned from code and then loaded."
+/>
 
 ## Sequencing
 
