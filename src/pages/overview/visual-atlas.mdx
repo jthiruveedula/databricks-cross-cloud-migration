@@ -1,7 +1,7 @@
 ---
 title: 'Visual atlas'
 layout: ../../layouts/Layout.astro
-description: 'Interactive diagrams for the migration: architecture, data flow, runbook, event path, per-table state, and all six cloud-pair topologies.'
+description: 'Interactive diagrams for the migration: architecture, data flow, runbook, event path, per-table state, all six cloud-pair topologies, and the discovery phase that scopes them.'
 hideToc: true
 ---
 
@@ -99,6 +99,17 @@ The four-lane architecture above is not Azure→GCP-specific — it is the shape
 </div>
 
 The full [cross-cloud equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix) is the construct-by-construct reference these six diagrams are drawn from.
+
+## 7. Discovery, before any of the above
+
+None of the first five diagrams have anything to sequence until discovery produces it. Four more diagrams cover that phase — the fan-out that collects the estate, the graph that clusters it into candidate waves, the scoring that tiers it, and the pattern that automates the data-gathering slice without letting a model touch raw rows.
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <Card href={withBase('/discovery/asset-inventory')} title="Asset inventory" description="Metastore plane and workspace plane, collected separately, cross-referenced on Day 3 into shared-dependency clusters." />
+  <Card href={withBase('/discovery/dependency-mapping')} title="Dependency mapping" description="Lineage to a graph, weakly-connected components to candidate wave boundaries — with the two things a human still has to resolve." />
+  <Card href={withBase('/discovery/risk-assessment')} title="Risk assessment" description="Seven weighted dimensions to a tier, with owner engagement deliberately inverted." />
+  <Card href={withBase('/discovery/ai-assisted-assessment')} title="AI-assisted assessment" description="Deterministic Spark SQL for every section except the narrative, which only ever sees an aggregated report." />
+</div>
 
 ## Editing these diagrams
 

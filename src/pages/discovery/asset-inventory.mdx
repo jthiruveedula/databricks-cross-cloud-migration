@@ -8,12 +8,21 @@ import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Accordion from '../../components/Accordion.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Asset inventory
 
 You have been told to "inventory the Databricks estate." This page is the five days that follow: what to run, what to keep, who to chase, and how to know when you are actually done.
 
 Worked on the same estate as the rest of the runbook — Northwind Retail, Azure East US → GCP, 3 workspaces, ~1,900 assets.
+
+<ArchifyDiagram
+  client:visible
+  name="asset-inventory.dataflow"
+  type="dataflow"
+  title="Two planes, cross-referenced, signed off"
+  caption="The metastore plane and the workspace plane are collected separately because they cover different things. Day 3's cross-reference step is what turns two counts into the shared-dependency clusters wave planning actually consumes."
+/>
 
 ## The five-day shape
 

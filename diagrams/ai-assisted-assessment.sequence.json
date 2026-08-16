@@ -1,0 +1,224 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "AI-Assisted Assessment: Deterministic Queries, One Narrating Prompt",
+    "output": "ai-assisted-assessment.sequence.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "deterministic",
+        "label": "Deterministic section",
+        "focus": [
+          "steward",
+          "notebook",
+          "system_tables"
+        ],
+        "note": "Every query above the summary is plain Spark SQL — reproducible and auditable, no model call."
+      },
+      {
+        "id": "narration",
+        "label": "The one LLM call",
+        "focus": [
+          "notebook",
+          "llm"
+        ],
+        "note": "ai_query() sees only the already-aggregated JSON report, never raw row contents or credentials."
+      },
+      {
+        "id": "genie",
+        "label": "Conversational follow-up",
+        "focus": [
+          "steward",
+          "genie",
+          "system_tables"
+        ],
+        "note": "Genie answers a follow-up by generating and executing a new governed query, not by hallucinating."
+      }
+    ],
+    "column_fit": "spread"
+  },
+  "participants": [
+    {
+      "id": "steward",
+      "type": "external",
+      "label": "Migration Steward",
+      "sublabel": "asks the questions"
+    },
+    {
+      "id": "notebook",
+      "type": "backend",
+      "label": "Assessment Notebook",
+      "sublabel": "Databricks Assistant"
+    },
+    {
+      "id": "system_tables",
+      "type": "database",
+      "label": "System Tables",
+      "sublabel": "governed, read-only"
+    },
+    {
+      "id": "llm",
+      "type": "cloud",
+      "label": "ai_query() LLM",
+      "sublabel": "narrative only"
+    },
+    {
+      "id": "genie",
+      "type": "frontend",
+      "label": "Genie Space",
+      "sublabel": "conversational"
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 320,
+      "label": "Deterministic: 4 queries"
+    },
+    {
+      "from": 332,
+      "to": 460,
+      "label": "One model call"
+    },
+    {
+      "from": 472,
+      "to": 660,
+      "label": "Conversational follow-up"
+    }
+  ],
+  "messages": [
+    {
+      "from": "steward",
+      "to": "notebook",
+      "y": 180,
+      "label": "run assessment",
+      "variant": "emphasis"
+    },
+    {
+      "from": "notebook",
+      "to": "system_tables",
+      "y": 222,
+      "label": "workspaces, tables, lineage, grants",
+      "variant": "emphasis"
+    },
+    {
+      "from": "system_tables",
+      "to": "notebook",
+      "y": 264,
+      "label": "rows",
+      "variant": "return"
+    },
+    {
+      "from": "notebook",
+      "to": "llm",
+      "y": 362,
+      "label": "aggregated report only",
+      "variant": "security",
+      "note": "aggregated to JSON first"
+    },
+    {
+      "from": "llm",
+      "to": "notebook",
+      "y": 404,
+      "label": "narrative summary",
+      "variant": "return"
+    },
+    {
+      "from": "notebook",
+      "to": "steward",
+      "y": 446,
+      "label": "Markdown report"
+    },
+    {
+      "from": "steward",
+      "to": "genie",
+      "y": 502,
+      "label": "follow-up question",
+      "variant": "dashed"
+    },
+    {
+      "from": "genie",
+      "to": "system_tables",
+      "y": 544,
+      "label": "new governed query",
+      "variant": "emphasis"
+    },
+    {
+      "from": "system_tables",
+      "to": "genie",
+      "y": 586,
+      "label": "rows",
+      "variant": "return"
+    },
+    {
+      "from": "genie",
+      "to": "steward",
+      "y": 628,
+      "label": "answer",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "notebook",
+      "from": 174,
+      "to": 470,
+      "type": "backend"
+    },
+    {
+      "participant": "system_tables",
+      "from": 216,
+      "to": 272,
+      "type": "database"
+    },
+    {
+      "participant": "llm",
+      "from": 356,
+      "to": 412,
+      "type": "cloud"
+    },
+    {
+      "participant": "genie",
+      "from": 496,
+      "to": 636,
+      "type": "frontend"
+    },
+    {
+      "participant": "system_tables",
+      "from": 538,
+      "to": 594,
+      "type": "database"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "The SQL is deterministic",
+      "items": [
+        "Every query above the narrative summary is plain Spark SQL — no model call, fully reproducible",
+        "The four queries are the same ones this runbook already documents: workspaces, assets, lineage, grants",
+        "Degree count from the lineage query approximates dependency mapping's cluster signal for a one-shot report"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Only the last step touches an LLM",
+      "items": [
+        "ai_query() sees only the already-aggregated JSON — counts, table names, hotspot lists",
+        "Never raw row contents, column values, or credentials cross into the model call",
+        "This is the data-boundary this runbook asks for everywhere an LLM appears"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Genie doesn't hallucinate the follow-up",
+      "items": [
+        "A follow-up question triggers a new governed SQL query, not a guessed answer",
+        "The same reconciliation discipline as the rest of this runbook: verify, don't assume",
+        "Works equally as a Lakeflow Job for the fully unattended, scheduled version"
+      ]
+    }
+  ]
+}
