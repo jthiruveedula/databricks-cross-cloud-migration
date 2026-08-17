@@ -1,0 +1,242 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "One Event from Azure Event Hubs to Pub/Sub and Delta on GCS",
+    "output": "event-bridge.sequence.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "azure-side",
+        "label": "Azure side",
+        "focus": [
+          "producer",
+          "evhub",
+          "relay"
+        ],
+        "note": "Producers keep writing to Event Hubs; only the relay is new."
+      },
+      {
+        "id": "gcp-delivery",
+        "label": "Delivery into GCP",
+        "focus": [
+          "relay",
+          "pubsub",
+          "stream",
+          "delta"
+        ],
+        "note": "Pub/Sub carries the event to a Databricks Structured Streaming job on GCP."
+      },
+      {
+        "id": "guarantees",
+        "label": "Redelivery and dedupe",
+        "focus": [
+          "pubsub",
+          "stream",
+          "delta"
+        ],
+        "note": "At-least-once delivery is made effectively-once by an idempotent MERGE on event id."
+      }
+    ],
+    "viewBox": [
+      1180,
+      600
+    ],
+    "column_fit": "spread",
+    "animation": "trace"
+  },
+  "participants": [
+    {
+      "id": "producer",
+      "type": "external",
+      "label": "Producer",
+      "sublabel": "Azure workload"
+    },
+    {
+      "id": "evhub",
+      "type": "messagebus",
+      "label": "Event Hubs",
+      "sublabel": "source topic"
+    },
+    {
+      "id": "relay",
+      "type": "backend",
+      "label": "Relay",
+      "sublabel": "Azure Function"
+    },
+    {
+      "id": "pubsub",
+      "type": "messagebus",
+      "label": "Pub/Sub",
+      "sublabel": "GCP topic"
+    },
+    {
+      "id": "stream",
+      "type": "backend",
+      "label": "Streaming job",
+      "sublabel": "Databricks on GCP"
+    },
+    {
+      "id": "delta",
+      "type": "database",
+      "label": "Delta table",
+      "sublabel": "GCS + Unity Catalog"
+    }
+  ],
+  "segments": [
+    {
+      "from": 160,
+      "to": 258,
+      "label": "Publish on Azure"
+    },
+    {
+      "from": 270,
+      "to": 378,
+      "label": "Bridge into GCP"
+    },
+    {
+      "from": 390,
+      "to": 528,
+      "label": "Redelivery + dedupe"
+    }
+  ],
+  "messages": [
+    {
+      "from": "producer",
+      "to": "evhub",
+      "y": 176,
+      "label": "publish event",
+      "variant": "emphasis"
+    },
+    {
+      "from": "evhub",
+      "to": "relay",
+      "y": 210,
+      "label": "capture batch",
+      "variant": "default"
+    },
+    {
+      "from": "relay",
+      "to": "pubsub",
+      "y": 244,
+      "label": "publish with ordering key",
+      "variant": "emphasis"
+    },
+    {
+      "from": "pubsub",
+      "to": "stream",
+      "y": 292,
+      "label": "pull subscription",
+      "variant": "emphasis"
+    },
+    {
+      "from": "stream",
+      "to": "delta",
+      "y": 326,
+      "label": "append micro-batch",
+      "variant": "default"
+    },
+    {
+      "from": "delta",
+      "to": "stream",
+      "y": 360,
+      "label": "commit version",
+      "variant": "return"
+    },
+    {
+      "from": "stream",
+      "to": "pubsub",
+      "y": 408,
+      "label": "ack after commit",
+      "variant": "dashed"
+    },
+    {
+      "from": "pubsub",
+      "to": "stream",
+      "y": 442,
+      "label": "redeliver past deadline",
+      "variant": "dashed"
+    },
+    {
+      "from": "stream",
+      "to": "delta",
+      "y": 476,
+      "label": "MERGE on event id",
+      "variant": "security"
+    },
+    {
+      "from": "delta",
+      "to": "stream",
+      "y": 510,
+      "label": "no duplicate rows",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "relay",
+      "from": 204,
+      "to": 252,
+      "type": "backend"
+    },
+    {
+      "participant": "pubsub",
+      "from": 238,
+      "to": 300,
+      "type": "messagebus"
+    },
+    {
+      "participant": "stream",
+      "from": 286,
+      "to": 416,
+      "type": "backend"
+    },
+    {
+      "participant": "delta",
+      "from": 320,
+      "to": 368,
+      "type": "database"
+    },
+    {
+      "participant": "stream",
+      "from": 436,
+      "to": 520,
+      "type": "backend"
+    },
+    {
+      "participant": "delta",
+      "from": 470,
+      "to": 520,
+      "type": "database"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Producers do not move first",
+      "items": [
+        "Azure producers keep writing to Event Hubs during the whole migration",
+        "The relay is the only new Azure component and it is disposable",
+        "Ordering key preserves per-partition order across the bridge"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Delivery is at-least-once",
+      "items": [
+        "Pub/Sub redelivers whenever the ack deadline passes",
+        "The streaming job acks only after the Delta commit",
+        "Checkpoints live on GCS and are never copied from Azure"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Effectively-once landing",
+      "items": [
+        "MERGE on event id makes redelivery harmless",
+        "Delta commit version is the durable record, not the ack",
+        "Cutover removes the relay, producers repoint to Pub/Sub directly"
+      ]
+    }
+  ]
+}

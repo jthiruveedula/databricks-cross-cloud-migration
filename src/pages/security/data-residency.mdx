@@ -8,6 +8,7 @@ import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Accordion from '../../components/Accordion.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Data residency and classification
 
@@ -74,6 +75,14 @@ That last pair is the highest-yield query on this page. **An existing column mas
 ## Four outcomes, and what each means for the plan
 
 Once the constrained subset is known, every table lands in one of four places. Decide this in design, not at cutover.
+
+<ArchifyDiagram
+  client:visible
+  name="data-residency.lifecycle"
+  type="lifecycle"
+  title="One decision, four outcomes"
+  caption="Unconstrained is the default and most of the estate. Provider-constrained isn't a blocked migration — Unity Catalog federation and Delta Sharing govern it where it sits, permanently."
+/>
 
 | Outcome | Meaning | Consequence |
 |---|---|---|

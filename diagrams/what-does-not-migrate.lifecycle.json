@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "What Does Not Migrate: Export It or Lose It",
+    "output": "what-does-not-migrate.lifecycle.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "register",
+        "label": "Every source-only asset, in one register",
+        "focus": ["asset", "exported"],
+        "note": "Audit logs, query history, lineage, job run history, and more all live only in the source system tables."
+      },
+      {
+        "id": "outcome",
+        "label": "Exported survives, un-exported does not",
+        "focus": ["preserved", "lost"],
+        "note": "Once the source is decommissioned, anything not deliberately cloned to durable storage is gone for good."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "main", "label": "Register" },
+    { "id": "terminal", "label": "After decommission" }
+  ],
+  "states": [
+    {
+      "id": "asset",
+      "type": "start",
+      "label": "Source-Only Asset",
+      "sublabel": "audit, lineage, ACLs",
+      "lane": "main",
+      "col": 0,
+      "step": "01"
+    },
+    {
+      "id": "exported",
+      "type": "decision",
+      "label": "Exported?",
+      "sublabel": "clone before cutover",
+      "lane": "main",
+      "col": 1,
+      "step": "02"
+    },
+    {
+      "id": "preserved",
+      "type": "success",
+      "label": "Preserved",
+      "sublabel": "durable clone survives",
+      "lane": "terminal",
+      "col": 0
+    },
+    {
+      "id": "lost",
+      "type": "waiting",
+      "label": "Lost Forever",
+      "sublabel": "no export, no recovery",
+      "lane": "terminal",
+      "col": 1,
+      "tag": "irreversible"
+    }
+  ],
+  "transitions": [
+    {
+      "from": "asset",
+      "to": "exported",
+      "variant": "emphasis"
+    },
+    {
+      "from": "exported",
+      "to": "preserved",
+      "label": "cloned before cutover",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [150, 300]
+    },
+    {
+      "from": "exported",
+      "to": "lost",
+      "label": "not exported",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "This is a register, not a checklist item",
+      "items": [
+        "Audit logs, query history, table lineage, and billing usage all live only in system tables -- clone before decommission",
+        "Notebook revision history and Delta table time travel are lost the moment the source workspace or metastore is gone",
+        "Personal access tokens, workspace ACLs, and dashboard subscriptions all need explicit export, not a passive assumption"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "One clock nobody controls",
+      "items": [
+        "Job run history is automatically removed after 60 days -- recreated jobs start at zero regardless of export status",
+        "That window expires whether or not you have exported it -- export via the Jobs API to Delta on a schedule, not as a one-time task"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "The four that hurt most when missed",
+      "items": [
+        "Delta Sharing recipient activation needs partner communication 2-4 weeks ahead -- nothing to export, only to plan",
+        "Key Vault-backed secrets cannot be exported at all -- re-source from the system of record and rotate",
+        "DBFS root is not migratable as a unit -- drain it to Volumes or external locations before cutover"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Runtime Upgrade: Fix the Ticking Clock Once",
+    "output": "runtime-upgrade.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "audit",
+        "label": "Every cluster, not just old ones",
+        "focus": [
+          "audit",
+          "eol"
+        ],
+        "note": "Teams are frequently unaware they're several LTS generations behind — check the actual DBR version per cluster."
+      },
+      {
+        "id": "pick",
+        "label": "Newest LTS that fits, not newest overall",
+        "focus": [
+          "pick",
+          "compat"
+        ],
+        "note": "Target the newest LTS supporting required features, standardized across the estate to shrink the compatibility matrix."
+      },
+      {
+        "id": "eol",
+        "label": "EOL blocks cutover",
+        "focus": [
+          "audit",
+          "eol"
+        ],
+        "note": "A runtime already close to end-of-support gets skipped as a target baseline, not carried forward by default."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "audit",
+      "label": "Audit current"
+    },
+    {
+      "id": "pick",
+      "label": "Pick baseline"
+    },
+    {
+      "id": "verify",
+      "label": "Verify compat"
+    },
+    {
+      "id": "exceptions",
+      "label": "Blocks cutover",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "audit",
+    "pick",
+    "compat",
+    "libraries"
+  ],
+  "nodes": [
+    {
+      "id": "audit",
+      "lane": "audit",
+      "col": 0,
+      "type": "frontend",
+      "label": "Audit DBR",
+      "sublabel": "per cluster, per job"
+    },
+    {
+      "id": "pick",
+      "lane": "pick",
+      "col": 1,
+      "type": "database",
+      "label": "Pick LTS",
+      "sublabel": "newest that fits"
+    },
+    {
+      "id": "compat",
+      "lane": "verify",
+      "col": 3,
+      "type": "backend",
+      "label": "Access + Feat.",
+      "sublabel": "UC, serverless, Photon"
+    },
+    {
+      "id": "libraries",
+      "lane": "verify",
+      "col": 5,
+      "type": "frontend",
+      "label": "Python + Libs",
+      "sublabel": "deprecated API audit"
+    },
+    {
+      "id": "eol",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "security",
+      "label": "EOL Runtime",
+      "sublabel": "already unsupported",
+      "tag": "skip as baseline"
+    }
+  ],
+  "edges": [
+    {
+      "from": "audit",
+      "to": "pick",
+      "label": "current version",
+      "variant": "emphasis"
+    },
+    {
+      "from": "pick",
+      "to": "compat",
+      "label": "target baseline",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "compat",
+      "to": "libraries",
+      "variant": "emphasis"
+    },
+    {
+      "from": "pick",
+      "to": "eol",
+      "label": "checked against support dates",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Every workload, not the ones already flagged old",
+      "items": [
+        "An old runtime carried into the target cloud unchanged just relocates a ticking clock",
+        "Check the actual DBR version per cluster and job — teams are often generations behind without knowing it",
+        "Migration is the natural forcing function to fix this once, not defer it again"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Standardize, don't just upgrade",
+      "items": [
+        "Target the newest LTS supporting required features, not simply one version newer than source",
+        "Standardize on one or two runtime versions across the target estate",
+        "UC access-mode, serverless, and Photon requirements shift with every LTS release — verify current, don't hardcode"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "EOL is a hard skip, not a soft preference",
+      "items": [
+        "A source runtime close to its support end date should not become the target baseline by default",
+        "Do not migrate clusters or jobs on end-of-life runtimes — upgrade and validate before cutover",
+        "Re-check the release-notes page before relying on any dated support-window snapshot"
+      ]
+    }
+  ]
+}

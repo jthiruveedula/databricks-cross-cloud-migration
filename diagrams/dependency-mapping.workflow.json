@@ -1,0 +1,239 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Dependency Mapping: From Lineage to Wave Boundaries",
+    "output": "dependency-mapping.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "trace",
+        "label": "Trace and build",
+        "focus": [
+          "trace",
+          "lineage",
+          "graph_build"
+        ],
+        "note": "Seven dependency types feed one graph, built from system-table lineage, not hand-parsed code."
+      },
+      {
+        "id": "cluster",
+        "label": "Cluster into waves",
+        "focus": [
+          "components",
+          "boundaries"
+        ],
+        "note": "Each weakly-connected component is a candidate wave boundary."
+      },
+      {
+        "id": "exceptions",
+        "label": "What can't be automated",
+        "focus": [
+          "components",
+          "cross_cluster",
+          "circular",
+          "manual_resolve"
+        ],
+        "note": "Cross-cluster edges are a risk signal; circular dependencies need a human design decision."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "sources",
+      "label": "Trace dependencies"
+    },
+    {
+      "id": "graph",
+      "label": "Build the graph"
+    },
+    {
+      "id": "boundaries",
+      "label": "Wave boundaries"
+    },
+    {
+      "id": "exceptions",
+      "label": "Needs a human",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "trace",
+    "lineage",
+    "graph_build",
+    "components",
+    "boundaries"
+  ],
+  "nodes": [
+    {
+      "id": "trace",
+      "lane": "sources",
+      "col": 0,
+      "type": "frontend",
+      "label": "Trace Deps",
+      "sublabel": "code + config"
+    },
+    {
+      "id": "lineage",
+      "lane": "sources",
+      "col": 1,
+      "type": "database",
+      "label": "Table Lineage",
+      "sublabel": "system tables"
+    },
+    {
+      "id": "graph_build",
+      "lane": "graph",
+      "col": 2,
+      "type": "backend",
+      "label": "Build Graph",
+      "sublabel": "DiGraph"
+    },
+    {
+      "id": "components",
+      "lane": "graph",
+      "col": 3,
+      "type": "backend",
+      "label": "Components",
+      "sublabel": "weakly connected"
+    },
+    {
+      "id": "boundaries",
+      "lane": "boundaries",
+      "col": 4,
+      "type": "frontend",
+      "label": "Boundaries",
+      "sublabel": "to wave planning"
+    },
+    {
+      "id": "cross_cluster",
+      "lane": "boundaries",
+      "col": 5,
+      "type": "security",
+      "label": "Cross-Cluster",
+      "sublabel": "flag as risk",
+      "tag": "to risk assessment"
+    },
+    {
+      "id": "circular",
+      "lane": "exceptions",
+      "col": 2,
+      "type": "security",
+      "label": "Circular Dep.",
+      "sublabel": "A needs B"
+    },
+    {
+      "id": "manual_resolve",
+      "lane": "exceptions",
+      "col": 3,
+      "type": "backend",
+      "label": "Manual Fix",
+      "sublabel": "design decision",
+      "tag": "not automated"
+    }
+  ],
+  "edges": [
+    {
+      "from": "trace",
+      "to": "lineage",
+      "label": "system tables",
+      "variant": "emphasis",
+      "labelDy": -20
+    },
+    {
+      "from": "lineage",
+      "to": "graph_build",
+      "label": "edges",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "graph_build",
+      "to": "components",
+      "variant": "emphasis"
+    },
+    {
+      "from": "components",
+      "to": "boundaries",
+      "label": "candidate waves",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "components",
+      "to": "cross_cluster",
+      "label": "shared clusters",
+      "role": "branch",
+      "route": "outside-right",
+      "fromSide": "right",
+      "toSide": "right"
+    },
+    {
+      "from": "graph_build",
+      "to": "circular",
+      "label": "cycle found",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "circular",
+      "to": "manual_resolve",
+      "label": "resolve",
+      "variant": "security",
+      "labelAt": [
+        365,
+        453
+      ]
+    },
+    {
+      "from": "manual_resolve",
+      "to": "boundaries",
+      "label": "resolved",
+      "variant": "dashed",
+      "role": "return",
+      "route": "up-channel",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "channelX": 560,
+      "labelAt": [
+        520,
+        407
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Seven places dependencies hide",
+      "items": [
+        "Table lineage, job-to-cluster-policy, job-to-secret-scope are the obvious ones",
+        "Dashboard/query to SQL warehouse to tables is the one that looks migrated while querying stale source data",
+        "System tables expose lineage directly — don't hand-parse SQL or notebooks"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Clusters, not a flat list",
+      "items": [
+        "Each weakly-connected component approximates a natural wave boundary",
+        "Splitting a component only pays off when it reduces risk more than it adds coordination overhead",
+        "This output is what wave planning's dependency-count scoring consumes"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Two things automation can't resolve",
+      "items": [
+        "A cross-cluster edge is a risk signal, not an error — feed it to risk assessment's dependency-count dimension",
+        "A circular dependency (A needs B needs A) needs a manual design decision before wave assignment",
+        "Neither should block the automated clustering of everything else"
+      ]
+    }
+  ]
+}

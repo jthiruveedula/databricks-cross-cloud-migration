@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Notebooks: Git-Backed Re-Clones, Un-Versioned Migrates Debt",
+    "output": "notebooks-and-repos.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "split",
+        "label": "Two very different starting points",
+        "focus": [
+          "git_backed",
+          "not_versioned"
+        ],
+        "note": "Git-backed code lives in Git, not the workspace. Un-versioned code is technical debt about to become permanent."
+      },
+      {
+        "id": "audit",
+        "label": "Audit regardless of path",
+        "focus": [
+          "reclone",
+          "audit"
+        ],
+        "note": "Cloud storage paths, catalog names, and DBFS mounts get hardcoded into notebook code no matter how it was exported."
+      },
+      {
+        "id": "debt",
+        "label": "Migration is the natural point to fix this",
+        "focus": [
+          "not_versioned"
+        ],
+        "note": "Carrying un-versioned notebooks into the target workspace just relocates the same problem, permanently."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "source",
+      "label": "Starting point"
+    },
+    {
+      "id": "move",
+      "label": "Move"
+    },
+    {
+      "id": "audit",
+      "label": "Audit references"
+    },
+    {
+      "id": "exceptions",
+      "label": "Technical debt",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "git_backed",
+    "reclone",
+    "audit"
+  ],
+  "nodes": [
+    {
+      "id": "git_backed",
+      "lane": "source",
+      "col": 0,
+      "type": "frontend",
+      "label": "Git-Backed",
+      "sublabel": "Databricks Repos"
+    },
+    {
+      "id": "reclone",
+      "lane": "move",
+      "col": 1,
+      "type": "backend",
+      "label": "Re-Clone",
+      "sublabel": "new remote target"
+    },
+    {
+      "id": "audit",
+      "lane": "audit",
+      "col": 3,
+      "type": "security",
+      "label": "Audit Refs",
+      "sublabel": "paths, catalogs, IDs"
+    },
+    {
+      "id": "not_versioned",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "security",
+      "label": "Un-Versioned",
+      "sublabel": "no history, no review",
+      "tag": ".dbc export, then Git"
+    }
+  ],
+  "edges": [
+    {
+      "from": "git_backed",
+      "to": "reclone",
+      "label": "same code",
+      "variant": "emphasis"
+    },
+    {
+      "from": "reclone",
+      "to": "audit",
+      "label": "hardcoded refs",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "git_backed",
+      "to": "not_versioned",
+      "label": "not Git-backed",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        88,
+        420
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Git-backed is usually the simplest part",
+      "items": [
+        "The code and history live in Git, not the workspace — re-clone the same remote into target",
+        "Re-establish Git credentials for the target workspace against the provider",
+        "If CI/CD deploys from the repo, confirm the deployment target mapping points at target, not source"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Un-versioned notebooks are debt about to become permanent",
+      "items": [
+        "No Git repo means no change history and no code review trail",
+        "Carrying it forward unchanged just relocates the same problem into the new workspace",
+        "Migration is the natural point to move it into a repo — export/import is the fallback, not the goal"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Audit runs regardless of which path got you here",
+      "items": [
+        "Cloud storage paths (abfss://, s3://, gs://) need the cloud-mapping path-rewrite applied",
+        "Catalog/schema names and any hardcoded cluster/warehouse IDs need target values",
+        "DBFS mount paths migrate to Unity Catalog volumes or external locations, never recreated as mounts"
+      ]
+    }
+  ]
+}

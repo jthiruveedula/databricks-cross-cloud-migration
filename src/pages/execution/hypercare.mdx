@@ -6,6 +6,7 @@ description: 'The heightened-monitoring period after cutover, before source deco
 
 import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Hypercare
 
@@ -14,6 +15,8 @@ Hypercare is the bounded period immediately after [cutover](/execution/cutover) 
 <Callout client:visible variant="decision" title="Hypercare is not indefinite">
   Set an explicit hypercare exit gate before cutover (e.g. "N consecutive clean SLA days plus one full business cycle"). Without one, hypercare quietly becomes permanent — source decommission keeps getting deferred and the migration never actually closes out.
 </Callout>
+
+<ArchifyDiagram client:visible name="hypercare.lifecycle" type="lifecycle" title="Hypercare ends on proof, not a date" caption="An explicit exit gate, agreed before cutover — without one, hypercare quietly becomes permanent." />
 
 ## What changes during hypercare
 

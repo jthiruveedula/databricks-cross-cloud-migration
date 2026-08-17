@@ -7,6 +7,7 @@ description: 'What UCX is, when to use it, and where it fits — and does not fi
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # UCX-assisted migration
 
@@ -27,6 +28,14 @@ Most enterprise Databricks estates still have a meaningful share of workspace-lo
 - Account admin (or workspace admin with UCX-required scopes) access to the source workspace.
 - A dedicated "assessment" workspace to install UCX into — UCX writes its findings as Delta tables and dashboards there, not into the workspace being assessed.
 - An inventory of workspace-local groups already gathered from [workspace inventory](/discovery/workspace-inventory).
+
+<ArchifyDiagram
+  client:visible
+  name="ucx-strategy.workflow"
+  type="workflow"
+  title="Assessment, then groups, then tables — gated, not scripted back-to-back"
+  caption="Assessment is read-only and always first. UCX upgrades in place; it never creates a target-cloud storage credential or crosses to a different account."
+/>
 
 ## Recommended sequence
 

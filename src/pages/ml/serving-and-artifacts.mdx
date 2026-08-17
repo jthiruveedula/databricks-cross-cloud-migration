@@ -7,6 +7,7 @@ description: 'Migrate model serving endpoints and artifact stores to the target 
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Serving and artifacts
 
@@ -35,6 +36,14 @@ Once a model is registered (see [model registry](/ml/model-registry)), serving i
 
   Model registry's advice is to pin consumers to an **alias** rather than a version. Serving endpoints cannot take one directly — `entity_version` is a version number — so the pattern is to **resolve the alias to a version at deploy time** and pass the result. That keeps the deployment declarative about intent ("serve champion") while satisfying an API that wants a number.
 </Callout>
+
+<ArchifyDiagram
+  client:visible
+  name="serving-and-artifacts.workflow"
+  type="workflow"
+  title="Resolve the alias at deploy time, stand up alongside source, canary, cut over"
+  caption="A copied entity_version is valid in the target and silently serves a different model. The accumulated inference-table payload history stays behind unless someone scopes it explicitly."
+/>
 
 ## Zero-downtime cutover pattern
 

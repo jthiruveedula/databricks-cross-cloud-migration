@@ -7,6 +7,7 @@ description: 'Migrate registered models and versions into Unity Catalog — wher
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Model registry
 
@@ -37,6 +38,14 @@ Registered models carry more than the model artifact itself — version history,
 <Callout client:visible variant="warning" title="Re-registering a model orphans its lineage unless the source run was migrated too">
   A model version's lineage pointer (`source_run`/`run_id`) references the MLflow run that produced it. If you re-register the model in target without also migrating that run via [MLflow](/ml/mlflow), the pointer either breaks or silently references a run ID that doesn't exist in the target tracking server — "which experiment produced this model" becomes unanswerable. Migrate the source run first, then re-register the model version against the *migrated* run's new ID, not the original source run ID.
 </Callout>
+
+<ArchifyDiagram
+  client:visible
+  name="model-registry.workflow"
+  type="workflow"
+  title="Download, re-log, translate stage to alias, record the version map"
+  caption="copy_model_version() doesn't bridge two accounts — a cross-cloud move is unavoidably download, re-log, and register. A model without a signature will not register in Unity Catalog."
+/>
 
 ## Two different problems — pick the right one first
 

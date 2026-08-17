@@ -8,10 +8,19 @@ import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Tabs from '../../components/Tabs.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Workflows and jobs
 
 Databricks Workflows is the native orchestrator for notebooks, Python, SQL, and DLT tasks. Migrating jobs requires recreating definitions in the target workspace and rewriting any cloud-specific references.
+
+<ArchifyDiagram
+  client:visible
+  name="workflows-jobs.workflow"
+  type="workflow"
+  title="Strip source-owned fields, recreate, keep the ID map"
+  caption="The new job_id is what breaks things downstream — every external orchestrator reference is pinned to the old number. File-arrival triggers need a redesign, not a config edit."
+/>
 
 ## Job components to migrate
 

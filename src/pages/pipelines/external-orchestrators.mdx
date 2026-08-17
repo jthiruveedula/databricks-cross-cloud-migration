@@ -8,6 +8,7 @@ import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Tabs from '../../components/Tabs.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # External orchestrators
 
@@ -37,6 +38,14 @@ Not every job runs inside Databricks Workflows — [workflows and jobs](/pipelin
     content: 'Same connection-update pattern as self-managed Airflow, plus: confirm Composer\'s VPC/networking can actually reach the target workspace\'s private endpoint (see network security) if the target enforces private-only connectivity.'
   },
 ]} />
+
+<ArchifyDiagram
+  client:visible
+  name="external-orchestrators.workflow"
+  type="workflow"
+  title="Inventory, identify auth, repoint, run it end to end"
+  caption="Cloud-native identity federation — ADF's Entra ID auth, for example — doesn't survive if the target isn't that cloud. A connectivity check proves the network path, not that the pipeline works."
+/>
 
 ## Migration steps
 

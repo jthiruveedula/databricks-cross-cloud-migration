@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "The Accelerator Stack: Automate the Mechanical, Not the Judgment",
+    "output": "databricks-tooling.architecture.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "assess",
+        "label": "UCX runs first, touches nothing",
+        "focus": ["ucx", "source"],
+        "note": "Assessment crawls tables, grants, jobs, and init scripts, flagging incompatibilities before anything changes."
+      },
+      {
+        "id": "move",
+        "label": "Convert, provision, and replicate in parallel",
+        "focus": ["lakebridge", "bundles", "replicator"],
+        "note": "Lakebridge converts SQL/ETL, Asset Bundles provision the target as code, Replicator keeps it warm during dual-run."
+      },
+      {
+        "id": "stop",
+        "label": "Every tool has an edge it hands to a human",
+        "focus": ["migrate", "target"],
+        "note": "Compute re-mapping across clouds and business-logic equivalence are judgment calls no tool automates."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "source",
+      "type": "external",
+      "label": "Source Workspace",
+      "sublabel": "Hive, workspace-local groups",
+      "pos": [60, 250],
+      "size": [200, 60]
+    },
+    {
+      "id": "ucx",
+      "type": "backend",
+      "label": "UCX",
+      "sublabel": "assess + UC upgrade",
+      "pos": [340, 80],
+      "size": [200, 60]
+    },
+    {
+      "id": "lakebridge",
+      "type": "backend",
+      "label": "Lakebridge",
+      "sublabel": "DW/ETL convert + validate",
+      "pos": [340, 250],
+      "size": [200, 60]
+    },
+    {
+      "id": "migrate",
+      "type": "backend",
+      "label": "migrate",
+      "sublabel": "workspace export/import",
+      "pos": [340, 420],
+      "size": [200, 60]
+    },
+    {
+      "id": "bundles",
+      "type": "security",
+      "label": "Asset Bundles",
+      "sublabel": "IaC for target",
+      "pos": [640, 80],
+      "size": [200, 60]
+    },
+    {
+      "id": "replicator",
+      "type": "database",
+      "label": "Replicator",
+      "sublabel": "D2D metadata + data",
+      "pos": [640, 250],
+      "size": [200, 60]
+    },
+    {
+      "id": "human",
+      "type": "security",
+      "label": "Human Judgment",
+      "sublabel": "compute re-map, logic equivalence",
+      "pos": [640, 420],
+      "size": [200, 60]
+    },
+    {
+      "id": "target",
+      "type": "cloud",
+      "label": "Target Workspace",
+      "sublabel": "UC-governed, provisioned",
+      "pos": [940, 250],
+      "size": [200, 60]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Automated (accelerator layer)",
+      "wraps": ["ucx", "lakebridge", "migrate", "bundles", "replicator"],
+      "pad": 30
+    }
+  ],
+  "connections": [
+    {
+      "from": "source",
+      "to": "ucx",
+      "label": "assessment report",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "left"
+    },
+    {
+      "from": "source",
+      "to": "lakebridge",
+      "label": "SQL / ETL",
+      "variant": "emphasis"
+    },
+    {
+      "from": "source",
+      "to": "migrate",
+      "label": "notebooks, jobs",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "from": "ucx",
+      "to": "bundles",
+      "label": "readiness score"
+    },
+    {
+      "from": "lakebridge",
+      "to": "replicator",
+      "label": "converted + validated",
+      "labelDy": -24
+    },
+    {
+      "from": "migrate",
+      "to": "human",
+      "label": "compute re-map needed",
+      "variant": "dashed",
+      "labelDy": -24
+    },
+    {
+      "from": "bundles",
+      "to": "target",
+      "label": "provisions",
+      "variant": "emphasis"
+    },
+    {
+      "from": "replicator",
+      "to": "target",
+      "label": "keeps warm",
+      "variant": "emphasis",
+      "labelDx": -70,
+      "labelDy": -24
+    },
+    {
+      "from": "human",
+      "to": "target",
+      "label": "signs off",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "UCX runs first and touches nothing",
+      "items": [
+        "Assessment crawls tables, UDFs, grants, mounts, jobs, and init scripts before anything changes",
+        "Cross-cloud external locations are explicitly not supported -- flags them for Delta Sharing instead"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Three tools move in parallel, not in sequence",
+      "items": [
+        "Lakebridge converts up to 80% of a warehouse migration automatically, gated by its Validator",
+        "Asset Bundles provision the target as versioned code while Replicator keeps it warm for dual-run"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Every tool stops at the same edge: judgment",
+      "items": [
+        "Classic compute differs across clouds -- clusters and jobs need a manual re-map even after import",
+        "Business-logic equivalence and governance decisions stay human; tooling automates the mechanical parts around them"
+      ]
+    }
+  ]
+}

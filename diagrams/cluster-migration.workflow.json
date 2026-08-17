@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Cluster Migration: Export, Translate, Recreate, Prove It Autoscales",
+    "output": "cluster-migration.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "translate",
+        "label": "Translate, don't copy",
+        "focus": [
+          "export",
+          "translate"
+        ],
+        "note": "Node types, instance profiles, and storage credentials all differ by name across clouds — map by workload profile, not name."
+      },
+      {
+        "id": "policy",
+        "label": "Policies before pools",
+        "focus": [
+          "policy",
+          "pools"
+        ],
+        "note": "Cost and compliance guardrails land in the policy before pools are recreated on top of it."
+      },
+      {
+        "id": "access",
+        "label": "Legacy access modes don't carry over",
+        "focus": [
+          "translate",
+          "legacy_mode"
+        ],
+        "note": "Unity Catalog requires shared or single-user access — legacy shared-no-isolation and high-concurrency clusters must convert."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "export",
+      "label": "Export"
+    },
+    {
+      "id": "translate",
+      "label": "Translate"
+    },
+    {
+      "id": "rebuild",
+      "label": "Recreate + prove it"
+    },
+    {
+      "id": "exceptions",
+      "label": "Not UC-compatible",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "export",
+    "translate",
+    "policy",
+    "pools",
+    "smoke_test"
+  ],
+  "nodes": [
+    {
+      "id": "export",
+      "lane": "export",
+      "col": 0,
+      "type": "database",
+      "label": "Export",
+      "sublabel": "Clusters API"
+    },
+    {
+      "id": "translate",
+      "lane": "translate",
+      "col": 1,
+      "type": "backend",
+      "label": "Translate",
+      "sublabel": "node types, profiles"
+    },
+    {
+      "id": "policy",
+      "lane": "rebuild",
+      "col": 2,
+      "type": "security",
+      "label": "Create Policy",
+      "sublabel": "cost + compliance"
+    },
+    {
+      "id": "pools",
+      "lane": "rebuild",
+      "col": 3,
+      "type": "cloud",
+      "label": "Recreate Pools",
+      "sublabel": "idle termination"
+    },
+    {
+      "id": "smoke_test",
+      "lane": "rebuild",
+      "col": 5,
+      "type": "frontend",
+      "label": "Smoke Test",
+      "sublabel": "autoscaling behavior"
+    },
+    {
+      "id": "legacy_mode",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "security",
+      "label": "Legacy Mode",
+      "sublabel": "shared / high-conc.",
+      "tag": "convert to UC mode"
+    }
+  ],
+  "edges": [
+    {
+      "from": "export",
+      "to": "translate",
+      "label": "cluster defs",
+      "variant": "emphasis"
+    },
+    {
+      "from": "translate",
+      "to": "policy",
+      "label": "mapped by profile",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "channelX": 280,
+      "labelAt": [
+        280,
+        300
+      ]
+    },
+    {
+      "from": "policy",
+      "to": "pools",
+      "variant": "emphasis"
+    },
+    {
+      "from": "pools",
+      "to": "smoke_test",
+      "label": "recreated",
+      "variant": "emphasis"
+    },
+    {
+      "from": "translate",
+      "to": "legacy_mode",
+      "label": "not UC-compatible",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "channelX": 220,
+      "labelAt": [
+        220,
+        420
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Map by profile, not by name",
+      "items": [
+        "Node type names don't correspond 1:1 across Azure, AWS, and GCP",
+        "Match on workload profile instead: CPU, memory, GPU, local SSD",
+        "Instance profiles, managed identities, and service accounts all need target-cloud principals"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Access modes are the migration's UC gate",
+      "items": [
+        "Unity Catalog requires shared or single-user access modes",
+        "Legacy shared-no-isolation and high-concurrency clusters don't carry over — they convert",
+        "Get this wrong and the cluster attaches to nothing in the target metastore"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Prove it before calling it done",
+      "items": [
+        "Policies carry cost and compliance guardrails — recreate them before pools, not after",
+        "Pools need target-cloud idle-termination tuning, not a copied source value",
+        "A smoke test validates autoscaling actually behaves the same, not just that the cluster starts"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Hypercare: Ends on Proof, Not a Calendar Date",
+    "output": "hypercare.lifecycle.html",
+    "viewBox": [980, 680],
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "watch",
+        "label": "Tightened thresholds, elevated staffing",
+        "focus": ["cutover", "monitoring"],
+        "note": "Job success, cost, data freshness, and ticket volume all watched daily against the source baseline."
+      },
+      {
+        "id": "incident",
+        "label": "Severity defined before the first incident",
+        "focus": ["monitoring", "incident"],
+        "note": "P1 pages immediately; P3 is tracked and reviewed in the daily hypercare sync."
+      },
+      {
+        "id": "exit",
+        "label": "An explicit gate, agreed before cutover",
+        "focus": ["exit_gate", "decommission"],
+        "note": "N consecutive clean SLA days plus a full business cycle -- without a gate, hypercare quietly becomes permanent."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "main", "label": "Hypercare" },
+    { "id": "incident", "label": "Incident path" },
+    { "id": "terminal", "label": "Outcome" }
+  ],
+  "states": [
+    {
+      "id": "cutover",
+      "type": "start",
+      "label": "Cutover Complete",
+      "sublabel": "rollback still live",
+      "lane": "main",
+      "col": 0,
+      "step": "01"
+    },
+    {
+      "id": "monitoring",
+      "type": "waiting",
+      "label": "Elevated Monitoring",
+      "sublabel": "tightened thresholds",
+      "lane": "main",
+      "col": 1,
+      "step": "02"
+    },
+    {
+      "id": "incident",
+      "type": "decision",
+      "label": "Incident?",
+      "sublabel": "P1 / P2 / P3",
+      "lane": "incident",
+      "col": 1,
+      "tag": "severity matrix"
+    },
+    {
+      "id": "exit_gate",
+      "type": "decision",
+      "label": "Exit Gate",
+      "sublabel": "clean SLA days met",
+      "lane": "main",
+      "col": 2,
+      "step": "03"
+    },
+    {
+      "id": "decommission",
+      "type": "success",
+      "label": "Decommission Source",
+      "sublabel": "read-only, then removed",
+      "lane": "terminal",
+      "col": 2
+    }
+  ],
+  "transitions": [
+    {
+      "from": "cutover",
+      "to": "monitoring",
+      "variant": "emphasis"
+    },
+    {
+      "from": "monitoring",
+      "to": "incident",
+      "label": "threshold breached",
+      "variant": "dashed",
+      "channelX": 300,
+      "labelAt": [300, 220]
+    },
+    {
+      "from": "monitoring",
+      "to": "exit_gate",
+      "label": "sustained clean window",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": -25
+    },
+    {
+      "from": "exit_gate",
+      "to": "decommission",
+      "label": "criteria met + sign-off",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "right",
+      "via": [[850, 157], [850, 479]],
+      "labelAt": [850, 320]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "What changes during hypercare",
+      "items": [
+        "On-call moves to elevated staffing, often a dedicated war-room or Slack channel",
+        "Change control freezes on unrelated work to reduce noise while diagnosing issues",
+        "Source stays fully running and reachable for rollback -- not yet decommissioned",
+        "A resolved incident returns to elevated monitoring, not to normal operations -- the clean-window count resets"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Severity is agreed before the first incident, not during it",
+      "items": [
+        "P1: migration-caused outage or data-correctness issue -- page immediately, resolve within hours",
+        "P2: degradation with a workaround -- same-day resolution",
+        "P3: cosmetic, no workaround needed -- tracked in the daily sync"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "The exit gate is explicit, or hypercare never ends",
+      "items": [
+        "Define the gate before cutover: N consecutive clean SLA days plus one full business cycle",
+        "Decommission source last -- 'looks successful on day one' and 'proven stable' are different claims"
+      ]
+    }
+  ]
+}

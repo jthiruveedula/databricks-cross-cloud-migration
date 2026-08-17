@@ -7,6 +7,7 @@ description: 'Trace the dependency graph between tables, jobs, and consumers to 
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Dependency mapping
 
@@ -15,6 +16,14 @@ The [asset inventory](/discovery/asset-inventory) tells you *what* exists, and i
 <Callout client:visible variant="warning" title="The most common wave-planning mistake">
   Grouping workloads by asset type ("migrate all the tables first, then all the jobs") ignores dependencies and guarantees a wave that can't run end to end. Group by dependency cluster instead — a job and every table, secret, and cluster policy it touches move together.
 </Callout>
+
+<ArchifyDiagram
+  client:visible
+  name="dependency-mapping.workflow"
+  type="workflow"
+  title="From lineage to wave boundaries, with the two things that need a human"
+  caption="A cross-cluster edge is a risk signal for risk assessment's dependency-count dimension. A circular dependency needs a design decision before wave assignment — it is not a bug in the clustering."
+/>
 
 ## Dependency types to trace
 

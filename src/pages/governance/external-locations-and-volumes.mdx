@@ -7,6 +7,7 @@ description: 'Migrate from legacy mounts to Unity Catalog external locations and
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # External locations and volumes
 
@@ -49,6 +50,14 @@ Volumes are UC objects for non-tabular files. They replace DBFS mounts for libra
 <CodeBlock client:visible language="sql" code={`CREATE EXTERNAL VOLUME <catalog>.<schema>.<volume_name>
 LOCATION 's3://<target-bucket>/volumes/<volume_name>'
 COMMENT 'Managed non-tabular data';`} />
+
+<ArchifyDiagram
+  client:visible
+  name="external-locations-and-volumes.workflow"
+  type="workflow"
+  title="Inventory to unmount, in order"
+  caption="Rewrite every notebook, job, and init-script reference before validating — and unmount only after validation confirms the target is correct."
+/>
 
 ## Migrating data from mounts
 

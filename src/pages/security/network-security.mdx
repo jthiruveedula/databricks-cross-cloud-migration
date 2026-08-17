@@ -8,6 +8,7 @@ import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Tabs from '../../components/Tabs.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Network security
 
@@ -20,6 +21,14 @@ Network security cannot be exported and imported — every construct (private co
 <Callout client:visible variant="prerequisite" title="Match posture, not just topology">
   The goal isn't "a VPC exists in the target cloud" — it's that the target network enforces the *same security posture* as source: no public IPs on compute, private control-plane connectivity, and explicit (not default-allow) egress.
 </Callout>
+
+<ArchifyDiagram
+  client:visible
+  name="network-security.architecture"
+  type="architecture"
+  title="The classic compute plane, and the plane it doesn't cover"
+  caption="Private Link, PrivateLink, and PSC are the same requirement under three names. Serverless isn't on this diagram because it doesn't run in your network at all — see serverless networking for its separate, account-level control."
+/>
 
 ## Private control-plane connectivity
 

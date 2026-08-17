@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Rollback: One Environment Must Go Read-Only First",
+    "output": "rollback.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "trigger",
+        "label": "Six triggers, zero negotiation",
+        "focus": ["triggered", "stop_writes"],
+        "note": "Unexplained reconciliation variance is 0% tolerance -- not a threshold to argue about mid-incident."
+      },
+      {
+        "id": "danger",
+        "label": "Split-brain is the failure mode to avoid",
+        "focus": ["stop_writes", "split_brain"],
+        "note": "Source and target both accepting writes is the most dangerous outcome -- make one read-only before re-enabling the other."
+      },
+      {
+        "id": "recover",
+        "label": "Redirect only after source is live again",
+        "focus": ["re_enable", "redirect"],
+        "note": "Source jobs restart in reverse dependency order before users are pointed back."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "steps_a", "label": "Rollback steps" },
+    { "id": "steps_b", "label": "Rollback steps (cont.)" },
+    { "id": "exceptions", "label": "Danger", "variant": "exception" }
+  ],
+  "mainPath": ["triggered", "stop_writes", "assess_drift", "re_enable", "redirect"],
+  "nodes": [
+    {
+      "id": "triggered",
+      "lane": "steps_a",
+      "col": 0,
+      "type": "security",
+      "label": "Triggered",
+      "sublabel": "variance, outage"
+    },
+    {
+      "id": "stop_writes",
+      "lane": "steps_b",
+      "col": 1,
+      "type": "backend",
+      "label": "Stop Writes",
+      "sublabel": "preserve evidence"
+    },
+    {
+      "id": "assess_drift",
+      "lane": "steps_a",
+      "col": 3,
+      "type": "database",
+      "label": "Assess Drift",
+      "sublabel": "replay or discard"
+    },
+    {
+      "id": "re_enable",
+      "lane": "steps_b",
+      "col": 4,
+      "type": "cloud",
+      "label": "Re-Enable",
+      "sublabel": "source, reverse order"
+    },
+    {
+      "id": "redirect",
+      "lane": "steps_a",
+      "col": 5,
+      "type": "frontend",
+      "label": "Redirect Users",
+      "sublabel": "endpoints, DNS"
+    },
+    {
+      "id": "split_brain",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "security",
+      "label": "Split-Brain",
+      "sublabel": "both sides writable",
+      "tag": "most dangerous mode"
+    }
+  ],
+  "edges": [
+    {
+      "from": "triggered",
+      "to": "stop_writes",
+      "variant": "emphasis"
+    },
+    {
+      "from": "stop_writes",
+      "to": "assess_drift",
+      "label": "evidence captured",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [300, 205]
+    },
+    {
+      "from": "assess_drift",
+      "to": "re_enable",
+      "variant": "emphasis"
+    },
+    {
+      "from": "re_enable",
+      "to": "redirect",
+      "label": "source stable",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [563, 205]
+    },
+    {
+      "from": "stop_writes",
+      "to": "split_brain",
+      "label": "if source not made read-only first",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [220, 420]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Six triggers, all planned before cutover",
+      "items": [
+        "Unexplained reconciliation variance is 0% tolerance, not a negotiated threshold",
+        "Critical jobs failing, identity outage, unenforced security controls, SLA violations, or revoked sign-off all trigger it"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Split-brain is the failure mode to design around",
+      "items": [
+        "Source and target both accepting writes is the most dangerous rollback outcome",
+        "Always make one environment read-only before re-enabling the other -- never both live at once"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "If rollback is not viable, roll forward instead",
+      "items": [
+        "Fix the blocking issue in target, replay missing data from source backups, extend hypercare",
+        "Test the rollback procedure itself in a pilot wave, before it is ever needed for real"
+      ]
+    }
+  ]
+}

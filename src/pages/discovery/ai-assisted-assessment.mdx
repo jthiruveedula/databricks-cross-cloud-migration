@@ -7,6 +7,7 @@ description: 'A ready-to-run prompt and notebook that drives Databricks Assistan
 import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # AI-assisted assessment
 
@@ -16,9 +17,17 @@ The four discovery pages in this section — [workspace inventory](/discovery/wo
   The queries below are fully deterministic and fully automatable — they are system-table reads, not judgment calls. What they can't automate: assigning a business owner to each asset, deciding whether an "orphaned" workload is actually dead or just undocumented, and sequencing waves from the dependency graph. Treat this as compressing the data-gathering slice of discovery from days to under an hour, not as removing the human decisions layered on top of it. See [AI-assisted migration](/accelerators/ai-assisted-migration) for the same hybrid principle applied to translation and validation.
 </Callout>
 
+<ArchifyDiagram
+  client:visible
+  name="ai-assisted-assessment.sequence"
+  type="sequence"
+  title="Deterministic queries, one narrating prompt, one governed follow-up"
+  caption="Every query above the summary is plain Spark SQL. The only LLM call sees an already-aggregated JSON report, never raw rows — and a Genie follow-up re-runs a governed query instead of guessing."
+/>
+
 ## The pattern: deterministic queries, one orchestrating prompt
 
-Rather than asking a model to freelance SQL against your metastore (risking exactly the hallucinated-column, wrong-join failure mode covered on the [AI-assisted migration](/accelerators/ai-assisted-migration) page), give it the **exact queries this runbook already documents** and ask it to run them, merge the results, and narrate the findings. The SQL is deterministic; the LLM's job is synthesis and report writing, not query authorship.
+Rather than asking a model to freelance SQL against your metastore (risking exactly the hallucinated-column, wrong-join failure mode covered on the [AI-assisted migration](/accelerators/ai-assisted-migration) page), give it the **exact queries this runbook already documents** and ask it to run them, merge the results, and narrate the findings.
 
 This works equally well as:
 - A prompt pasted into **Databricks Assistant** inside a notebook (it runs cells, iterates, and writes the summary in the same notebook).

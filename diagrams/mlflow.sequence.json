@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "MLflow Run Migration: The Two Defaults That Silently Under-Deliver",
+    "output": "mlflow.sequence.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "column_fit": "spread",
+    "views": [
+      { "id": "page", "label": "search_runs caps at 1000", "focus": ["engineer","source"], "note": "An experiment with 5,000 runs migrates 1,000 of them and reports success unless the page_token is followed." },
+      { "id": "history", "label": "metrics holds the latest value, not the series", "focus": ["source","engineer"], "note": "Re-logging from run.data.metrics turns a 200-epoch curve into a single point — get_metric_history is the real series." },
+      { "id": "handoff", "label": "The run ID map is the deliverable", "focus": ["target","engineer"], "note": "Model registry migration needs the migrated run ID, not the source one — nothing produces this map for you." }
+    ]
+  },
+  "participants": [
+    { "id": "engineer", "type": "external", "label": "Migration Script", "sublabel": "builds run_id_map" },
+    { "id": "source", "type": "database", "label": "Source MLflow", "sublabel": "tracking + artifacts" },
+    { "id": "target", "type": "database", "label": "Target MLflow", "sublabel": "tracking + artifacts" }
+  ],
+  "segments": [
+    { "from": 150, "to": 268, "label": "Page through runs" },
+    { "from": 280, "to": 398, "label": "Replay the real metric series" },
+    { "from": 410, "to": 540, "label": "Re-log and hand off the ID map" }
+  ],
+  "messages": [
+    { "from": "engineer", "to": "source", "y": 180, "label": "search_runs(page_token)", "variant": "default" },
+    { "from": "source", "to": "engineer", "y": 222, "label": "run batch, next token", "variant": "return" },
+    { "from": "engineer", "to": "source", "y": 292, "label": "get_metric_history(key)", "variant": "emphasis" },
+    { "from": "source", "to": "engineer", "y": 334, "label": "full series: step + timestamp", "variant": "return" },
+    { "from": "engineer", "to": "target", "y": 404, "label": "start_run + log params/metrics/tags", "variant": "emphasis" },
+    { "from": "target", "to": "engineer", "y": 446, "label": "target_run_id", "variant": "return" },
+    { "from": "engineer", "to": "source", "y": 486, "label": "download_artifacts", "variant": "default" },
+    { "from": "engineer", "to": "target", "y": 528, "label": "log_artifacts, remapped parentRunId", "variant": "security" }
+  ],
+  "activations": [
+    { "participant": "source", "from": 174, "to": 232, "type": "database" },
+    { "participant": "source", "from": 286, "to": 344, "type": "database" },
+    { "participant": "target", "from": 398, "to": 456, "type": "database" },
+    { "participant": "target", "from": 522, "to": 538, "type": "database" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Two defaults that pass a demo and fail a real experiment", "items": ["run.data.metrics is the latest value per key, not the series — a training curve collapses to one point", "search_runs caps at 1000 and pages via page_token — an unpaginated script silently drops the rest", "Both fail silently: the target has runs, the counts just don't match unless someone checks"] },
+    { "dot": "amber", "title": "parentRunId needs its own remap", "items": ["mlflow.* tags are system-managed and get filtered out of a naive tag copy", "parentRunId is one of them — re-set it explicitly, remapped through run_id_map", "Parents must migrate before their children or the remap has nothing to point at yet"] },
+    { "dot": "rose", "title": "The run ID map is the actual deliverable", "items": ["Nothing produces this mapping automatically — the script has to build and keep it", "Model registry re-registration needs the migrated run ID, not the source one", "Print or persist run_id_map before the script exits; it's the handoff artifact"] }
+  ]
+}

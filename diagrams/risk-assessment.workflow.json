@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Risk Scoring: Seven Dimensions to a Wave Tier",
+    "output": "risk-assessment.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "gather",
+        "label": "Gather ratings",
+        "focus": [
+          "interviews",
+          "dependency_graph",
+          "ratings"
+        ],
+        "note": "Ratings come from discovery interviews and the dependency graph, never guessed from an asset name."
+      },
+      {
+        "id": "score",
+        "label": "Score and tier",
+        "focus": [
+          "ratings",
+          "weighted_score",
+          "tiers"
+        ],
+        "note": "Seven weighted dimensions collapse into one score, then a tier."
+      },
+      {
+        "id": "orphan",
+        "label": "The exception that inverts",
+        "focus": [
+          "ratings",
+          "orphaned"
+        ],
+        "note": "An unengaged owner is the highest-risk signal, not the lowest — score it inverted, not skipped."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "gather",
+      "label": "Gather ratings"
+    },
+    {
+      "id": "score",
+      "label": "Score"
+    },
+    {
+      "id": "tier",
+      "label": "Tier and sequence"
+    },
+    {
+      "id": "exceptions",
+      "label": "Inverted signal",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "interviews",
+    "dependency_graph",
+    "ratings",
+    "weighted_score",
+    "tiers",
+    "sequence"
+  ],
+  "nodes": [
+    {
+      "id": "interviews",
+      "lane": "gather",
+      "col": 0,
+      "type": "frontend",
+      "label": "Interviews",
+      "sublabel": "owner + criticality"
+    },
+    {
+      "id": "dependency_graph",
+      "lane": "gather",
+      "col": 1,
+      "type": "database",
+      "label": "Dep. Graph",
+      "sublabel": "dependency count"
+    },
+    {
+      "id": "ratings",
+      "lane": "score",
+      "col": 2,
+      "type": "backend",
+      "label": "7 Ratings",
+      "sublabel": "1 low - 3 high"
+    },
+    {
+      "id": "weighted_score",
+      "lane": "score",
+      "col": 3,
+      "type": "backend",
+      "label": "Weighted Score",
+      "sublabel": "sum(weight * rating)"
+    },
+    {
+      "id": "tiers",
+      "lane": "tier",
+      "col": 4,
+      "type": "frontend",
+      "label": "Tier",
+      "sublabel": "low, medium, high"
+    },
+    {
+      "id": "sequence",
+      "lane": "tier",
+      "col": 5,
+      "type": "database",
+      "label": "Register",
+      "sublabel": "tracked, not one-shot"
+    },
+    {
+      "id": "orphaned",
+      "lane": "exceptions",
+      "col": 3,
+      "type": "security",
+      "label": "No Owner",
+      "sublabel": "invert the rating",
+      "tag": "highest risk"
+    }
+  ],
+  "edges": [
+    {
+      "from": "interviews",
+      "to": "dependency_graph",
+      "label": "scope"
+    },
+    {
+      "from": "dependency_graph",
+      "to": "ratings",
+      "label": "counts",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "ratings",
+      "to": "weighted_score",
+      "variant": "emphasis"
+    },
+    {
+      "from": "weighted_score",
+      "to": "tiers",
+      "label": "bucketed",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "tiers",
+      "to": "sequence",
+      "label": "tracked",
+      "labelDy": -20
+    },
+    {
+      "from": "ratings",
+      "to": "orphaned",
+      "label": "no engagement",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "orphaned",
+      "to": "weighted_score",
+      "label": "inverted score",
+      "variant": "security",
+      "role": "return",
+      "route": "up-channel",
+      "fromSide": "top",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Seven dimensions, one number",
+      "items": [
+        "Criticality and data sensitivity carry the highest weight, at 3 each",
+        "Ratings come from discovery interviews and the dependency graph, not a guess from the asset name",
+        "Dependency count reuses dependency mapping's cross-cluster-edge signal directly"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Orphaned inverts the intuition",
+      "items": [
+        "An unengaged owner looks like low activity, low risk — it is the opposite",
+        "No owner means no one to validate the migration or explain undocumented behavior",
+        "The scoring model inverts owner engagement on purpose, not by accident"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "A tier is a sequencing decision",
+      "items": [
+        "Low risk seeds the pilot and early waves to build confidence",
+        "High risk gets a named rollback owner or a blue-green approach, not a standard cutover",
+        "Every medium/high item lives in the risk register as a standing entry, not a one-time score"
+      ]
+    }
+  ]
+}

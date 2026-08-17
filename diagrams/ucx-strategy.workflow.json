@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "UCX: Three Gated Workflows, Run in Order",
+    "output": "ucx-strategy.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "assess",
+        "label": "Read-only first",
+        "focus": [
+          "assessment",
+          "cross_cloud"
+        ],
+        "note": "Assessment scans and reports. Nothing in the source workspace is modified."
+      },
+      {
+        "id": "groups",
+        "label": "Groups before tables",
+        "focus": [
+          "group_migration"
+        ],
+        "note": "Group migration is a prerequisite for Unity Catalog grants to behave correctly at all."
+      },
+      {
+        "id": "tables",
+        "label": "Table upgrade",
+        "focus": [
+          "table_migration"
+        ],
+        "note": "SYNC, CTAS, or DEEP CLONE, chosen per table by the assessment, not by default."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "assess",
+      "label": "Assessment"
+    },
+    {
+      "id": "groups",
+      "label": "Group migration"
+    },
+    {
+      "id": "tables",
+      "label": "Table migration"
+    },
+    {
+      "id": "exceptions",
+      "label": "What UCX can't do",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "assessment",
+    "group_migration",
+    "table_migration"
+  ],
+  "nodes": [
+    {
+      "id": "assessment",
+      "lane": "assess",
+      "col": 0,
+      "type": "frontend",
+      "label": "Assessment",
+      "sublabel": "read-only scan",
+      "tag": "writes a dashboard"
+    },
+    {
+      "id": "group_migration",
+      "lane": "groups",
+      "col": 1,
+      "type": "backend",
+      "label": "Migrate Groups",
+      "sublabel": "local to account"
+    },
+    {
+      "id": "table_migration",
+      "lane": "tables",
+      "col": 3,
+      "type": "backend",
+      "label": "Migrate Tables",
+      "sublabel": "SYNC, CTAS, DEEP CLONE"
+    },
+    {
+      "id": "cross_cloud",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "security",
+      "label": "No Cloud Move",
+      "sublabel": "upgrades in place only",
+      "tag": "cred. is separate"
+    }
+  ],
+  "edges": [
+    {
+      "from": "assessment",
+      "to": "group_migration",
+      "label": "readiness report",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 11
+    },
+    {
+      "from": "group_migration",
+      "to": "table_migration",
+      "label": "grants resolve",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "assessment",
+      "to": "cross_cloud",
+      "label": "different cloud target",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Non-destructive by design",
+      "items": [
+        "Assessment scans Hive tables, DBFS mounts, workspace-local groups, and incompatible cluster configs",
+        "Findings land as Delta tables plus a dashboard in a dedicated assessment workspace, not the one being scanned",
+        "Export the readiness report before touching any source object"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Two gated workflows, not one script",
+      "items": [
+        "Group migration converts workspace-local groups and re-points cluster/job/notebook ACLs at the account-level group",
+        "migrate-groups runs as a deployed Databricks Job — monitor and repair-run it, there is no direct run flag",
+        "Review the assessment output between workflows; don't run them back-to-back"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "UCX upgrades in place, it doesn't cross clouds",
+      "items": [
+        "It does not create target-cloud storage credentials or provision a metastore in a different account",
+        "A cross-cloud move still needs Unity Catalog strategy, metastore migration, and per-cloud Terraform",
+        "Skip UCX entirely if the source is already fully on Unity Catalog with account-level groups"
+      ]
+    }
+  ]
+}

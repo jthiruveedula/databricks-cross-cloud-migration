@@ -7,6 +7,7 @@ description: 'Plan the network and throughput mechanics of moving multi-TB to mu
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Large-scale data transfer
 
@@ -45,6 +46,14 @@ print(f"Estimated transfer window: {hours:.1f} hours")
 | **Azure Storage Mover** (cloud-to-cloud, preview) | S3 → Blob at scale | Fully managed; confirm current region/source support before committing a date |
 | **Private interconnect** (Megaport, Equinix Fabric, cloud-native Direct Connect/ExpressRoute/Partner Interconnect paired at a colocation) | Sustained PB-scale transfer, or an ongoing dual-run window measured in weeks | Bypasses public-internet egress path entirely for predictable throughput; procurement lead time is real — start this conversation in Foundation, not Cutover |
 | Physical transfer appliance (AWS Snowball, Azure Data Box, GCP Transfer Appliance) | Genuinely offline-constrained sites, or when the math above returns a transfer window measured in weeks | Removes the network bottleneck entirely; introduces device logistics, chain-of-custody, and a hard resync-the-delta step for anything written after the appliance shipped |
+
+<ArchifyDiagram
+  client:visible
+  name="table-migration.dataflow"
+  type="dataflow"
+  title="The three things that move, and the mechanism each one uses"
+  caption="Files, catalog metadata, and event traffic take separate paths and finish at different times. The bulk object copy is only the top lane — a table is not migrated until its DDL and grants have been replayed and its stream has a rebuilt checkpoint."
+/>
 
 ## Tuning Deep Clone for bulk throughput
 

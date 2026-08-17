@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Classic Compute Plane: Rebuilt Posture, Not Just Topology",
+    "output": "network-security.architecture.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "control-plane",
+        "label": "Control-plane link",
+        "focus": [
+          "clusters",
+          "link",
+          "control_plane"
+        ],
+        "note": "Private Link, PrivateLink, or PSC — every cloud's name for the same requirement: no public internet to the control plane."
+      },
+      {
+        "id": "egress",
+        "label": "Egress control",
+        "focus": [
+          "nat",
+          "endpoints"
+        ],
+        "note": "Explicit allow-lists per endpoint, not a lifted 'allow all' from a source environment that had tighter rules."
+      },
+      {
+        "id": "serverless-gap",
+        "label": "What this plane doesn't cover",
+        "focus": [
+          "clusters",
+          "serverless"
+        ],
+        "note": "Serverless is on by default and governed by a separate account-level object — see serverless networking."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "clusters",
+      "type": "backend",
+      "label": "Compute Cluster",
+      "sublabel": "no public IP",
+      "pos": [
+        60,
+        70
+      ],
+      "size": [
+        200,
+        60
+      ]
+    },
+    {
+      "id": "nat",
+      "type": "security",
+      "label": "NAT / Firewall",
+      "sublabel": "explicit egress only",
+      "pos": [
+        60,
+        220
+      ],
+      "size": [
+        200,
+        60
+      ]
+    },
+    {
+      "id": "link",
+      "type": "security",
+      "label": "Private Link / PSC",
+      "sublabel": "webapp + SCC relay",
+      "pos": [
+        520,
+        70
+      ],
+      "size": [
+        200,
+        60
+      ]
+    },
+    {
+      "id": "control_plane",
+      "type": "external",
+      "label": "Databricks Control Plane",
+      "sublabel": "managed, outside your network",
+      "pos": [
+        980,
+        70
+      ],
+      "size": [
+        200,
+        60
+      ]
+    },
+    {
+      "id": "storage",
+      "type": "database",
+      "label": "Metastore + Storage",
+      "sublabel": "private endpoint only",
+      "pos": [
+        980,
+        220
+      ],
+      "size": [
+        200,
+        60
+      ]
+    },
+    {
+      "id": "endpoints",
+      "type": "external",
+      "label": "Allow-Listed Endpoints",
+      "sublabel": "registries, APIs, SaaS",
+      "pos": [
+        980,
+        370
+      ],
+      "size": [
+        200,
+        60
+      ]
+    },
+    {
+      "id": "serverless",
+      "type": "messagebus",
+      "label": "Serverless (NCC)",
+      "sublabel": "separate plane, on by default",
+      "pos": [
+        60,
+        400
+      ],
+      "size": [
+        200,
+        60
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Target cloud VPC/VNet (classic compute plane)",
+      "wraps": [
+        "clusters",
+        "nat"
+      ],
+      "pad": 30
+    }
+  ],
+  "connections": [
+    {
+      "from": "clusters",
+      "to": "link",
+      "label": "control-plane link",
+      "variant": "security"
+    },
+    {
+      "from": "link",
+      "to": "control_plane",
+      "variant": "emphasis"
+    },
+    {
+      "from": "clusters",
+      "to": "storage",
+      "label": "private endpoint",
+      "variant": "security",
+      "via": [
+        [
+          160,
+          150
+        ],
+        [
+          900,
+          150
+        ],
+        [
+          900,
+          250
+        ]
+      ],
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "from": "nat",
+      "to": "endpoints",
+      "label": "explicit egress only",
+      "variant": "emphasis"
+    },
+    {
+      "from": "serverless",
+      "to": "control_plane",
+      "label": "bypasses this plane",
+      "variant": "dashed",
+      "fromSide": "left",
+      "toSide": "top",
+      "via": [
+        [
+          20,
+          430
+        ],
+        [
+          20,
+          25
+        ],
+        [
+          1080,
+          25
+        ]
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Match posture, not just topology",
+      "items": [
+        "The goal isn't 'a VPC exists' — it's no public IPs, private control-plane connectivity, and explicit egress, matching source exactly",
+        "A partial Private Link / PrivateLink setup silently falls back to public connectivity for the endpoint you missed",
+        "GCP requires explicit PSC endpoints per workspace — confirm DNS resolves to the private endpoint, not the public one"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Egress is enumerated, not inherited",
+      "items": [
+        "Lifting 'allow all egress' from a looser source environment is a regression, not a migration",
+        "Every external endpoint workloads actually call comes from the asset inventory, allow-listed individually",
+        "Metastore and storage traffic route through private endpoints even when public would technically work"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Serverless isn't on this diagram for a reason",
+      "items": [
+        "Serverless compute doesn't run in your VPC, so none of these controls govern it",
+        "It's on by default in new workspaces — a target can run workloads ungoverned while this network is still being built",
+        "Its egress is a separate account-level object: see serverless networking"
+      ]
+    }
+  ]
+}

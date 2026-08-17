@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Serverless Egress: Four Steps, One Shared Object",
+    "output": "serverless-networking.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "decide",
+        "label": "Decide before the landing zone",
+        "focus": [
+          "decide",
+          "account_admin"
+        ],
+        "note": "This is an architecture decision, not a runtime one — retrofitting it means touching workloads already running."
+      },
+      {
+        "id": "provision",
+        "label": "One NCC per region",
+        "focus": [
+          "create_ncc",
+          "endpoint_rules"
+        ],
+        "note": "The NCC is account-level and shared by every attached workspace in that region — its rules are a shared blast radius."
+      },
+      {
+        "id": "allowlist",
+        "label": "The step outside Databricks",
+        "focus": [
+          "allowlist",
+          "stale_ips"
+        ],
+        "note": "Firewall allow-lists are configured by a team that often was never told the migration was happening."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "decide",
+      "label": "Decide scope"
+    },
+    {
+      "id": "provision",
+      "label": "Create the NCC"
+    },
+    {
+      "id": "connect",
+      "label": "Connect + allow-list"
+    },
+    {
+      "id": "exceptions",
+      "label": "Not the workspace team's call",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "decide",
+    "create_ncc",
+    "endpoint_rules",
+    "allowlist"
+  ],
+  "nodes": [
+    {
+      "id": "decide",
+      "lane": "decide",
+      "col": 0,
+      "type": "frontend",
+      "label": "Decide Scope",
+      "sublabel": "before landing zone"
+    },
+    {
+      "id": "create_ncc",
+      "lane": "provision",
+      "col": 1,
+      "type": "security",
+      "label": "Create NCC",
+      "sublabel": "per region"
+    },
+    {
+      "id": "endpoint_rules",
+      "lane": "connect",
+      "col": 2,
+      "type": "cloud",
+      "label": "Endpoint Rules",
+      "sublabel": "per private target"
+    },
+    {
+      "id": "allowlist",
+      "lane": "connect",
+      "col": 3,
+      "type": "cloud",
+      "label": "Allow-List IPs",
+      "sublabel": "on every firewall"
+    },
+    {
+      "id": "account_admin",
+      "lane": "exceptions",
+      "col": 0,
+      "type": "security",
+      "label": "Account Admin",
+      "sublabel": "schedule early",
+      "tag": "account admin only"
+    },
+    {
+      "id": "stale_ips",
+      "lane": "exceptions",
+      "col": 3,
+      "type": "security",
+      "label": "Stale List",
+      "sublabel": "re-derive it",
+      "tag": "not from old lists"
+    }
+  ],
+  "edges": [
+    {
+      "from": "decide",
+      "to": "create_ncc",
+      "label": "in scope",
+      "variant": "emphasis"
+    },
+    {
+      "from": "create_ncc",
+      "to": "endpoint_rules",
+      "label": "attached",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "channelX": 310
+    },
+    {
+      "from": "endpoint_rules",
+      "to": "allowlist",
+      "label": "target exists first",
+      "variant": "emphasis",
+      "labelDy": -20
+    },
+    {
+      "from": "decide",
+      "to": "account_admin",
+      "label": "shared blast radius",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "allowlist",
+      "to": "stale_ips",
+      "label": "if copied from UI",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Three properties classic networking doesn't have",
+      "items": [
+        "The NCC is account-level, regional, and shared across every attached workspace",
+        "A workspace admin cannot create one — it needs an account admin, which is a scheduling dependency, not a technical one",
+        "Two target regions means two NCCs with two rule sets to keep consistent"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Ordering that bites if skipped",
+      "items": [
+        "The target resource must exist before you can point a private endpoint rule at it",
+        "Some private endpoints also need approval on the resource side — another team, another elapsed day",
+        "Deciding serverless scope after the landing zone means retrofitting egress onto workloads already running"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "The step most likely to be missed",
+      "items": [
+        "Firewall allow-lists live outside Databricks, often owned by a team never told about the migration",
+        "Its failure mode is a workload that hangs, not one that errors clearly",
+        "Databricks decommissioned the legacy stable-IP list on 25 May 2026 — re-derive it, don't copy an old one"
+      ]
+    }
+  ]
+}

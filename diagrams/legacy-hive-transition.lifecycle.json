@@ -1,0 +1,170 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Legacy Hive: Retire Now, Not on a Future Migration",
+    "output": "legacy-hive-transition.lifecycle.html",
+    "viewBox": [
+      980,
+      680
+    ],
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "assess",
+        "label": "Assess with UCX",
+        "focus": [
+          "legacy",
+          "assessed"
+        ],
+        "note": "UCX scans, maps grants, and generates upgrade notebooks without touching source objects."
+      },
+      {
+        "id": "upgrade",
+        "label": "Three upgrade methods",
+        "focus": [
+          "assessed",
+          "upgraded"
+        ],
+        "note": "DEEP CLONE, external table recreation, or view recreation — chosen per table, not applied uniformly."
+      },
+      {
+        "id": "coexist",
+        "label": "When a full upgrade can't happen yet",
+        "focus": [
+          "assessed",
+          "federated"
+        ],
+        "note": "Federation queries Hive tables from UC-enabled clusters without forcing every table to upgrade before cutover."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Upgrade path"
+    },
+    {
+      "id": "coexist",
+      "label": "Coexistence"
+    },
+    {
+      "id": "terminal",
+      "label": "End state"
+    }
+  ],
+  "states": [
+    {
+      "id": "legacy",
+      "type": "start",
+      "label": "Legacy Hive Table",
+      "sublabel": "workspace-local",
+      "lane": "main",
+      "col": 0,
+      "step": "01"
+    },
+    {
+      "id": "assessed",
+      "type": "decision",
+      "label": "Assessed",
+      "sublabel": "UCX readiness report",
+      "lane": "main",
+      "col": 1,
+      "step": "02"
+    },
+    {
+      "id": "upgraded",
+      "type": "success",
+      "label": "Upgraded",
+      "sublabel": "DEEP CLONE, external, or view",
+      "lane": "main",
+      "col": 2,
+      "step": "03"
+    },
+    {
+      "id": "federated",
+      "type": "waiting",
+      "label": "Federated",
+      "sublabel": "queryable, not yet upgraded",
+      "lane": "coexist",
+      "col": 1,
+      "tag": "wave by wave"
+    },
+    {
+      "id": "retired",
+      "type": "success",
+      "label": "Retired",
+      "sublabel": "source object deleted",
+      "lane": "terminal",
+      "col": 2
+    }
+  ],
+  "transitions": [
+    {
+      "from": "legacy",
+      "to": "assessed",
+      "variant": "emphasis"
+    },
+    {
+      "from": "assessed",
+      "to": "upgraded",
+      "label": "ready now",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": -25
+    },
+    {
+      "from": "assessed",
+      "to": "federated",
+      "label": "not ready yet",
+      "variant": "dashed"
+    },
+    {
+      "from": "upgraded",
+      "to": "retired",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "right",
+      "via": [
+        [
+          850,
+          157
+        ],
+        [
+          850,
+          479
+        ]
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Two incidents this retires for good",
+      "items": [
+        "Workspace-local Hive metastores don't share governance across workspaces — nothing here is portable",
+        "DBFS-backed managed tables are tied to a workspace; both the data and the metastore pointer must move",
+        "Deferring this moves the failure from planning time to cutover night, it doesn't avoid it"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Three methods, chosen per table",
+      "items": [
+        "Hive managed (DBFS) upgrades via CREATE TABLE ... DEEP CLONE",
+        "Hive external upgrades via CREATE EXTERNAL TABLE at the new location",
+        "Hive views are recreated after their base tables exist"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Federation buys time, it doesn't replace upgrading",
+      "items": [
+        "Hive metastore federation queries legacy tables from UC-enabled clusters",
+        "Migrate wave by wave rather than forcing one cutover for every table",
+        "Avoid creating new Hive assets in the source during the migration itself"
+      ]
+    }
+  ]
+}
