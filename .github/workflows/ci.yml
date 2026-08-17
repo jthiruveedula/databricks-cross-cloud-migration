@@ -101,6 +101,8 @@ jobs:
       - if: needs.changes.outputs.site == 'true'
         run: npm ci
       - if: needs.changes.outputs.site == 'true'
+        run: npm run check:diagram-wiring
+      - if: needs.changes.outputs.site == 'true'
         run: npm run build
       - if: needs.changes.outputs.site != 'true'
         run: echo "No site sources changed -- build skipped."

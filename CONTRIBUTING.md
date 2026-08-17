@@ -106,6 +106,10 @@ scripts/build-diagrams.mjs    the renderer wrapper
    1024px wide, and a prose column is narrower, so a too-short frame produces a scrollbar inside a
    scrollbar. Load the page, confirm the iframe's `scrollHeight` fits its box, and raise the
    `height` prop if it does not.
+6. **Run `npm run check:diagram-wiring`** before opening the PR — CI runs it too. It catches three
+   things that are otherwise silent: a spec with no rendered HTML, a page embed pointing at a
+   render that doesn't exist, and a rendered HTML file no page actually embeds (dead weight, or a
+   removed embed whose render was never cleaned up).
 
 ## Testing a UI/interactive change
 
