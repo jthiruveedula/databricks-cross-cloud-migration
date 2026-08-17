@@ -84,7 +84,12 @@ Apply least privilege from day one:
 
 - Run a principal mapping review with security and identity teams.
 - Test each target role with a read and write operation on target storage.
+- Run a negative-privilege test too: confirm each target role does **not** have access it shouldn't — replaying source grants 1:1 also replays any over-permissioning that existed there.
 - Confirm that break-glass accounts exist in the target account.
+
+<Callout client:visible variant="warning" title="This mapping does not end source sessions">
+  A rebuilt IAM role or managed identity in target says nothing about a session or token already issued against source — see [identity federation](/security/identity-federation) for source session TTL and force-revocation before freeze. Read both pages together; this one is the target side, that one is the cutover-time cutoff.
+</Callout>
 
 ## Rollback
 
