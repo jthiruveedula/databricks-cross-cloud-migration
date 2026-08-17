@@ -128,7 +128,7 @@ dbxmig -c migration.yaml reconcile -i inventory.json -t target-inventory.json --
 # a hard 15-minute timeout, before final sync (step 4) touches anything.
 dbxmig -c migration.yaml cutover-drain --side source --timeout 900`} />
 
-<Callout client:visible variant="tip" title="Three of the fifteen need credentials outright; reconcile is optional-in and cutover-drain is cutover-only">
+<Callout client:visible variant="tip" title="Three of the sixteen need credentials outright; reconcile is optional-in and cutover-drain is cutover-only">
   `inventory` and `workspace` read the source; `apply` writes to the target. `reconcile` runs against JSON on disk unless `--live` is passed, in which case it also reads both warehouses to checksum table data. `cutover-drain` always needs a live workspace — it has nothing to poll otherwise. Everything else — planning, collision detection, DDL generation, grant translation, bundle output, verification — runs against JSON on disk. Most of the migration can be generated, reviewed, and signed off before anyone holds a token for the target account, which in a regulated environment is usually the long pole rather than the technical work.
 </Callout>
 
