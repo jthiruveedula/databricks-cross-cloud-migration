@@ -23,8 +23,12 @@ A metastore is created per account and region and cannot move or span regions. D
 | Approach | What it is | Trade-off |
 |---|---|---|
 | **Databricks Managed Disaster Recovery** (AWS + Azure) | Databricks-operated secondary workspace + UC metastore in a second region, with continuous replication of UC metadata and managed table data, workspace assets (notebooks, jobs, warehouses, ACLs) | Managed failover reduces custom tooling, but the secondary workspace's network config, Private Link, and CMK setup must match primary from day one — not bolted on later |
-| Delta Sharing across metastores | Share tables from the primary metastore to a standby workspace/metastore in a second region; standby queries live or maintains a synced replica | Cheaper for read-mostly DR; the standby is not automatically promotable to primary without a runbook |
-| Customer-built dual-write / replication | Manually replicate catalogs, grants, and Delta tables to a second-region metastore via CDC or scheduled Deep Clone | Full control, full operational burden — the same replication discipline this site recommends for [dual-run during migration](/collaboration/cross-cloud-collaboration#keep-source-and-target-in-sync-dual-run) applies to steady-state DR too |
+| Delta Sharing across metastores | Share tables from the primary metastore to a standby workspace/metastore in a second region; standby queries live or maintains a synced replica | Cheaper for read-mostly DR; RPO is bounded by share/replica refresh cadence, not continuous — and the standby is not automatically promotable to primary without a runbook |
+| Customer-built dual-write / replication | Manually replicate catalogs, grants, and Delta tables to a second-region metastore via CDC or scheduled Deep Clone | Full control, full operational burden — RPO is exactly as good as your replication cadence, no better. The same replication discipline this site recommends for [dual-run during migration](/collaboration/cross-cloud-collaboration#keep-source-and-target-in-sync-dual-run) applies to steady-state DR too |
+
+<Callout client:visible variant="prerequisite" title="Pick the topology from your RTO/RPO target, not the other way around">
+  Databricks' own DR guidance is explicit that it does not prescribe target numbers for you — RPO ("how much data loss can this service tolerate") and RTO ("how fast must it be restored") are business decisions per workload, made before choosing infrastructure. Write those two numbers down for each critical workload first. Managed DR's continuous replication fits a tight RPO; a scheduled Delta Sharing refresh or nightly Deep Clone only fits an RPO measured in the refresh interval — don't pick the cheaper option and then discover the RPO gap during a real incident.
+</Callout>
 
 <Callout client:visible variant="warning" title="Never dual-register the same table as external in two metastores">
   Registering a shared table as an external table in more than one metastore causes schema/commit desync under concurrent writes — the same failure mode called out in [cross-cloud collaboration](/collaboration/cross-cloud-collaboration). Use Delta Sharing or a controlled replica for DR reads, never a second external-table registration of the primary's storage path.
@@ -61,7 +65,8 @@ DR design itself carries no migration rollback risk — it's additive infrastruc
 - Automate the failover drill itself as a scheduled job that promotes a scratch environment, runs reconciliation, and tears down — turning "DR works" into a continuously tested claim instead of a document.
 
 <Checklist client:visible title="Disaster recovery" items={[
-  { id: 'topology', label: 'DR topology (Managed DR, Delta Sharing, or custom replication) chosen alongside target region selection' },
+  { id: 'rtorpo', label: 'RTO and RPO defined per critical workload before choosing a topology' },
+  { id: 'topology', label: 'DR topology (Managed DR, Delta Sharing, or custom replication) chosen to meet the stated RTO/RPO, alongside target region selection' },
   { id: 'network-match', label: 'Secondary network config, Private Link/PSC, and CMK match primary' },
   { id: 'identity-match', label: 'Account-level groups and UC grants present in secondary metastore' },
   { id: 'no-dual-register', label: 'No table dual-registered as external in both metastores' },

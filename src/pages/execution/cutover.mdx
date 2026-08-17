@@ -43,12 +43,17 @@ If any domain is not signed off, the answer is no-go — reschedule rather than 
 |------|--------|-------|
 | 1 | Announce maintenance window | Migration PMO |
 | 2 | Pause source jobs and writes | Platform team |
-| 3 | Final incremental sync | Data team |
-| 4 | Run final reconciliation | QA / data team |
-| 5 | Switch DNS/endpoints/connection strings | Network team |
-| 6 | Enable target jobs in dependency order | Platform team |
-| 7 | Verify first target runs | Application teams |
-| 8 | Open support channel | Migration PMO |
+| 3 | Drain: confirm zero active runs on source | Platform team |
+| 4 | Final incremental sync | Data team |
+| 5 | Run final reconciliation | QA / data team |
+| 6 | Switch DNS/endpoints/connection strings | Network team |
+| 7 | Enable target jobs in dependency order | Platform team |
+| 8 | Verify first target runs | Application teams |
+| 9 | Open support channel | Migration PMO |
+
+<Callout client:visible variant="warning" title="Pausing a job disables future triggers — it does not stop a run already in flight">
+  Step 2 stops new runs from being scheduled; it does nothing to a job that started five minutes before the freeze. Proceeding straight to final sync while a source job is still writing is the exact split-brain precondition [rollback](/execution/rollback) exists to prevent — the sync captures a state the source is still mutating underneath it. Poll the Jobs API's `active_only=true` filter on `List job runs` (active states: `QUEUED`, `PENDING`, `RUNNING`, `TERMINATING`) after step 2, and do not proceed to step 4 until it returns zero across every source job — or the drain hits a hard timeout, in which case treat it as a no-go, not a "close enough."
+</Callout>
 
 ## Final sync and read-only mode
 
@@ -85,11 +90,12 @@ If cutover fails:
 
 ## Automation opportunity
 
-- Use a cutover runbook script that pauses jobs, runs final sync, validates, and enables target jobs.
+- Use a cutover runbook script that pauses jobs, polls `active_only=true` until drained, runs final sync, validates, and enables target jobs.
 - Integrate with orchestration tools for dependency-aware job startup.
 
 <Checklist client:visible title="Cutover checklist" items={[
   { id: 'freeze', label: 'Source jobs paused and users notified' },
+  { id: 'drain', label: 'Zero active source runs confirmed via Jobs API before final sync' },
   { id: 'final-sync', label: 'Final incremental sync completed' },
   { id: 'reconcile', label: 'Final reconciliation passed' },
   { id: 'endpoint', label: 'Endpoints/DNS switched to target' },

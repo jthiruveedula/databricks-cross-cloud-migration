@@ -27,15 +27,26 @@ Data reconciliation proves that target data matches source data within agreed to
 
 ## Row-count and checksum query
 
+<Callout client:visible variant="warning" title="A per-row hash is not a checksum — it has to be aggregated">
+  Hashing each row and eyeballing (or `ORDER BY`-ing) the list does not scale past a handful of rows, and it gives you nothing to diff against the target in one shot. Aggregate the per-row hashes with a commutative, order-independent operation — `SUM()` over `xxhash64()` — so two tables compare with a single `COUNT` and a single 8-byte sum, regardless of table size or row order. This is the same principle behind SQL Server's `CHECKSUM_AGG` and the Merkle-tree-style anti-entropy checks used for cross-region replica repair: verification cost stays O(1) to transfer, not O(n) rows.
+</Callout>
+
 <CodeBlock client:visible language="sql" filename="reconcile.sql" code={`-- Reconcile row count
 SELECT 'source' AS env, COUNT(*) AS cnt FROM source_catalog.schema.table
 UNION ALL
 SELECT 'target' AS env, COUNT(*) AS cnt FROM target_catalog.schema.table;
 
--- Column-level checksum
-SELECT md5(concat_ws(',', cast(col1 AS string), cast(col2 AS string))) AS hash
+-- Column-level checksum: one order-independent number per side, not one hash per row
+SELECT 'source' AS env, COUNT(*) AS cnt, SUM(xxhash64(col1, col2, col3)) AS agg_hash
 FROM source_catalog.schema.table
-ORDER BY hash;`} />
+UNION ALL
+SELECT 'target' AS env, COUNT(*) AS cnt, SUM(xxhash64(col1, col2, col3)) AS agg_hash
+FROM target_catalog.schema.table;
+
+-- Only if agg_hash disagrees: fall back to a row-level diff to isolate the mismatch
+SELECT * FROM source_catalog.schema.table
+EXCEPT
+SELECT * FROM target_catalog.schema.table;`} />
 
 ## Volume reconciliation
 
