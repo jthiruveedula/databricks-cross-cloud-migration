@@ -76,7 +76,7 @@ So `gaps` takes `--target-inventory` and compares intended names against what th
 
 Omitting the flag is allowed, because a genuinely greenfield region has nothing to compare against — but the report then says the check did not run rather than staying quiet about it.
 
-## The fourteen commands, in the order you run them
+## The fifteen commands, in the order you run them
 
 | Command | Does | Needs a workspace |
 |---|---|---|
@@ -93,6 +93,7 @@ Omitting the flag is allowed, because a genuinely greenfield region has nothing 
 | `apply` | Executes, resumably — dry-run unless `--execute` | yes (target) |
 | `verify` | Proves the target holds the grants and object ACLs the migration intended | no |
 | `reconcile` | Compares target against source, exits non-zero on a blocker — metadata-only by default; add `--live` for row-count + aggregate-hash checksum reconciliation against both warehouses | no (yes with `--live`) |
+| `cutover-drain` | Polls a workspace's Jobs API until zero active runs or a hard timeout — the [cutover](/execution/cutover) step 3 gate, read-only | yes |
 | `report` | Rolls inventory, plan, gaps, and reconciliation into one markdown file | no |
 
 <CodeBlock client:visible language="bash" filename="a full run" code={`export DBX_SOURCE_TOKEN=...        # tokens live in the environment, never in the config
@@ -120,10 +121,14 @@ dbxmig -c migration.yaml reconcile -i inventory.json -t target-inventory.json
 # the row-count + SUM(xxhash64(...)) checksum query from data-reconciliation
 # against both warehouses, restricted to tables that already passed the
 # metadata check above.
-dbxmig -c migration.yaml reconcile -i inventory.json -t target-inventory.json --live`} />
+dbxmig -c migration.yaml reconcile -i inventory.json -t target-inventory.json --live
 
-<Callout client:visible variant="tip" title="Three of the fourteen need credentials outright; reconcile is optional-in">
-  `inventory` and `workspace` read the source; `apply` writes to the target. `reconcile` runs against JSON on disk unless `--live` is passed, in which case it also reads both warehouses to checksum table data. Everything else — planning, collision detection, DDL generation, grant translation, bundle output, verification — runs against JSON on disk. Most of the migration can be generated, reviewed, and signed off before anyone holds a token for the target account, which in a regulated environment is usually the long pole rather than the technical work.
+# Cutover night, after pausing source jobs (step 2): poll until drained or
+# a hard 15-minute timeout, before final sync (step 4) touches anything.
+dbxmig -c migration.yaml cutover-drain --side source --timeout 900`} />
+
+<Callout client:visible variant="tip" title="Three of the fifteen need credentials outright; reconcile is optional-in and cutover-drain is cutover-only">
+  `inventory` and `workspace` read the source; `apply` writes to the target. `reconcile` runs against JSON on disk unless `--live` is passed, in which case it also reads both warehouses to checksum table data. `cutover-drain` always needs a live workspace — it has nothing to poll otherwise. Everything else — planning, collision detection, DDL generation, grant translation, bundle output, verification — runs against JSON on disk. Most of the migration can be generated, reviewed, and signed off before anyone holds a token for the target account, which in a regulated environment is usually the long pole rather than the technical work.
 </Callout>
 
 ## One config file is the whole contract

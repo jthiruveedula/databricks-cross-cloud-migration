@@ -212,6 +212,13 @@ def test_apply_dry_run_prints_statements_and_writes_no_journal_entries(tmp_path,
     assert entries and all(e["status"] == "blocked" for e in entries)
 
 
+def test_cutover_drain_requires_a_live_workspace(tmp_path):
+    # No source.host in the config -- this is the honest failure mode, not a
+    # silent no-op, since the whole point of the check is to poll a real
+    # workspace's Jobs API.
+    assert main(["-c", write_config(tmp_path), "cutover-drain"]) == EXIT_USAGE
+
+
 def migrated_target(tmp_path) -> str:
     """The fixture as it should look after a correct migration."""
     with open(FIXTURE, encoding="utf-8") as handle:
