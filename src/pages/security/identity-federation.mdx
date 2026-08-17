@@ -42,6 +42,16 @@ Databricks accounts support SSO via SAML 2.0 and OIDC, and user/group provisioni
 
 Before migrating, convert workspace-local groups to account-level groups — this ensures grants and workspace attachments work correctly. The mechanics (export, create matching account-level groups, reassign ownership/grants, retire workspace-local groups) are the same regardless of cloud change; see [UCX-assisted migration](/governance/ucx-strategy)'s group migration workflow for the actual `migrate-groups` job, or run the equivalent steps manually if not using UCX.
 
+## Session and token invalidation at cutover
+
+<Callout client:visible variant="warning" title="Reconfiguring SSO does not end sessions that already exist">
+  [Cutover](/execution/cutover) and [network security](/security/network-security) both assume source becomes read-only at the freeze. A SAML/OIDC session established before the freeze, or a long-lived personal access token, keeps working against source until it naturally expires — reconfiguring the IdP in the target account does nothing to it. If the source IdP's session TTL is longer than your freeze window, "read-only" is a policy, not a fact, until sessions actually lapse.
+</Callout>
+
+- Note the source IdP's maximum session TTL before cutover — it's the real lower bound on how fast the freeze is enforced end-to-end, not the moment you flip write permissions.
+- Where the IdP supports it, force-revoke active sessions/tokens for the source app at freeze time rather than waiting them out.
+- Inventory and rotate or revoke source personal access tokens as part of the [what does not migrate](/execution/what-does-not-migrate) export — a forgotten PAT is a write path that survives the freeze.
+
 ## Validation
 
 - Test SSO login to the target account with a non-admin user.
@@ -62,5 +72,6 @@ If federation fails, keep a local account admin account enabled for break-glass 
   { id: 'scim', label: 'Enable SCIM provisioning for target groups' },
   { id: 'groups', label: 'Convert workspace-local groups to account-level' },
   { id: 'sp', label: 'Create target service principals and OAuth credentials' },
+  { id: 'session-revoke', label: 'Source session TTL known; sessions/tokens force-revoked or waited out before freeze is trusted' },
   { id: 'breakglass', label: 'Create break-glass admin account' },
 ]} />
