@@ -36,7 +36,7 @@ from .bundle import generate_bundle
 from .collisions import detect as detect_collisions
 from .collisions import render as render_collisions
 from .config import ConfigError, MigrationConfig, load_config, load_principal_map
-from .crossrefs import coverage_gaps, merge, scan, scan_source_tree, to_rows
+from .crossrefs import coverage_gaps, from_dicts, merge, scan, scan_source_tree, to_dicts, to_rows
 from .cutover import check_drain
 from .ddl import (
     add_constraint,
@@ -82,9 +82,11 @@ from .report import (
     plan_summary,
     reconciliation_summary,
     verify_summary,
+    wave_plan_summary,
     workspace_summary,
 )
 from .state import STATUS_BLOCKED, STATUS_DONE, STATUS_FAILED, Journal
+from .waveplan import DEFAULT_THRESHOLDS, build_wave_plan
 from .workspace import (
     ASSET_CLASSES,
     WorkspaceInventory,
@@ -523,8 +525,39 @@ def cmd_crossrefs(config: MigrationConfig, args: argparse.Namespace) -> int:
         with open(args.csv, "w", encoding="utf-8", newline="") as handle:
             csv.writer(handle).writerows(to_rows(report))
         print("wrote {0}".format(args.csv), file=sys.stderr)
+    if args.json:
+        _write(args.json, json.dumps(to_dicts(report), indent=2, sort_keys=True))
+        print("wrote {0}".format(args.json), file=sys.stderr)
     _write(args.out, crossref_summary(inventory, report))
     return EXIT_FINDINGS if report.blockers else EXIT_OK
+
+
+def cmd_wave_plan(config: MigrationConfig, args: argparse.Namespace) -> int:
+    """Cluster assets that share a reference and assign them to waves.
+
+    [Wave planning](/execution/wave-planning) calls the shared-references
+    table "the wave-planning signal"; this is the step that was always left
+    manual -- turning it into actual clusters, scoring them, and assigning
+    waves. Clustering and dependency-count scoring are deterministic; the
+    other four scoring factors are a judgment call this toolkit cannot
+    observe, so they come from ``--scores`` or default to 1 (earliest wave)
+    rather than being invented.
+    """
+    with open(args.crossrefs, "r", encoding="utf-8") as handle:
+        report = from_dicts(json.load(handle))
+    manual_scores: dict = {}
+    if args.scores:
+        with open(args.scores, "r", encoding="utf-8") as handle:
+            manual_scores = json.load(handle)
+    shared = report.shared_references(minimum=args.minimum_holders)
+    plan = build_wave_plan(
+        shared,
+        manual_scores=manual_scores,
+        all_assets=report.all_asset_labels(),
+        thresholds=DEFAULT_THRESHOLDS,
+    )
+    _write(args.out, wave_plan_summary(plan))
+    return EXIT_OK
 
 
 def cmd_bundle(config: MigrationConfig, args: argparse.Namespace) -> int:
@@ -806,7 +839,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("-o", "--out", help="write the report here instead of stdout")
     p.add_argument("--csv", help="also write the findings as CSV")
+    p.add_argument(
+        "--json", help="also write the full report as JSON, for `dbxmig wave-plan --crossrefs`"
+    )
     p.set_defaults(func=cmd_crossrefs)
+
+    p = sub.add_parser(
+        "wave-plan",
+        help="cluster assets sharing a reference and assign them to waves",
+    )
+    p.add_argument(
+        "--crossrefs", required=True, help="`dbxmig crossrefs --json` output"
+    )
+    p.add_argument(
+        "--scores",
+        help=(
+            "JSON: {cluster_id: {criticality, risk_tolerance, data_size, owner_readiness, "
+            "dependency_count}}, each 1-5 -- cluster_id is the cluster's alphabetically-lowest "
+            "asset label. Unscored clusters default to 1 (earliest wave) on every factor."
+        ),
+    )
+    p.add_argument(
+        "--minimum-holders",
+        type=int,
+        default=2,
+        help="minimum assets sharing a reference before they're clustered together (default: 2)",
+    )
+    p.add_argument("-o", "--out", help="write the plan here instead of stdout")
+    p.set_defaults(func=cmd_wave_plan)
 
     p = sub.add_parser(
         "bundle", help="generate Declarative Automation Bundle YAML from the workspace inventory"

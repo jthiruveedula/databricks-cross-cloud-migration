@@ -76,14 +76,15 @@ So `gaps` takes `--target-inventory` and compares intended names against what th
 
 Omitting the flag is allowed, because a genuinely greenfield region has nothing to compare against — but the report then says the check did not run rather than staying quiet about it.
 
-## The fifteen commands, in the order you run them
+## The sixteen commands, in the order you run them
 
 | Command | Does | Needs a workspace |
 |---|---|---|
 | `validate` | Rejects a broken config before anything runs | no |
 | `inventory` | Exports the source metastore to JSON | yes (source) |
 | `workspace` | Collects the *workspace* plane — jobs, clusters, dashboards, object ACLs — which the metastore inventory does not cover | yes (source) |
-| `crossrefs` | Scans a source tree for references to objects that are moving, so the code changes land in the same wave as the data | no |
+| `crossrefs` | Scans a source tree for references to objects that are moving, so the code changes land in the same wave as the data — add `--json` to feed `wave-plan` | no |
+| `wave-plan` | Clusters assets sharing a reference and scores/assigns them to waves, per [wave planning](/execution/wave-planning)'s formula | no |
 | `plan` | Orders every object by dependency into executable steps | no |
 | `gaps` | Everything with no automated path, plus names already taken in the target — **read this first** | no |
 | `ddl` | Emits idempotent target SQL, in dependency order | no |
@@ -228,7 +229,7 @@ Reported as manual work rather than pretended. Each of these is a genuine limit,
 
 ## Testing and status
 
-<CodeBlock client:visible language="bash" code={`pytest        # 123 tests, no credentials, no network
+<CodeBlock client:visible language="bash" code={`pytest        # 264 tests, no credentials, no network
 ruff check .`} />
 
 Both run in CI on every pull request that touches `automation/`, and the Python is scanned by CodeQL alongside the site code — this generates and executes SQL against a customer's metastore, so it is treated as application code rather than sample snippets.
