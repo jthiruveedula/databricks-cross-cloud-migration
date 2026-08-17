@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Grant Migration: Export, Translate, Apply Top-Down, Verify",
+    "output": "grants-and-roles.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "export",
+        "label": "Export as admin",
+        "focus": [
+          "export",
+          "filtered"
+        ],
+        "note": "information_schema filters to what the querying principal can see — run this as a metastore admin or export a silent subset."
+      },
+      {
+        "id": "apply",
+        "label": "Top-down, not table-first",
+        "focus": [
+          "translate",
+          "generate",
+          "apply"
+        ],
+        "note": "Catalog and schema grants land before table-level exceptions, or some operations fail with confusing permission errors."
+      },
+      {
+        "id": "verify",
+        "label": "Diff before trusting it",
+        "focus": [
+          "apply",
+          "verify"
+        ],
+        "note": "The verify step is what catches a translation gap before a user does."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "export",
+      "label": "Export"
+    },
+    {
+      "id": "translate",
+      "label": "Translate"
+    },
+    {
+      "id": "apply",
+      "label": "Apply top-down"
+    },
+    {
+      "id": "exceptions",
+      "label": "Silent gap risk",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "export",
+    "translate",
+    "generate",
+    "apply",
+    "verify"
+  ],
+  "nodes": [
+    {
+      "id": "export",
+      "lane": "export",
+      "col": 0,
+      "type": "database",
+      "label": "Export Grants",
+      "sublabel": "as metastore admin"
+    },
+    {
+      "id": "translate",
+      "lane": "translate",
+      "col": 1,
+      "type": "backend",
+      "label": "Translate",
+      "sublabel": "principal to group"
+    },
+    {
+      "id": "generate",
+      "lane": "translate",
+      "col": 3,
+      "type": "backend",
+      "label": "Generate GRANT",
+      "sublabel": "from the mapping"
+    },
+    {
+      "id": "apply",
+      "lane": "apply",
+      "col": 4,
+      "type": "security",
+      "label": "Apply",
+      "sublabel": "catalog, schema, table"
+    },
+    {
+      "id": "verify",
+      "lane": "apply",
+      "col": 5,
+      "type": "frontend",
+      "label": "Verify",
+      "sublabel": "diff vs. source"
+    },
+    {
+      "id": "filtered",
+      "lane": "exceptions",
+      "col": 0,
+      "type": "security",
+      "label": "Filtered",
+      "sublabel": "non-admin sees a subset",
+      "tag": "gaps found weeks later"
+    }
+  ],
+  "edges": [
+    {
+      "from": "export",
+      "to": "translate",
+      "label": "grant list",
+      "variant": "emphasis"
+    },
+    {
+      "from": "translate",
+      "to": "generate",
+      "variant": "emphasis"
+    },
+    {
+      "from": "generate",
+      "to": "apply",
+      "label": "GRANT statements",
+      "variant": "emphasis"
+    },
+    {
+      "from": "apply",
+      "to": "verify",
+      "label": "target grants",
+      "variant": "emphasis",
+      "labelDy": -20
+    },
+    {
+      "from": "export",
+      "to": "filtered",
+      "label": "not run as admin",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "The export step is the one that silently lies",
+      "items": [
+        "information_schema automatically filters to what the querying principal can already see",
+        "A clean-looking export from a non-admin is a subset, not the whole grant set",
+        "Sanity-check the exported grant count against the object count before trusting it"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Apply order is not optional",
+      "items": [
+        "Grant catalog, then schema, then table — the wrong order fails with confusing permission errors",
+        "Reserve table-level grants for genuine exceptions; they're the ones that get missed and drift",
+        "Use Unity Catalog groups as grantees everywhere, not individual users"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Verify closes the loop",
+      "items": [
+        "dbxmig verify diffs target grants against the source export directly",
+        "A missing grant here is a support ticket weeks after cutover, not a build failure today",
+        "Keep an ownership group per domain, separate from the read-access group"
+      ]
+    }
+  ]
+}

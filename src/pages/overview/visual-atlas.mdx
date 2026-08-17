@@ -119,6 +119,19 @@ Six more diagrams cover the security work that's hardest to get right: the circu
   <Card href={withBase('/security/data-residency')} title="Data residency" description="One decision, four outcomes — and provider-constrained isn't a blocked migration." />
 </div>
 
+## 9. Governance, where isolation actually lives
+
+Six more diagrams cover Unity Catalog governance: the metastore topology every workspace attaches to, the UCX pipeline that upgrades a legacy estate in place, and the four migration patterns — grants, row/column security, external locations, and legacy Hive retirement — that all share the same shape: export, recreate, verify.
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <Card href={withBase('/governance/unity-catalog-strategy')} title="Unity Catalog strategy" description="One metastore per region, workspaces attached, isolation moved to catalogs — a limit, not a design choice." />
+  <Card href={withBase('/governance/ucx-strategy')} title="UCX-assisted migration" description="Assessment, then groups, then tables — three gated workflows, and the cross-cloud limit UCX doesn't cover." />
+  <Card href={withBase('/governance/grants-and-roles')} title="Grants and roles" description="Export as admin, translate, apply top-down, verify — with the silently-filtered export as the exception." />
+  <Card href={withBase('/governance/row-column-security')} title="Row and column-level security" description="Redeploy the UDF, attach, verify — with ABAC as the default for anything migrating in bulk." />
+  <Card href={withBase('/governance/external-locations-and-volumes')} title="External locations and volumes" description="Inventory to unmount in six steps, with cleanup deliberately last." />
+  <Card href={withBase('/governance/legacy-hive-transition')} title="Legacy Hive transition" description="Assessed, upgraded, or federated as a coexistence state — retire now, not on the next migration." />
+</div>
+
 ## Editing these diagrams
 
 The diagrams are generated, not hand-drawn. Each one is a typed JSON spec in `diagrams/`, rendered to a self-contained HTML file in `public/diagrams/` by [Archify](https://github.com/tt-a1i/archify):

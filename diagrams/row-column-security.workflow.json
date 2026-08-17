@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Row Filters and Column Masks: Functions First, Then Attach",
+    "output": "row-column-security.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "export",
+        "label": "Export the policy set",
+        "focus": [
+          "export",
+          "recreate_fn"
+        ],
+        "note": "Row filters, column masks, and ABAC policies are exported before anything is written against the target."
+      },
+      {
+        "id": "attach",
+        "label": "Functions, then attachment",
+        "focus": [
+          "recreate_fn",
+          "attach"
+        ],
+        "note": "The filter and mask are UDFs and must be redeployed — attaching without redeploying the function attaches nothing."
+      },
+      {
+        "id": "abac",
+        "label": "Prefer ABAC in bulk",
+        "focus": [
+          "attach",
+          "abac"
+        ],
+        "note": "Hand-attaching to hundreds of tables is exactly the step that silently drops coverage."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "export",
+      "label": "Export policies"
+    },
+    {
+      "id": "recreate",
+      "label": "Recreate functions"
+    },
+    {
+      "id": "verify",
+      "label": "Attach and verify"
+    },
+    {
+      "id": "exceptions",
+      "label": "Bulk migration",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "export",
+    "recreate_fn",
+    "attach",
+    "check"
+  ],
+  "nodes": [
+    {
+      "id": "export",
+      "lane": "export",
+      "col": 0,
+      "type": "database",
+      "label": "Export",
+      "sublabel": "filters, masks, ABAC"
+    },
+    {
+      "id": "recreate_fn",
+      "lane": "recreate",
+      "col": 1,
+      "type": "backend",
+      "label": "Recreate UDFs",
+      "sublabel": "in target catalog"
+    },
+    {
+      "id": "attach",
+      "lane": "verify",
+      "col": 3,
+      "type": "security",
+      "label": "Attach",
+      "sublabel": "to target tables"
+    },
+    {
+      "id": "check",
+      "lane": "verify",
+      "col": 5,
+      "type": "frontend",
+      "label": "Verify",
+      "sublabel": "as non-privileged user"
+    },
+    {
+      "id": "abac",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "security",
+      "label": "Use ABAC",
+      "sublabel": "self-extending",
+      "tag": "for bulk migrations"
+    }
+  ],
+  "edges": [
+    {
+      "from": "export",
+      "to": "recreate_fn",
+      "label": "policy set",
+      "variant": "emphasis"
+    },
+    {
+      "from": "recreate_fn",
+      "to": "attach",
+      "label": "functions deployed",
+      "variant": "emphasis"
+    },
+    {
+      "from": "attach",
+      "to": "check",
+      "variant": "emphasis"
+    },
+    {
+      "from": "recreate_fn",
+      "to": "abac",
+      "label": "migrating in bulk",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Same discipline as grants",
+      "items": [
+        "Extract the full source policy set before writing anything against the target",
+        "Row filters and column masks are SQL functions registered in Unity Catalog, then attached",
+        "ABAC policies key off tags instead of per-table attachment"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Functions are redeployed, not referenced",
+      "items": [
+        "A row filter or column mask is a UDF — it must be recreated in the target catalog, not just re-pointed",
+        "Confirm tags were actually migrated before assuming an ABAC policy will attach correctly",
+        "Attach, then query as a representative non-privileged principal and diff against source behavior"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "ABAC is the bulk-migration default",
+      "items": [
+        "Hand-attaching filters/masks to hundreds of tables is exactly the step that silently drops coverage",
+        "A tag-driven ABAC policy covers new tables automatically, present or future",
+        "Prefer it whenever the source pattern was already consistent, e.g. 'any table tagged pii'"
+      ]
+    }
+  ]
+}

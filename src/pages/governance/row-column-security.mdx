@@ -7,6 +7,7 @@ description: 'Migrate Unity Catalog row filters, column masks, and attribute-bas
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Row and column-level security
 
@@ -42,6 +43,14 @@ WHERE table_catalog = 'source_catalog';
 -- ABAC policies and the tags they key off
 SHOW POLICIES ON CATALOG source_catalog;
 `} />
+
+<ArchifyDiagram
+  client:visible
+  name="row-column-security.workflow"
+  type="workflow"
+  title="Functions redeployed first, then attached, then verified"
+  caption="A row filter or column mask is a UDF that must be recreated in the target catalog. Prefer ABAC for anything migrating in bulk — hand-attaching to hundreds of tables is exactly where coverage silently drops."
+/>
 
 ## Migration pattern
 

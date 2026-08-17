@@ -7,6 +7,7 @@ description: 'Replicate Unity Catalog grants and role assignments in the target 
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Grants and roles
 
@@ -53,6 +54,14 @@ WHERE specific_catalog = 'source_catalog';
 <Callout client:visible variant="warning" title="Run the export as a metastore admin, or you will export a subset and not know it">
   `information_schema` **automatically filters** its results to the objects the querying principal has privileges on. A data engineer running this export gets a clean-looking result containing only the grants they can already see, migrates it, and finds the gaps when other teams start filing access tickets weeks later. Sanity-check the exported grant count against the object count before trusting it. (`MANAGE` on an object is also not currently sufficient to see all of that object's grants here.)
 </Callout>
+
+<ArchifyDiagram
+  client:visible
+  name="grants-and-roles.workflow"
+  type="workflow"
+  title="Export, translate, apply top-down, verify"
+  caption="A non-admin export is silently filtered to what that principal can already see. Grant catalog, then schema, then table — the wrong order fails with confusing permission errors."
+/>
 
 ## Grant migration pattern
 

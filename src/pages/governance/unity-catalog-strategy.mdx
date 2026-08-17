@@ -7,6 +7,7 @@ description: 'Design the Unity Catalog topology for cross-cloud migration.'
 import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Unity Catalog strategy
 
@@ -19,6 +20,14 @@ Unity Catalog (UC) is the shared governance layer across Databricks clouds. Desi
 - **External location:** A registered cloud storage path that UC can read and write. It uses a storage credential.
 - **Storage credential:** A cloud identity (managed identity, IAM role, service account) attached to UC.
 - **Volume:** UC-managed non-tabular storage. Prefer volumes over DBFS mounts.
+
+<ArchifyDiagram
+  client:visible
+  name="unity-catalog-strategy.architecture"
+  type="architecture"
+  title="One metastore per region, workspaces attached, isolation moved to catalogs"
+  caption="Identity centralizes at the account level, above every metastore and every cloud subscription. DR means a second metastore in a second region, not a replicated metastore."
+/>
 
 ## Regional constraints
 
