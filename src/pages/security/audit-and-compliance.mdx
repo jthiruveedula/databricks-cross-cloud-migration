@@ -38,6 +38,32 @@ WHERE event_date >= '<CUTOVER_DATE>'
 ORDER BY event_time;
 `} />
 
+## Verifying a certification actually covers the target
+
+"Any compliance certifications scoped to the source environment have a documented transition plan" is a checkbox until it names what to actually go check. A certification is scoped to specific cloud accounts, regions, and services — moving to a new cloud, region, or Databricks deployment type does not automatically carry it over, and nobody discovers a gap here from the Databricks console.
+
+<Callout client:visible variant="warning" title="Ask the provider, don't assume the badge transfers">
+  Databricks' and each hyperscaler's own compliance attestations (SOC 2 Type II, ISO 27001, HIPAA, PCI-DSS, FedRAMP, etc.) are scoped documents — they name the specific regions, services, and deployment types in scope for a given attestation period. A certification your source deployment relied on may not list the target region or the specific compute type (serverless, in particular — see [data residency](/security/data-residency)) yet.
+</Callout>
+
+Concrete steps, not a checkbox:
+
+1. **Pull the current scope document.** Databricks publishes its compliance attestations and their in-scope regions/services through its Trust Center / compliance portal (request through your account team if not self-serve); the target cloud provider publishes the equivalent for its own services. Read the actual scope table — don't rely on a sales deck saying "we're SOC 2 compliant."
+2. **Check the target region and service by name.** A certification covering "Databricks on AWS" does not automatically mean every AWS region, or every compute type (classic vs. serverless), is in scope for that attestation period — confirm the specific region and service the migration lands on appears in the current scope document.
+3. **Get it in writing, dated.** An email or portal confirmation naming the target region/service and the attestation period it's covered under is the artifact an auditor will ask for — a verbal assurance from an account manager is not.
+4. **Re-check on renewal, not just at migration time.** Attestation scope can change between audit cycles. A certification that covered the target region at migration time is not guaranteed to still cover it a year later — put a recheck on the same cadence as the certification's renewal.
+
+## Auditing across the dual-run window, not just the cutover moment
+
+The "different systems at different times" framing above assumes a clean instant of cutover. It isn't one: [metastore migration](/governance/metastore-migration)'s bulk-clone-then-freeze pattern and [network security](/security/network-security)'s "keep both networks live through hypercare" guidance both describe source and target running concurrently for days to weeks, not a single moment. That overlap needs its own answer, not an extension of the pre/post framing.
+
+<Callout client:visible variant="decision" title="Name the system of record for every timestamp in the overlap, before it starts">
+  For the duration of dual-run, decide and document: which system is authoritative for which workload, at which point — not "whichever one an auditor asks about first." A workload cut over on day 3 of an 11-day dual-run has target as system-of-record from day 3 onward even though source is still live and still being read; a workload still on source until day 9 has source as system-of-record until then. Write this table down per workload before dual-run starts, not reconstructed from memory when an auditor asks.
+</Callout>
+
+- **Log both sides for the full overlap**, not just the side currently designated system-of-record — a question about day 5 needs day-5 logs from whichever side actually served the request, and during dual-run either side legitimately might have.
+- **Capture the per-workload cutover timestamp**, not just one migration-wide cutover date — see the table above. This is what lets an auditor map "requests against this workload on this date" to the correct log source without a project-wide timeline as the only reference.
+
 ## Compliance sign-off checklist
 
 Before hypercare exit, confirm with compliance/security stakeholders:
@@ -70,5 +96,8 @@ Audit and compliance concerns don't block a technical rollback, but any rollback
   { id: 'export', label: 'Source audit logs exported and archived per retention policy' },
   { id: 'target-logging', label: 'Target audit logging verified active from day one' },
   { id: 'mapping-preserved', label: 'Principal mapping retained as a durable, referenceable artifact' },
+  { id: 'cert-scope', label: 'Target region/service confirmed IN SCOPE on the current attestation document, in writing, not assumed' },
+  { id: 'dual-run-sor', label: 'System-of-record named per workload for the full dual-run overlap, not just pre/post cutover' },
+  { id: 'dual-run-logging', label: 'Both source and target logged for the full dual-run window, whichever side is authoritative' },
   { id: 'signoff', label: 'Formal compliance sign-off obtained before source decommission' },
 ]} />

@@ -8,6 +8,7 @@ import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
+import Accordion from '../../components/Accordion.tsx';
 
 # Data reconciliation
 
@@ -25,6 +26,10 @@ Data reconciliation proves that target data matches source data within agreed to
 | Partitions | Compare partition values and counts | 0% |
 | Primary/unique keys | Verify uniqueness constraints | 0% |
 | Delta table history | `DESCRIBE HISTORY` on target vs. source | Non-zero — see below |
+
+<Callout client:visible variant="warning" title="0% tolerance assumes a quiesced table — most tables during migration are not">
+  Every row above is exact-match by default, and that is the right default. It only holds for a table that is genuinely frozen for the comparison window: a batch table inside a freeze, or a static reference table. A table still receiving writes during the compare — near-real-time ingestion, a streaming table, or a table with floating-point columns where two computationally-equivalent values are not bit-identical — needs the tolerance-based approach below instead of a widened "close enough" percentage bolted onto the exact-match query.
+</Callout>
 
 ## Row-count and checksum query
 
@@ -51,13 +56,53 @@ SELECT * FROM target_catalog.schema.table;`} />
 
 ## Volume reconciliation
 
-For non-tabular files:
+<Callout client:visible variant="warning" title="A dry-run sync diffs by size and modified time, not content">
+  `aws s3 sync --dryrun` and `gsutil rsync -n` below tell you file *counts* line up — they do not prove the bytes match. Two files can share a size and a coincidental mtime and still differ. For anything where content integrity actually matters (not just "did the copy run"), compute and compare a real content hash.
+</Callout>
 
-<CodeBlock client:visible language="bash" code={`# AWS example: compare file counts and total size
+<CodeBlock client:visible language="bash" code={`# AWS example: compare file counts and total size (not content)
 aws s3 sync s3://source-bucket/path s3://target-bucket/path --dryrun
 
-# GCP example
-gsutil -m rsync -r gs://source-bucket/path gs://target-bucket/path -d -n`} />
+# GCP example (not content)
+gsutil -m rsync -r gs://source-bucket/path gs://target-bucket/path -d -n
+
+# Content hash, per file -- the check that actually proves the bytes match.
+# S3's ETag is an MD5 only for single-part uploads; multipart uploads (the
+# default above a threshold) produce a different, non-portable ETag, so it
+# cannot be compared directly against a GCS/ADLS hash. Compute your own hash
+# on both sides instead of trusting the cloud-native one to be comparable
+# across providers.
+aws s3api get-object-attributes --bucket source-bucket --key path/file.parquet \\
+  --object-attributes Checksum --query 'Checksum.ChecksumSHA256' --output text
+gsutil hash -h gs://target-bucket/path/file.parquet   # prints CRC32C and MD5
+
+# Cross-cloud-safe fallback: stream both files through the same hash function
+# so the comparison never depends on a provider's native checksum algorithm.
+aws s3 cp s3://source-bucket/path/file.parquet - | sha256sum
+gsutil cp gs://target-bucket/path/file.parquet - | sha256sum`} />
+
+<Callout client:visible variant="tip" title="ML artifacts, feature stores, and embeddings are volumes too">
+  Model weights, feature-store Parquet files, and vector-embedding files have no row-count or SQL checksum to lean on — they reconcile exactly like any other volume content: file-count-and-size as the cheap first pass, `sha256sum` as the check that actually proves nothing was corrupted or truncated in transit. Treat "it's an ML artifact" as a reason to be more careful here, not a reason this section doesn't apply.
+</Callout>
+
+## Tolerance-based reconciliation, for tables that can't be quiesced
+
+The exact-match approach above assumes a stable snapshot on both sides. Two situations break that assumption, and each needs a different fix — not a looser percentage on the same query.
+
+<Accordion client:visible items={[
+  {
+    title: 'Streaming tables and DLT pipelines — reconcile the checkpoint, not a live row count',
+    content: 'A table still being written by a Structured Streaming or DLT pipeline never holds still long enough for a row count on both sides to agree, even a millisecond apart. Reconcile the input offset instead of the output row count: compare the source pipeline\'s last-committed checkpoint/offset against what the target pipeline has consumed as of a specific point in time, using `DESCRIBE HISTORY` on the streaming table\'s Delta log to read the checkpoint metadata for each side, or the pipeline\'s own checkpoint location if it is not Delta-backed. Two pipelines built from the same source and caught up to the same offset are reconciled, even if a row count taken moments apart would disagree.'
+  },
+  {
+    title: 'Floating-point columns — compare with an epsilon, not equality',
+    content: 'Two computationally-equivalent floating-point values are not always bit-identical after passing through different compute engines or codepaths — `xxhash64` hashes the bit pattern, so a value that is numerically equal but bit-different still fails the exact aggregate-hash check. For tables with floating-point columns, run a separate numeric-tolerance comparison: `SELECT COUNT(*) FROM source_catalog.schema.table s JOIN target_catalog.schema.table t ON s.id = t.id WHERE abs(s.amount - t.amount) > 0.0001` (or your agreed epsilon). A nonzero result here is a real finding; a nonzero result from the bit-exact hash on a float column, on its own, is not conclusive of anything until this check has run.'
+  },
+  {
+    title: 'Sampling, only when full comparison is genuinely infeasible',
+    content: 'For a table too large to checksum in the maintenance window even with the aggregate-hash approach, a statistical sample (row count agreement plus a hash comparison over a deterministic, seeded sample of partitions or key ranges) is a documented, signed-off exception — not a default. Record the sample size, the selection method, and who approved treating a sample as sufficient evidence for that specific table; an unstated sampling policy that quietly became the norm for large tables is a compliance and reconciliation gap discovered later, not a shortcut that saved time.'
+  }
+]} />
 
 ## Delta table history reconciliation
 
@@ -110,8 +155,12 @@ If reconciliation fails beyond tolerance, halt cutover and re-sync. Do not proce
 <Checklist client:visible title="Data reconciliation" items={[
   { id: 'counts', label: 'Row counts match for all tables' },
   { id: 'checksums', label: 'Column checksums match' },
-  { id: 'files', label: 'File counts and checksums match for volumes' },
+  { id: 'files', label: 'File counts AND content hash (sha256sum or equivalent) match for volumes — not just size/mtime from a dry-run sync' },
+  { id: 'ml-artifacts', label: 'Model weights, feature-store files, and embeddings reconciled by content hash like any other volume' },
   { id: 'schema', label: 'Schemas match exactly' },
   { id: 'partitions', label: 'Partitions match' },
+  { id: 'streaming', label: 'Streaming tables/DLT pipelines reconciled by checkpoint/offset, not a live row count' },
+  { id: 'float-tolerance', label: 'Floating-point columns checked with an epsilon comparison, separate from the bit-exact hash' },
+  { id: 'sampling', label: 'Any sampled (non-full) reconciliation is a documented, signed-off exception, not a silent default' },
   { id: 'history', label: 'Target CLONE operation verified (not CTAS/raw sync); tables needing pre-cutover time travel have separate version snapshots or a source-retention plan' },
 ]} />
