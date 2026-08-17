@@ -132,6 +132,19 @@ Six more diagrams cover Unity Catalog governance: the metastore topology every w
   <Card href={withBase('/governance/legacy-hive-transition')} title="Legacy Hive transition" description="Assessed, upgraded, or federated as a coexistence state — retire now, not on the next migration." />
 </div>
 
+## 10. Compute and pipelines, rebuilt not copied
+
+Six more diagrams cover the layer that actually runs workloads: clusters, policies, and runtimes on the compute side; jobs, external orchestrators, and CI/CD on the pipelines side. The shared thread is the same one running through governance and security — export, translate the cloud-specific parts, recreate, then prove it behaves the same before cutover.
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <Card href={withBase('/compute/cluster-migration')} title="Cluster migration" description="Export, translate node types and access modes, recreate, prove autoscaling still behaves." />
+  <Card href={withBase('/compute/cluster-policies')} title="Cluster policies" description="Five fields that can't be copied verbatim, codified as Terraform, tiered by workload." />
+  <Card href={withBase('/compute/runtime-upgrade')} title="Runtime upgrade" description="Audit every cluster, pick the newest LTS that fits, and hard-skip anything already near end of support." />
+  <Card href={withBase('/pipelines/workflows-jobs')} title="Workflows and jobs" description="Strip source-owned fields, recreate, and keep the ID map every external reference depends on." />
+  <Card href={withBase('/pipelines/cicd-promotion')} title="CI/CD promotion" description="Five things still pointing at the source, Asset Bundles to decouple from the cloud, and fresh Terraform state." />
+  <Card href={withBase('/pipelines/external-orchestrators')} title="External orchestrators" description="Invisible to a Databricks-only inventory, and cloud-native identity federation is the failure mode that doesn't survive the move." />
+</div>
+
 ## Editing these diagrams
 
 The diagrams are generated, not hand-drawn. Each one is a typed JSON spec in `diagrams/`, rendered to a self-contained HTML file in `public/diagrams/` by [Archify](https://github.com/tt-a1i/archify):

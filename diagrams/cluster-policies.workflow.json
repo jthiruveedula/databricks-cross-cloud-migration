@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Cluster Policies: Five Fields That Can't Be Copied Verbatim",
+    "output": "cluster-policies.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "translate",
+        "label": "Five fields, five reasons",
+        "focus": [
+          "export",
+          "translate"
+        ],
+        "note": "Node types, cloud attribute blocks, identity references, tags, and spark_conf all break in different ways across clouds."
+      },
+      {
+        "id": "code",
+        "label": "As code, not console clicks",
+        "focus": [
+          "translate",
+          "codify"
+        ],
+        "note": "Terraform makes the target-cloud values explicit and reviewable instead of hidden in a UI form."
+      },
+      {
+        "id": "tier",
+        "label": "Tiers, not one policy per team",
+        "focus": [
+          "codify",
+          "tier"
+        ],
+        "note": "Teams map to workload tiers, tiers map to policies — not the other way around."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "export",
+      "label": "Export"
+    },
+    {
+      "id": "translate",
+      "label": "Translate 5 fields"
+    },
+    {
+      "id": "govern",
+      "label": "Codify + govern"
+    },
+    {
+      "id": "exceptions",
+      "label": "Re-tune for target",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "export",
+    "translate",
+    "codify",
+    "tier"
+  ],
+  "nodes": [
+    {
+      "id": "export",
+      "lane": "export",
+      "col": 0,
+      "type": "database",
+      "label": "Export Policy",
+      "sublabel": "per workload tier"
+    },
+    {
+      "id": "translate",
+      "lane": "translate",
+      "col": 1,
+      "type": "backend",
+      "label": "Translate",
+      "sublabel": "5 field categories"
+    },
+    {
+      "id": "codify",
+      "lane": "govern",
+      "col": 2,
+      "type": "security",
+      "label": "Codify",
+      "sublabel": "Terraform, fixed fields"
+    },
+    {
+      "id": "tier",
+      "lane": "govern",
+      "col": 3,
+      "type": "frontend",
+      "label": "Assign Tier",
+      "sublabel": "team maps to tier"
+    },
+    {
+      "id": "guardrails",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "security",
+      "label": "Cost Fields",
+      "sublabel": "max workers, auto-term",
+      "tag": "re-tune for target"
+    }
+  ],
+  "edges": [
+    {
+      "from": "export",
+      "to": "translate",
+      "label": "5 field categories",
+      "variant": "emphasis"
+    },
+    {
+      "from": "translate",
+      "to": "codify",
+      "label": "target values",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "channelX": 280,
+      "labelAt": [
+        280,
+        300
+      ]
+    },
+    {
+      "from": "codify",
+      "to": "tier",
+      "variant": "emphasis"
+    },
+    {
+      "from": "translate",
+      "to": "guardrails",
+      "label": "cost-sensitive fields",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "channelX": 220,
+      "labelAt": [
+        220,
+        420
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Five fields, five different breaks",
+      "items": [
+        "node_type_id names differ entirely across clouds, not just in value",
+        "aws_attributes / azure_attributes / gcp_attributes blocks don't transfer between clouds at all",
+        "custom_tags often encode the source cloud's account, subscription, or project ID"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Fixed fields, not conventions",
+      "items": [
+        "No-public-IP, mandatory tags, and instance-profile restrictions belong in type: \"fixed\" fields",
+        "A convention can be silently overridden by an individual cluster config; a fixed policy field can't",
+        "Terraform makes every target-cloud value explicit and reviewable, not hidden in a console form"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Tiers, and re-tuned cost guardrails",
+      "items": [
+        "One policy family per workload tier — etl-standard, ml-gpu, ad-hoc-notebook — not one per team",
+        "Max workers and auto-termination need re-review against target-cloud pricing, not a copied source limit",
+        "A policy tuned for source-cloud spot pricing may be wrong on the target by a wide margin"
+      ]
+    }
+  ]
+}

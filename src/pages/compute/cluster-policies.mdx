@@ -7,6 +7,7 @@ description: 'Redesign cluster policies for the target cloud as a governance con
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Cluster policies
 
@@ -15,6 +16,14 @@ import Checklist from '../../components/Checklist.tsx';
 <Callout client:visible variant="prerequisite" title="Policies are a governance decision, not a technical translation">
   Use the migration as an opportunity to tighten policies you've been meaning to fix, not just to reproduce whatever existed on source — a policy that was "temporarily" permissive on day one of the source environment shouldn't be carried forward as permanent policy on the target.
 </Callout>
+
+<ArchifyDiagram
+  client:visible
+  name="cluster-policies.workflow"
+  type="workflow"
+  title="Five fields, translated, codified, tiered"
+  caption="Cost guardrails tuned for source-cloud spot pricing need re-review against the target — that's the branch worth checking before trusting a copied policy."
+/>
 
 ## What must change per policy
 

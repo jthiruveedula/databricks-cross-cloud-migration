@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "CI/CD Promotion: New State, Not a Copy of Source State",
+    "output": "cicd-promotion.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "identify",
+        "label": "Five things that change",
+        "focus": [
+          "identify",
+          "rebuild"
+        ],
+        "note": "Auth, config, Terraform backend, secrets, and branch-to-workspace mapping all point at the source today."
+      },
+      {
+        "id": "bundles",
+        "label": "Bundles decouple this from the cloud",
+        "focus": [
+          "rebuild"
+        ],
+        "note": "Databricks Asset Bundles are target-workspace-agnostic — only the environment variables change per cloud."
+      },
+      {
+        "id": "state",
+        "label": "Don't import into a shared state file",
+        "focus": [
+          "rebuild",
+          "state"
+        ],
+        "note": "Target infrastructure starts as new Terraform state, never terraform import from source resource IDs."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "identify",
+      "label": "Identify changes"
+    },
+    {
+      "id": "rebuild",
+      "label": "Rebuild pipeline"
+    },
+    {
+      "id": "state",
+      "label": "Terraform state"
+    },
+    {
+      "id": "exceptions",
+      "label": "Rebuilt per cloud",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "identify",
+    "rebuild",
+    "state"
+  ],
+  "nodes": [
+    {
+      "id": "identify",
+      "lane": "identify",
+      "col": 0,
+      "type": "frontend",
+      "label": "Identify",
+      "sublabel": "auth, config, secrets"
+    },
+    {
+      "id": "rebuild",
+      "lane": "rebuild",
+      "col": 1,
+      "type": "backend",
+      "label": "Rebuild",
+      "sublabel": "Asset Bundles"
+    },
+    {
+      "id": "state",
+      "lane": "state",
+      "col": 3,
+      "type": "database",
+      "label": "New TF State",
+      "sublabel": "not an import"
+    },
+    {
+      "id": "cloud_auth",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "security",
+      "label": "Cloud Auth",
+      "sublabel": "OIDC federation",
+      "tag": "rebuilt per cloud"
+    }
+  ],
+  "edges": [
+    {
+      "from": "identify",
+      "to": "rebuild",
+      "label": "target values",
+      "variant": "emphasis"
+    },
+    {
+      "from": "rebuild",
+      "to": "state",
+      "label": "infra as code",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "identify",
+      "to": "cloud_auth",
+      "label": "e.g. GitHub OIDC to Azure",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        220,
+        420
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Five things that all point at the source today",
+      "items": [
+        "Databricks auth in CI/CD, environment config, Terraform state backend, CI secrets, and branch-to-workspace mapping",
+        "Every one of them needs a target-cloud value, not a copied source value",
+        "Cloud-native identity federation (GitHub OIDC to Azure, for example) must be rebuilt for the target's federation model"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Bundles pay for themselves immediately",
+      "items": [
+        "If source jobs still deploy via ad hoc scripts or manual clicks, migrate to Asset Bundles during this step",
+        "Bundle definitions are target-workspace-agnostic — only environment variables change per cloud",
+        "This decouples the deployment pipeline from the specific cloud it happens to target today"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Terraform state starts fresh",
+      "items": [
+        "The target needs its own state, not source state pointing at source resource IDs",
+        "Never terraform import from source IDs into a shared state file",
+        "A cloud-storage-backed state (Azure Storage, S3, GCS) needs a new backend location for the new cloud"
+      ]
+    }
+  ]
+}
