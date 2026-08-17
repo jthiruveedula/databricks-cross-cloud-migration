@@ -71,7 +71,7 @@ from .grants import (
 )
 from .llm import Assistant, NullLlmClient
 from .models import Inventory
-from .reconcile import reconcile_inventories
+from .reconcile import reconcile_inventories, reconcile_live
 from .report import (
     crossref_summary,
     full_report,
@@ -665,6 +665,25 @@ def cmd_reconcile(config: MigrationConfig, args: argparse.Namespace) -> int:
     source = _load_inventory(args.inventory)
     target = _load_inventory(args.target_inventory)
     report = reconcile_inventories(source, target, config.source_prefixes())
+    if args.live:
+        # Only checksum tables that already cleared metadata reconciliation --
+        # a missing table or schema drift should block before we ever touch a
+        # warehouse for that table.
+        already_blocked = {f.obj for f in report.blockers}
+        target_index = target.table_index()
+        wanted = set(args.tables) if args.tables else None
+        live_tables = [
+            t
+            for t in source.tables
+            if t.full_name in target_index
+            and t.full_name not in already_blocked
+            and (wanted is None or t.full_name in wanted)
+        ]
+        source_gateway = _gateway(config, args, side="source")
+        target_gateway = _gateway(config, args, side="target")
+        live_report = reconcile_live(source_gateway, target_gateway, live_tables)
+        report.checked += live_report.checked
+        report.findings.extend(live_report.findings)
     _write(args.out, reconciliation_summary(report))
     return report.exit_code()
 
@@ -834,6 +853,27 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("reconcile", help="compare a target inventory against the source")
     add_common(p)
     p.add_argument("-t", "--target-inventory", required=True, help="target inventory JSON")
+    p.add_argument(
+        "--live",
+        action="store_true",
+        help=(
+            "also run row-count + aggregate-hash checksum reconciliation against live "
+            "source and target warehouses (needs source.host/target.host or --fixture)"
+        ),
+    )
+    p.add_argument(
+        "--tables",
+        nargs="*",
+        help="restrict --live checksum reconciliation to these full table names",
+    )
+    p.add_argument(
+        "--fixture",
+        help=(
+            "run --live against a fixture gateway instead of live workspaces -- the same "
+            "fixture is used for both source and target, so this proves the wiring, not "
+            "an actual cross-environment result"
+        ),
+    )
     p.set_defaults(func=cmd_reconcile)
 
     p = sub.add_parser("report", help="one markdown report covering inventory, plan, and gaps")

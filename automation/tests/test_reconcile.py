@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import copy
 
-from dbxmig.models import Column, Inventory
+from dbxmig.gateway import FixtureGateway
+from dbxmig.models import Column, Inventory, Table
 from dbxmig.reconcile import (
     SEV_BLOCKER,
     SEV_WARNING,
     check_clone_provenance,
     check_unmigrated_locations,
+    checksum_query,
+    compare_checksums,
     compare_object_counts,
     compare_row_counts,
     compare_schemas,
+    reconcile_clone_provenance,
     reconcile_inventories,
+    reconcile_live,
 )
 
 
@@ -121,6 +126,98 @@ def test_missing_table_in_target_fails_reconciliation(inventory: Inventory, raw_
     report = reconcile_inventories(inventory, Inventory.from_dict(trimmed))
     assert not report.passed
     assert any(f.check == "missing_object" for f in report.findings)
+
+
+def test_checksum_query_is_order_independent_aggregate():
+    query = checksum_query("prod.sales.orders", ["id", "amount"])
+    assert query == (
+        "SELECT COUNT(*) AS cnt, SUM(xxhash64(id, amount)) AS agg_hash FROM prod.sales.orders"
+    )
+
+
+def test_matching_checksums_pass():
+    row = {"cnt": 100, "agg_hash": 12345}
+    assert compare_checksums("t", row, dict(row)) is None
+
+
+def test_checksum_mismatch_reports_row_count_first():
+    source = {"cnt": 100, "agg_hash": 111}
+    target = {"cnt": 99, "agg_hash": 111}
+    finding = compare_checksums("t", source, target)
+    assert finding is not None and finding.blocking
+    assert "row count differs" in finding.detail
+
+
+def test_checksum_mismatch_with_matching_counts_reports_hash_drift():
+    source = {"cnt": 100, "agg_hash": 111}
+    target = {"cnt": 100, "agg_hash": 222}
+    finding = compare_checksums("t", source, target)
+    assert finding is not None and finding.blocking
+    assert "aggregate hash differs" in finding.detail
+
+
+def _table(name: str = "orders") -> Table:
+    return Table(
+        catalog="prod",
+        schema="sales",
+        name=name,
+        columns=[Column("id", "BIGINT"), Column("amount", "DECIMAL(18,2)")],
+    )
+
+
+def test_reconcile_live_passes_when_checksums_match():
+    table = _table()
+    query = checksum_query(table.full_name, ["id", "amount"])
+    row = {"cnt": 10, "agg_hash": 999}
+    source_gw = FixtureGateway(query_results={query: [row]})
+    target_gw = FixtureGateway(query_results={query: [dict(row)]})
+    report = reconcile_live(source_gw, target_gw, [table])
+    assert report.passed
+    assert report.checked == 1
+
+
+def test_reconcile_live_catches_a_drifted_table():
+    table = _table()
+    query = checksum_query(table.full_name, ["id", "amount"])
+    source_gw = FixtureGateway(query_results={query: [{"cnt": 10, "agg_hash": 999}]})
+    target_gw = FixtureGateway(query_results={query: [{"cnt": 9, "agg_hash": 999}]})
+    report = reconcile_live(source_gw, target_gw, [table])
+    assert not report.passed
+    assert report.findings[0].check == "checksum"
+
+
+def test_reconcile_live_flags_empty_result_instead_of_crashing():
+    table = _table()
+    source_gw = FixtureGateway(query_results={})
+    target_gw = FixtureGateway(query_results={})
+    report = reconcile_live(source_gw, target_gw, [table])
+    assert not report.passed
+    assert "no rows on source" in report.findings[0].detail
+
+
+def test_reconcile_clone_provenance_live_uses_describe_history():
+    table = _table()
+    history_query = "DESCRIBE HISTORY {0} LIMIT 5".format(table.full_name)
+    target_gw = FixtureGateway(
+        query_results={
+            history_query: [
+                {"operation": "CLONE", "operationParameters": {"source": "dev.sales.orders"}}
+            ]
+        }
+    )
+    report = reconcile_clone_provenance(target_gw, [table], lambda name: "dev.sales.orders")
+    assert report.passed
+    assert report.checked == 1
+
+
+def test_reconcile_clone_provenance_live_catches_a_ctas():
+    table = _table()
+    history_query = "DESCRIBE HISTORY {0} LIMIT 5".format(table.full_name)
+    target_gw = FixtureGateway(
+        query_results={history_query: [{"operation": "CREATE TABLE AS SELECT"}]}
+    )
+    report = reconcile_clone_provenance(target_gw, [table], lambda name: "dev.sales.orders")
+    assert not report.passed
 
 
 def test_renamed_catalog_still_matches_on_schema_and_name(raw_inventory: dict):

@@ -92,7 +92,7 @@ Omitting the flag is allowed, because a genuinely greenfield region has nothing 
 | `bundle` | Generates Declarative Automation Bundle YAML for jobs and pipelines, with every workspace-scoped id turned into a variable | no |
 | `apply` | Executes, resumably — dry-run unless `--execute` | yes (target) |
 | `verify` | Proves the target holds the grants and object ACLs the migration intended | no |
-| `reconcile` | Compares target against source, exits non-zero on a blocker | no |
+| `reconcile` | Compares target against source, exits non-zero on a blocker — metadata-only by default; add `--live` for row-count + aggregate-hash checksum reconciliation against both warehouses | no (yes with `--live`) |
 | `report` | Rolls inventory, plan, gaps, and reconciliation into one markdown file | no |
 
 <CodeBlock client:visible language="bash" filename="a full run" code={`export DBX_SOURCE_TOKEN=...        # tokens live in the environment, never in the config
@@ -113,10 +113,17 @@ dbxmig -c migration.yaml grants    -i inventory.json -o grants.sql
 dbxmig -c migration.yaml apply     -i inventory.json                  # dry run, prints SQL
 dbxmig -c migration.yaml apply     -i inventory.json --execute
 dbxmig -c target.yaml    inventory -o target-inventory.json           # the target, after
-dbxmig -c migration.yaml reconcile -i inventory.json -t target-inventory.json`} />
+dbxmig -c migration.yaml reconcile -i inventory.json -t target-inventory.json
 
-<Callout client:visible variant="tip" title="Only three of the fourteen need credentials">
-  `inventory` and `workspace` read the source; `apply` writes to the target. Everything else — planning, collision detection, DDL generation, grant translation, bundle output, verification, reconciliation — runs against JSON on disk. The entire migration can be generated, reviewed, and signed off before anyone holds a token for the target account, which in a regulated environment is usually the long pole rather than the technical work.
+# Metadata reconciliation above only proves both sides have the same objects
+# and schemas. To prove the *data* inside them matches, add --live: it runs
+# the row-count + SUM(xxhash64(...)) checksum query from data-reconciliation
+# against both warehouses, restricted to tables that already passed the
+# metadata check above.
+dbxmig -c migration.yaml reconcile -i inventory.json -t target-inventory.json --live`} />
+
+<Callout client:visible variant="tip" title="Three of the fourteen need credentials outright; reconcile is optional-in">
+  `inventory` and `workspace` read the source; `apply` writes to the target. `reconcile` runs against JSON on disk unless `--live` is passed, in which case it also reads both warehouses to checksum table data. Everything else — planning, collision detection, DDL generation, grant translation, bundle output, verification — runs against JSON on disk. Most of the migration can be generated, reviewed, and signed off before anyone holds a token for the target account, which in a regulated environment is usually the long pole rather than the technical work.
 </Callout>
 
 ## One config file is the whole contract
