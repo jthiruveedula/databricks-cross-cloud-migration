@@ -7,10 +7,13 @@ description: 'Collaborate and collate across clouds without a physical move: Del
 import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Cross-cloud data collaboration
 
 Not every cross-cloud requirement is a migration. Often the goal is **collation** — bringing data together so teams can compute on it — without copying it. Databricks gives you three primitives that avoid a physical lift: **Delta Sharing** (share live, no copy), **Lakehouse Federation** (query in place), and **Clean Rooms** (compute jointly on sensitive data). Each pairs with the migration patterns when you do need to move.
+
+<ArchifyDiagram client:visible name="cross-cloud-collaboration.workflow" type="workflow" title="Share vs replicate vs federate" caption="Pick by access pattern, not habit — and never dual-register the same shared table as external in more than one metastore." />
 
 ## Share vs replicate vs federate — the decision
 

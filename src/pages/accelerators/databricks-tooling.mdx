@@ -7,10 +7,13 @@ description: 'The accelerator stack for cross-cloud moves: UCX, Lakebridge, Data
 import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Databricks migration tooling
 
 A cross-cloud migration is a platform-modernization program with a data workstream attached. The tooling below is the accelerator layer that keeps the data workstream from dominating the timeline. Use it to automate the mechanical parts — assessment, catalog upgrade, replication, and infrastructure-as-code — and spend human effort on governance and business-logic equivalence.
+
+<ArchifyDiagram client:visible name="databricks-tooling.architecture" type="architecture" title="The accelerator stack" caption="Every tool automates the mechanical parts and hands the judgment calls — compute re-mapping, logic equivalence — to a human." />
 
 ## The accelerator map
 

@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Share vs Replicate vs Federate: Pick by Access Pattern, Not Habit",
+    "output": "cross-cloud-collaboration.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "share",
+        "label": "Zero copy, lowest cost",
+        "focus": ["need", "share"],
+        "note": "Consumers run their own workloads against live data with no pipeline to maintain."
+      },
+      {
+        "id": "replicate",
+        "label": "Local copy beats repeated cross-cloud reads",
+        "focus": ["need", "replicate"],
+        "note": "Heavy or frequent querying justifies the cost of a local Deep Clone kept warm with CDF."
+      },
+      {
+        "id": "risk",
+        "label": "Never register a shared table twice",
+        "focus": ["replicate", "dual_register"],
+        "note": "Registering the same shared table as external in more than one metastore desyncs schema and commits under multi-writer load."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "main", "label": "Decision point" },
+    { "id": "mechanism", "label": "Chosen mechanism" },
+    { "id": "exceptions", "label": "Risk", "variant": "exception" }
+  ],
+  "mainPath": ["need", "share"],
+  "nodes": [
+    {
+      "id": "need",
+      "lane": "main",
+      "col": 0,
+      "type": "frontend",
+      "label": "Cross-Cloud",
+      "sublabel": "share, not always move"
+    },
+    {
+      "id": "share",
+      "lane": "mechanism",
+      "col": 1,
+      "type": "backend",
+      "label": "Delta Sharing",
+      "sublabel": "zero copy, live",
+      "tag": "lowest cost"
+    },
+    {
+      "id": "replicate",
+      "lane": "mechanism",
+      "col": 3,
+      "type": "database",
+      "label": "Replicate",
+      "sublabel": "Deep Clone + CDF",
+      "tag": "heavy local query"
+    },
+    {
+      "id": "federate",
+      "lane": "mechanism",
+      "col": 5,
+      "type": "cloud",
+      "label": "Federate",
+      "sublabel": "query in place",
+      "tag": "explore / PoC"
+    },
+    {
+      "id": "dual_register",
+      "lane": "exceptions",
+      "col": 3,
+      "type": "security",
+      "label": "Registered 2x",
+      "sublabel": "registered twice",
+      "tag": "schema desync"
+    }
+  ],
+  "edges": [
+    {
+      "from": "need",
+      "to": "share",
+      "label": "consumers run own workloads",
+      "role": "branch",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [88, 300]
+    },
+    {
+      "from": "need",
+      "to": "replicate",
+      "label": "heavy / frequent querying",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [190, 380]
+    },
+    {
+      "from": "need",
+      "to": "federate",
+      "label": "explore, avoid building ETL",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [88, 470]
+    },
+    {
+      "from": "replicate",
+      "to": "dual_register",
+      "label": "if also registered external",
+      "variant": "security",
+      "role": "error",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [430, 329]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Share when consumers run their own workloads",
+      "items": [
+        "Delta Sharing reads live data directly from provider storage via short-lived tokens -- no copy, no pipeline",
+        "Databricks-to-Databricks, open protocol, or customer-managed OSS server -- pick per recipient capability"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Replicate when local reads dominate",
+      "items": [
+        "Deep Clone plus Delta Change Data Feed limits egress to the incremental refresh, not the full table",
+        "Federation is a bridge for exploration, not a destination -- avoid large unfiltered remote joins"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Never dual-register a shared table",
+      "items": [
+        "Registering the same shared table as external in more than one metastore desyncs schema and commits under multi-writer load",
+        "Choose one: share it (Delta Sharing) or replicate it (Deep Clone) -- never both for the same table"
+      ]
+    }
+  ]
+}

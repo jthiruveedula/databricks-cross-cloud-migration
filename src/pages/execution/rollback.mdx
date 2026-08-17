@@ -6,10 +6,13 @@ description: 'Rollback criteria, steps, and guardrails for cross-cloud migration
 
 import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Rollback
 
 A rollback returns the business to the source environment. It must be planned before cutover and executed with discipline to avoid data loss or split-brain.
+
+<ArchifyDiagram client:visible name="rollback.workflow" type="workflow" title="Rollback: read-only before re-enable" caption="Split-brain — both environments accepting writes — is the failure mode this order is designed to prevent." />
 
 ## Rollback criteria
 

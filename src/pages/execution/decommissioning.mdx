@@ -8,6 +8,7 @@ import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Accordion from '../../components/Accordion.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Decommissioning the source
 
@@ -32,6 +33,8 @@ The last phase, the one with the least attention and the only irreversible step 
 | 18 | Storage deleted. Migration over | 1× |
 
 Four months from cutover to a single bill. Everyone budgets four weeks. Say the real number out loud at planning time, or the schedule pressure lands on the export step, which is the one step that must not be rushed. The full double-running model, including the egress and re-computation costs that are always underestimated, is on [cost and tagging continuity](/execution/cost-and-tagging-continuity).
+
+<ArchifyDiagram client:visible name="decommissioning.workflow" type="workflow" title="Each step forecloses a rollback option" caption="Step 3 is the gate — everything after it is mechanical. Storage deletion is the only irreversible step." />
 
 ## The order, and what each step forecloses
 

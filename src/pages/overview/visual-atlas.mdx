@@ -158,6 +158,19 @@ Six more diagrams close out Analytics and ML. Every one of them turns out to sha
   <Card href={withBase('/ml/serving-and-artifacts')} title="Serving and artifacts" description="A copied entity_version silently serves a different model — resolve the alias at deploy time instead." />
 </div>
 
+## 12. Execution's back half, tooling, and collaboration
+
+The last six close the loop: what the migration destroys rather than moves, the irreversible decommission order, the rollback path that must stay live, hypercare's proof-based exit, the accelerator stack that automates the mechanical parts, and the share/replicate/federate decision for data that never needs to move at all.
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <Card href={withBase('/execution/what-does-not-migrate')} title="What does not migrate" description="Audit logs, run history, notebook revisions — a register of what's exported before decommission or lost forever." />
+  <Card href={withBase('/execution/decommissioning')} title="Decommissioning" description="Nine steps, each foreclosing a rollback option — step 3, verifying every export from the target, is the gate." />
+  <Card href={withBase('/execution/rollback')} title="Rollback" description="Split-brain — both environments writable — is the failure mode this order exists to prevent." />
+  <Card href={withBase('/execution/hypercare')} title="Hypercare" description="Ends on an explicit, pre-agreed proof gate, not a calendar date — otherwise it quietly becomes permanent." />
+  <Card href={withBase('/accelerators/databricks-tooling')} title="Databricks migration tooling" description="UCX, Lakebridge, Replicator, migrate, and Asset Bundles — the accelerator stack and where each one stops." />
+  <Card href={withBase('/collaboration/cross-cloud-collaboration')} title="Cross-cloud data collaboration" description="Share, replicate, or federate — picked by access pattern, never by habit or dual-registered by mistake." />
+</div>
+
 ## Editing these diagrams
 
 The diagrams are generated, not hand-drawn. Each one is a typed JSON spec in `diagrams/`, rendered to a self-contained HTML file in `public/diagrams/` by [Archify](https://github.com/tt-a1i/archify):
