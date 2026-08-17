@@ -7,6 +7,7 @@ description: 'Migrate workspace notebooks and Git-backed repos without losing hi
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Notebooks and repos
 
@@ -29,6 +30,14 @@ databricks workspace export-dir /Shared/analytics ./export/analytics --format DB
 # Import into the target workspace
 databricks workspace import-dir ./export/analytics /Shared/analytics --format DBC
 `} />
+
+<ArchifyDiagram
+  client:visible
+  name="notebooks-and-repos.workflow"
+  type="workflow"
+  title="Git-backed re-clones; un-versioned is debt about to become permanent"
+  caption="Regardless of which path got you here, cloud storage paths, catalog names, and DBFS mounts hardcoded in notebook code all still need auditing."
+/>
 
 ## Git-backed repos
 

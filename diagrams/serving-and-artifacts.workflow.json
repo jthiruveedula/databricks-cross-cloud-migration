@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Serving Cutover: Resolve the Alias, Stand Up, Canary, Full Cutover",
+    "output": "serving-and-artifacts.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "resolve",
+        "label": "Never carry the source version number",
+        "focus": [
+          "resolve_alias",
+          "standup"
+        ],
+        "note": "entity_version copied from source is valid in the target and silently serves a different model."
+      },
+      {
+        "id": "canary",
+        "label": "Incremental, not a DNS flip",
+        "focus": [
+          "standup",
+          "canary",
+          "full_cutover"
+        ],
+        "note": "Target stands up alongside the still-running source; traffic moves in canary percentages, not all at once."
+      },
+      {
+        "id": "inference",
+        "label": "Monitoring history stays behind",
+        "focus": [
+          "standup",
+          "inference_table"
+        ],
+        "note": "The accumulated payload table is history in the source metastore — it migrates only if someone puts it in scope."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "resolve",
+      "label": "Resolve alias"
+    },
+    {
+      "id": "standup",
+      "label": "Stand up target"
+    },
+    {
+      "id": "cutover",
+      "label": "Canary + cutover"
+    },
+    {
+      "id": "exceptions",
+      "label": "Stays behind",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "resolve_alias",
+    "standup",
+    "canary",
+    "full_cutover"
+  ],
+  "nodes": [
+    {
+      "id": "resolve_alias",
+      "lane": "resolve",
+      "col": 0,
+      "type": "database",
+      "label": "Resolve Alias",
+      "sublabel": "at deploy time"
+    },
+    {
+      "id": "standup",
+      "lane": "standup",
+      "col": 1,
+      "type": "backend",
+      "label": "Stand Up",
+      "sublabel": "alongside source"
+    },
+    {
+      "id": "canary",
+      "lane": "cutover",
+      "col": 3,
+      "type": "frontend",
+      "label": "Canary",
+      "sublabel": "incremental traffic"
+    },
+    {
+      "id": "full_cutover",
+      "lane": "cutover",
+      "col": 5,
+      "type": "security",
+      "label": "Full Cutover",
+      "sublabel": "source stays warm"
+    },
+    {
+      "id": "inference_table",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "database",
+      "label": "Inference",
+      "sublabel": "payload history",
+      "tag": "scope explicitly"
+    }
+  ],
+  "edges": [
+    {
+      "from": "resolve_alias",
+      "to": "standup",
+      "label": "version number",
+      "variant": "emphasis"
+    },
+    {
+      "from": "standup",
+      "to": "canary",
+      "label": "validated directly",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "canary",
+      "to": "full_cutover",
+      "label": "latency + error OK",
+      "variant": "emphasis"
+    },
+    {
+      "from": "standup",
+      "to": "inference_table",
+      "label": "auto_capture_config",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "The version number is the trap, again",
+      "items": [
+        "entity_version copied from source is valid in the target and serves a different model — silently, no error",
+        "Pin the deployment to an alias intent (\"serve champion\"), resolve the version number only at deploy time",
+        "Serving endpoints take a number, not an alias — resolution has to happen in the deploy script"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Zero downtime means overlap, not a flip",
+      "items": [
+        "Stand up target alongside the still-running source, don't replace it yet",
+        "Canary a small traffic percentage before an all-at-once DNS flip",
+        "Keep source warm through hypercare as the rollback target"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Inference tables are two separate problems",
+      "items": [
+        "The auto_capture_config must point at a target catalog and schema — copying it verbatim breaks",
+        "The accumulated payload table is monitoring history that migrates only if someone scopes it",
+        "Log delivery is best-effort — don't reconcile row-for-row during a dual-run window, compare a closed window instead"
+      ]
+    }
+  ]
+}

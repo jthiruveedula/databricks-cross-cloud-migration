@@ -7,6 +7,7 @@ description: 'Migrate MLflow experiments, runs, and tracking data to the target 
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # MLflow
 
@@ -35,6 +36,14 @@ MLflow experiment tracking is workspace-local — experiments, runs, metrics, an
 
   Both fail silently — the target has runs, the counts just do not match, and nobody compares them unless the validation step below is actually run.
 </Callout>
+
+<ArchifyDiagram
+  client:visible
+  name="mlflow.sequence"
+  type="sequence"
+  title="Page through runs, replay the real metric series, hand off the run ID map"
+  caption="run.data.metrics is the latest value per key, not the series — get_metric_history is what preserves a training curve. Model registry migration needs the migrated run ID, not the source one."
+/>
 
 ## Migration script pattern
 

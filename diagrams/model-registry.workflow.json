@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Model Registry: Download, Re-Log, Translate Stage to Alias",
+    "output": "model-registry.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "decide",
+        "label": "Two different problems",
+        "focus": [
+          "decide",
+          "download"
+        ],
+        "note": "copy_model_version() only bridges one registry — a cross-cloud move has two accounts and no shared registry to call it against."
+      },
+      {
+        "id": "alias",
+        "label": "Stages become aliases",
+        "focus": [
+          "relog",
+          "alias"
+        ],
+        "note": "Version numbers never match between source and target — record the map, and pin consumers to an alias, not a number."
+      },
+      {
+        "id": "signature",
+        "label": "No signature, no registration",
+        "focus": [
+          "download",
+          "no_signature"
+        ],
+        "note": "Unity Catalog requires a model signature — find the gaps during discovery, not at cutover."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "decide",
+      "label": "Pick the path"
+    },
+    {
+      "id": "migrate",
+      "label": "Download + re-log"
+    },
+    {
+      "id": "translate",
+      "label": "Translate + record"
+    },
+    {
+      "id": "exceptions",
+      "label": "Blocks registration",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "decide",
+    "download",
+    "relog",
+    "alias"
+  ],
+  "nodes": [
+    {
+      "id": "decide",
+      "lane": "decide",
+      "col": 0,
+      "type": "frontend",
+      "label": "Same Registry?",
+      "sublabel": "cross-account?"
+    },
+    {
+      "id": "download",
+      "lane": "migrate",
+      "col": 1,
+      "type": "backend",
+      "label": "Download",
+      "sublabel": "from source run"
+    },
+    {
+      "id": "relog",
+      "lane": "migrate",
+      "col": 3,
+      "type": "security",
+      "label": "Re-Log",
+      "sublabel": "3-level UC name"
+    },
+    {
+      "id": "alias",
+      "lane": "translate",
+      "col": 4,
+      "type": "frontend",
+      "label": "Set Alias",
+      "sublabel": "champion/challenger",
+      "tag": "record version map"
+    },
+    {
+      "id": "no_signature",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "security",
+      "label": "No Signature",
+      "sublabel": "fails UC registration",
+      "tag": "find at discovery"
+    }
+  ],
+  "edges": [
+    {
+      "from": "decide",
+      "to": "download",
+      "label": "cross-cloud: no shared registry",
+      "variant": "emphasis"
+    },
+    {
+      "from": "download",
+      "to": "relog",
+      "label": "local artifact",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "relog",
+      "to": "alias",
+      "variant": "emphasis"
+    },
+    {
+      "from": "download",
+      "to": "no_signature",
+      "label": "signature missing",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "copy_model_version() doesn't span accounts",
+      "items": [
+        "It copies within one registry the client is connected to — same account, shared metastore",
+        "A cross-cloud move has two accounts, two metastores, no shared registry to call it against",
+        "The unavoidable pattern is download, re-log, and register — model versions are artifacts, not metadata"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "A model without a signature will not register",
+      "items": [
+        "Unity Catalog requires a model signature; a legacy model logged without one fails outright",
+        "This surfaces as a batch of failures late, at cutover, unless found during discovery first",
+        "The proper fix is re-logging with a signature inferred from a sample input, scheduled per model"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Version numbers never match",
+      "items": [
+        "Target versions are assigned in registration order starting at 1 — source version 47 will not be 47",
+        "Stages don't exist in Unity Catalog; translate Production/Staging to champion/challenger aliases",
+        "Pin every consumer to an alias, not a version number — that's what stops this from recurring"
+      ]
+    }
+  ]
+}

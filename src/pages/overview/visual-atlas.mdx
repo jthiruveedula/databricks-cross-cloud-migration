@@ -145,6 +145,19 @@ Six more diagrams cover the layer that actually runs workloads: clusters, polici
   <Card href={withBase('/pipelines/external-orchestrators')} title="External orchestrators" description="Invisible to a Databricks-only inventory, and cloud-native identity federation is the failure mode that doesn't survive the move." />
 </div>
 
+## 11. Analytics and ML, where the version number is always the trap
+
+Six more diagrams close out Analytics and ML. Every one of them turns out to share the same failure mode in a different costume: an ID or version number embedded in a definition, copied verbatim instead of resolved fresh in the target.
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <Card href={withBase('/analytics/dashboards')} title="Dashboards" description="The warehouse ID is embedded in the dashboard, not attached — an un-rewritten one fails or silently queries the wrong warehouse." />
+  <Card href={withBase('/analytics/bi-tool-reconnection')} title="BI tool reconnection" description="Enumerate, provision M2M OAuth, stage, cut over at the freeze point — a missed connection fails silently, not loudly." />
+  <Card href={withBase('/analytics/notebooks-and-repos')} title="Notebooks and repos" description="Git-backed re-clones cleanly; un-versioned notebooks are technical debt about to become permanent." />
+  <Card href={withBase('/ml/mlflow')} title="MLflow" description="Two defaults that pass a demo and fail a real experiment: the 1000-run cap and the latest-value-only metric." />
+  <Card href={withBase('/ml/model-registry')} title="Model registry" description="copy_model_version() doesn't bridge two accounts — cross-cloud is download, re-log, and translate stage to alias." />
+  <Card href={withBase('/ml/serving-and-artifacts')} title="Serving and artifacts" description="A copied entity_version silently serves a different model — resolve the alias at deploy time instead." />
+</div>
+
 ## Editing these diagrams
 
 The diagrams are generated, not hand-drawn. Each one is a typed JSON spec in `diagrams/`, rendered to a self-contained HTML file in `public/diagrams/` by [Archify](https://github.com/tt-a1i/archify):

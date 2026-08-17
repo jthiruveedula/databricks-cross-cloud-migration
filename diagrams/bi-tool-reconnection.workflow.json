@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "BI Reconnection: A Tool Pointed at Source After Cutover Fails Silently",
+    "output": "bi-tool-reconnection.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "enumerate",
+        "label": "Don't rely on self-reporting",
+        "focus": [
+          "enumerate",
+          "stage"
+        ],
+        "note": "Every connection pointed at a source warehouse comes from the asset inventory, not the BI team's own list."
+      },
+      {
+        "id": "m2m",
+        "label": "M2M, not a re-issued PAT",
+        "focus": [
+          "provision",
+          "stage"
+        ],
+        "note": "PATs are workspace/user-scoped and increasingly deprecated — a scheduled refresh needs service-principal OAuth."
+      },
+      {
+        "id": "cutover",
+        "label": "Silent, not loud, when missed",
+        "focus": [
+          "cutover",
+          "stale_connection"
+        ],
+        "note": "A BI tool still pointed at source after cutover reads stale data without failing loudly."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "enumerate",
+      "label": "Enumerate"
+    },
+    {
+      "id": "provision",
+      "label": "Provision M2M"
+    },
+    {
+      "id": "cutover",
+      "label": "Stage + cutover"
+    },
+    {
+      "id": "exceptions",
+      "label": "Fails silently",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "enumerate",
+    "provision",
+    "stage",
+    "cutover"
+  ],
+  "nodes": [
+    {
+      "id": "enumerate",
+      "lane": "enumerate",
+      "col": 0,
+      "type": "frontend",
+      "label": "Enumerate",
+      "sublabel": "every connection"
+    },
+    {
+      "id": "provision",
+      "lane": "provision",
+      "col": 1,
+      "type": "security",
+      "label": "Provision M2M",
+      "sublabel": "service principal OAuth"
+    },
+    {
+      "id": "stage",
+      "lane": "cutover",
+      "col": 3,
+      "type": "database",
+      "label": "Stage",
+      "sublabel": "non-prod copy first"
+    },
+    {
+      "id": "cutover",
+      "lane": "cutover",
+      "col": 5,
+      "type": "cloud",
+      "label": "Cut Over",
+      "sublabel": "at source freeze"
+    },
+    {
+      "id": "stale_connection",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "security",
+      "label": "Stale Conn.",
+      "sublabel": "still reads source",
+      "tag": "no error, just stale"
+    }
+  ],
+  "edges": [
+    {
+      "from": "enumerate",
+      "to": "provision",
+      "label": "connection list",
+      "variant": "emphasis"
+    },
+    {
+      "from": "provision",
+      "to": "stage",
+      "label": "credential ready",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "stage",
+      "to": "cutover",
+      "label": "parity confirmed",
+      "variant": "emphasis"
+    },
+    {
+      "from": "provision",
+      "to": "stale_connection",
+      "label": "if not repointed",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "The connection string is embedded, not swappable",
+      "items": [
+        "Every BI tool embeds the source warehouse's hostname and HTTP path directly in the dataset/workbook definition",
+        "There is no in-place hostname swap in most tools — rebuild the connection against the target endpoint",
+        "Gateway-registered data sources don't follow a workspace migration automatically"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "M2M OAuth, not a re-issued PAT",
+      "items": [
+        "PATs are workspace/user-scoped and Databricks documentation labels them legacy",
+        "A scheduled refresh has no user present to complete an interactive OAuth flow — M2M is required",
+        "Power BI gateway M2M setup is currently manual; budget explicit cutover time for it"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "A missed reconnection fails silently, not loudly",
+      "items": [
+        "A BI tool still pointed at source after cutover reads stale data without erroring",
+        "Stage the reconnection in non-production first and validate parity before cutting real callers over",
+        "Retire the source PAT/credential only after every known connection is confirmed repointed"
+      ]
+    }
+  ]
+}
