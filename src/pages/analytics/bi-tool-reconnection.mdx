@@ -56,7 +56,7 @@ Databricks connections in Power BI now support **Client Credentials (M2M OAuth)*
 1. During [asset inventory](/discovery/asset-inventory), enumerate every BI tool connection pointed at a source SQL warehouse or cluster — do not rely on the BI team self-reporting the list.
 2. Provision the equivalent service principal + OAuth (M2M) credential in the target workspace, granted against the target Unity Catalog objects the report actually queries.
 3. Stage the reconnection in a non-production copy of the report/dataset first; validate visual and numeric parity against the source-connected version.
-4. Cut over the connection at the same point the underlying SQL warehouse or table goes read-only on source — a BI tool still pointed at source after cutover is silently reading stale data, not failing loudly.
+4. Cut over the connection at the same point the underlying SQL warehouse or table goes read-only on source.
 5. Retire the source-side PAT/credential only after every known BI connection has been confirmed repointed.
 
 ## Validation

@@ -59,7 +59,7 @@ What it costs: you cannot use metastore boundaries to isolate business units tha
 
 ### Multi-region replication
 
-If active-active or DR is required, replicate Delta tables and use a second metastore. Foreign catalogs are not cross-region; you must copy metadata.
+Foreign catalogs are not cross-region, so DR means copying metadata into the second metastore rather than just replicating data.
 
 - Higher operational complexity.
 - Requires metadata synchronization or dual-write.

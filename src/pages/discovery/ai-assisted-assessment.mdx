@@ -27,7 +27,7 @@ The four discovery pages in this section — [workspace inventory](/discovery/wo
 
 ## The pattern: deterministic queries, one orchestrating prompt
 
-Rather than asking a model to freelance SQL against your metastore (risking exactly the hallucinated-column, wrong-join failure mode covered on the [AI-assisted migration](/accelerators/ai-assisted-migration) page), give it the **exact queries this runbook already documents** and ask it to run them, merge the results, and narrate the findings. The SQL is deterministic; the LLM's job is synthesis and report writing, not query authorship.
+Rather than asking a model to freelance SQL against your metastore (risking exactly the hallucinated-column, wrong-join failure mode covered on the [AI-assisted migration](/accelerators/ai-assisted-migration) page), give it the **exact queries this runbook already documents** and ask it to run them, merge the results, and narrate the findings.
 
 This works equally well as:
 - A prompt pasted into **Databricks Assistant** inside a notebook (it runs cells, iterates, and writes the summary in the same notebook).
