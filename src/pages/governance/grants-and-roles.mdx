@@ -93,6 +93,33 @@ with open("source_grants.csv") as f:
 statements = [translate_grant(r) for r in source_grants]
 `} />
 
+## Migration is a re-baseline opportunity, not just a replay
+
+Every step above replays the source grant set faithfully — which also faithfully replays any over-permissioning that accumulated in source over the years. A 1:1 replay is the right *starting* target (it's the only way to guarantee nothing legitimate breaks), but treating it as the *final* state means the migration shipped every stale grant along with the real ones.
+
+<Callout client:visible variant="tip" title="Re-baseline after replay, not instead of it">
+  Don't try to redesign least-privilege as part of the migration itself — that turns a migration into a governance redesign project and puts both at risk. Replay 1:1 first, prove nothing broke, then run a **separate**, post-hypercare re-baseline pass with its own sign-off. The migration's job is parity; the re-baseline's job is improvement, and conflating them is how both take longer and neither finishes.
+</Callout>
+
+Add a negative-privilege check alongside the positive one this page already recommends:
+
+<CodeBlock client:visible language="sql" filename="unused_grants.sql" code={`-- Grants that exist but were never exercised in the observation window --
+-- candidates for the post-hypercare re-baseline, not proof of a problem on
+-- their own (a quarterly report a principal hasn't needed yet is not "unused").
+SELECT p.grantee, p.object_type, p.object_name, p.privilege_type
+FROM system.information_schema.table_privileges p
+LEFT JOIN (
+  SELECT DISTINCT user_identity.email AS principal, request_params.full_name_arg AS object_name
+  FROM system.access.audit
+  WHERE event_date >= current_date() - INTERVAL 90 DAYS
+    AND action_name IN ('getTable', 'getTableV2')
+) used ON p.grantee = used.principal AND p.object_name = used.object_name
+WHERE used.principal IS NULL;`} />
+
+<Callout client:visible variant="warning" title="Unexercised does not mean unnecessary">
+  This query surfaces candidates for review, not a delete list. A grant nobody has used in 90 days might back an annual close process, a disaster-recovery runbook, or a report someone runs once a quarter. Route every result to the object owner for a decision — keep, document why it's needed, or revoke — rather than acting on the query output directly.
+</Callout>
+
 ## Role hierarchy
 
 - Grant at the **catalog** or **schema** level by default; reserve **table-level** grants for genuine exceptions — table-by-table grants are the ones that get missed during migration and drift afterward.
@@ -124,6 +151,7 @@ Grants are additive and low-risk to fix forward — if a grant is missing or wro
   { id: 'apply', label: 'Grants applied top-down: catalog → schema → table' },
   { id: 'diff', label: 'Target grants diffed against source export with zero gaps' },
   { id: 'real-user-test', label: 'Access validated with real (non-admin) user credentials' },
+  { id: 'rebaseline-scheduled', label: 'Post-hypercare least-privilege re-baseline scheduled, with its own owner and sign-off — separate from the migration itself' },
 ]} />
 
 ## Sources
