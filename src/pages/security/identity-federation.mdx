@@ -6,10 +6,19 @@ description: 'Configure SSO, SCIM, and group provisioning for cross-cloud migrat
 
 import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Identity federation
 
 Databricks accounts support SSO via SAML 2.0 and OIDC, and user/group provisioning via SCIM. Federation must be reconfigured in the target account because the cloud identity provider changes or is scoped differently.
+
+<ArchifyDiagram
+  client:visible
+  name="identity-federation.workflow"
+  type="workflow"
+  title="SSO, then groups, then validate — with a break-glass path the whole way"
+  caption="Convert workspace-local groups to account-level before migrating, not after — grants and workspace attachments depend on it. A local admin stays enabled as break-glass access until SSO is proven with a non-admin user."
+/>
 
 ## SSO configuration
 

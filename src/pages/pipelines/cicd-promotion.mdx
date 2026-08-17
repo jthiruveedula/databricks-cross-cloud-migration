@@ -7,6 +7,7 @@ description: 'Rebuild CI/CD pipelines to deploy against the target workspace, no
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # CI/CD promotion
 
@@ -25,6 +26,14 @@ CI/CD pipelines that deploy notebooks, jobs, and Terraform-managed infrastructur
 | Terraform state | New state backend location if the backend itself is cloud storage (e.g. an Azure Storage-backed state moving to an S3-backed one) |
 | Secrets used by CI/CD | Re-created in the target cloud's secret manager, not copied from source |
 | Deployment target mapping | Any dev/staging/prod branch-to-workspace mapping needs updating to target workspace IDs |
+
+<ArchifyDiagram
+  client:visible
+  name="cicd-promotion.workflow"
+  type="workflow"
+  title="Five things that still point at the source, then Bundles, then fresh state"
+  caption="Terraform state starts new in the target — never terraform import from source resource IDs into a shared state file."
+/>
 
 ## Rebuilding the deployment pipeline
 

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Retiring a Mount: Inventory to Delete, in Six Steps",
+    "output": "external-locations-and-volumes.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      { "id": "map", "label": "Map before copying", "focus": ["inventory","map"], "note": "Every dbutils.fs.mounts() path is mapped to a target external location or volume before any bytes move." },
+      { "id": "rewrite", "label": "Rewrite before validating", "focus": ["copy","rewrite"], "note": "Notebooks, jobs, and init scripts still point at the old path until this step runs." },
+      { "id": "cleanup", "label": "Delete only after validation", "focus": ["validate","cleanup"], "note": "Unmounting first is how a migration finds out what it missed the hard way." }
+    ]
+  },
+  "lanes": [
+    { "id": "inventory", "label": "Inventory + map" },
+    { "id": "move", "label": "Copy + rewrite" },
+    { "id": "confirm", "label": "Validate" },
+    { "id": "retire", "label": "Retire" }
+  ],
+  "mainPath": ["inventory", "map", "copy", "rewrite", "validate", "cleanup"],
+  "nodes": [
+    { "id": "inventory", "lane": "inventory", "col": 0, "type": "frontend", "label": "Inventory", "sublabel": "dbutils.fs.mounts()" },
+    { "id": "map", "lane": "inventory", "col": 1, "type": "database", "label": "Map Target", "sublabel": "location or volume" },
+    { "id": "copy", "lane": "move", "col": 3, "type": "cloud", "label": "Copy Files", "sublabel": "cloud-native tools" },
+    { "id": "rewrite", "lane": "move", "col": 5, "type": "backend", "label": "Rewrite Refs", "sublabel": "notebooks, jobs, init" },
+    { "id": "validate", "lane": "confirm", "col": 5, "type": "frontend", "label": "Validate", "sublabel": "counts, checksums, ACLs" },
+    { "id": "cleanup", "lane": "retire", "col": 5, "type": "security", "label": "Unmount", "sublabel": "delete source mount" }
+  ],
+  "edges": [
+    { "from": "inventory", "to": "map", "label": "every mount", "variant": "emphasis", "labelDy": -20 },
+    { "from": "map", "to": "copy", "label": "target assigned", "variant": "emphasis", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "from": "copy", "to": "rewrite", "label": "files landed", "variant": "emphasis", "labelDy": -20 },
+    { "from": "rewrite", "to": "validate", "label": "paths updated", "variant": "emphasis" },
+    { "from": "validate", "to": "cleanup", "label": "confirmed", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "External locations are the DBFS-mount successor", "items": ["An external location registers a cloud path with a storage credential, replacing dbfs:/mnt/", "Volumes replace mounts for non-tabular files — libraries, config, images, raw exports", "The identity mapping alone isn't enough; the target identity also needs an explicit grant on the target storage"] },
+    { "dot": "amber", "title": "Rewrite before you validate", "items": ["Every notebook, job, and init script referencing the old mount path needs updating", "Validate file counts, checksums, and access permissions only after paths are rewritten", "Skipping the rewrite step means validation passes against files nothing actually reads yet"] },
+    { "dot": "rose", "title": "Unmount is the last step, not an early one", "items": ["Delete source mounts only after verification — this is what avoids drift", "An unmounted-too-early mount is a production incident, not a cleanup task", "See target storage credentials for the identity this whole chain depends on"] }
+  ]
+}

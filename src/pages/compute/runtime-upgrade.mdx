@@ -7,6 +7,7 @@ description: 'Upgrade Databricks runtimes and access modes as part of migration.
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Runtime upgrade
 
@@ -19,6 +20,14 @@ An old runtime carried into the target cloud unchanged just relocates a ticking 
 ## Applicability
 
 Applies to every workload being migrated, not only ones already flagged as "old." Check the actual DBR version in use per cluster/job — teams are frequently unaware they're several LTS generations behind.
+
+<ArchifyDiagram
+  client:visible
+  name="runtime-upgrade.workflow"
+  type="workflow"
+  title="Audit, pick the newest LTS that fits, verify compatibility"
+  caption="A runtime already close to its support end date is a hard skip as a target baseline, not a soft preference — migration is the forcing function to fix this once."
+/>
 
 ## Recommended runtime strategy
 

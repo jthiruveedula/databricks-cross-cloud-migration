@@ -7,6 +7,7 @@ description: 'Migrate Lakeview dashboards and external BI tool connections witho
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Dashboards
 
@@ -25,6 +26,14 @@ Dashboards sit on top of the [SQL queries](/analytics/sql-queries) and [SQL ware
 | External BI tool dashboards (Tableau, Power BI, Looker) | Re-point the underlying Databricks connection (warehouse endpoint, catalog) in the BI tool itself |
 | Scheduled dashboard refresh/subscriptions | Recreate subscription schedule against target; verify recipient list is current |
 | Dashboard-level permissions | Replay ACLs with mapped principals |
+
+<ArchifyDiagram
+  client:visible
+  name="dashboards.workflow"
+  type="workflow"
+  title="Export, rewrite the embedded warehouse ID, strip, create, verify parity"
+  caption="An un-rewritten warehouse_id imports cleanly and fails or silently queries the wrong warehouse — the same workspace-scoped-ID problem as queries, jobs, and pipelines."
+/>
 
 ## Migration steps
 

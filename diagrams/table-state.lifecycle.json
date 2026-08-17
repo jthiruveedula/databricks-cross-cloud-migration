@@ -1,0 +1,252 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Per-Table Migration Lifecycle",
+    "output": "table-state.lifecycle.html",
+    "viewBox": [
+      1420,
+      650
+    ],
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "main-rail",
+        "label": "Migration rail",
+        "focus": [
+          "discovered",
+          "copying",
+          "cloned",
+          "reconciling",
+          "cutover"
+        ],
+        "note": "Each table moves independently from inventory to repointed consumers."
+      },
+      {
+        "id": "gates",
+        "label": "Freeze and repair",
+        "focus": [
+          "cloned",
+          "awaiting_freeze",
+          "reconciling",
+          "repairing"
+        ],
+        "note": "A table waits for the write freeze and can be repaired without stopping the wave."
+      },
+      {
+        "id": "endings",
+        "label": "Terminal outcomes",
+        "focus": [
+          "skipped",
+          "failed",
+          "retired"
+        ],
+        "note": "Every table ends as skipped, failed, or retired with its Azure copy deleted."
+      }
+    ],
+    "animation": "trace"
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Migration phases"
+    },
+    {
+      "id": "waiting",
+      "label": "Waiting on window"
+    },
+    {
+      "id": "recovery",
+      "label": "Repair"
+    },
+    {
+      "id": "terminal",
+      "label": "Terminal outcomes"
+    }
+  ],
+  "states": [
+    {
+      "id": "discovered",
+      "type": "start",
+      "label": "Discovered",
+      "sublabel": "UCX inventory",
+      "lane": "main",
+      "col": 0,
+      "step": "01",
+      "tag": "scoped"
+    },
+    {
+      "id": "copying",
+      "type": "active",
+      "label": "Copying",
+      "sublabel": "bulk to GCS",
+      "lane": "main",
+      "col": 1,
+      "step": "02",
+      "tag": "running"
+    },
+    {
+      "id": "cloned",
+      "type": "active",
+      "label": "Cloned",
+      "sublabel": "DEEP CLONE done",
+      "lane": "main",
+      "col": 2,
+      "step": "03",
+      "tag": "dual-run"
+    },
+    {
+      "id": "reconciling",
+      "type": "decision",
+      "label": "Reconciling",
+      "sublabel": "counts + grants",
+      "lane": "main",
+      "col": 3,
+      "step": "04",
+      "tag": "gate"
+    },
+    {
+      "id": "cutover",
+      "type": "success",
+      "label": "Cut over",
+      "sublabel": "GCP authoritative",
+      "lane": "main",
+      "col": 4,
+      "step": "05",
+      "tag": "live"
+    },
+    {
+      "id": "awaiting_freeze",
+      "type": "waiting",
+      "label": "Awaiting Freeze",
+      "sublabel": "Azure still writable",
+      "lane": "waiting",
+      "col": 0,
+      "tag": "queued"
+    },
+    {
+      "id": "repairing",
+      "type": "failure",
+      "label": "Repairing",
+      "sublabel": "re-copy diff files",
+      "lane": "recovery",
+      "col": 1,
+      "tag": "recoverable"
+    },
+    {
+      "id": "shadow",
+      "type": "waiting",
+      "label": "Shadow Reads",
+      "sublabel": "both clouds queried",
+      "lane": "waiting",
+      "col": 2,
+      "tag": "observe"
+    },
+    {
+      "id": "skipped",
+      "type": "failure",
+      "label": "Skipped",
+      "sublabel": "deprecated table",
+      "lane": "terminal",
+      "col": 0,
+      "tag": "terminal"
+    },
+    {
+      "id": "failed",
+      "type": "failure",
+      "label": "Failed",
+      "sublabel": "diff unresolved",
+      "lane": "terminal",
+      "col": 1,
+      "tag": "terminal"
+    },
+    {
+      "id": "retired",
+      "type": "success",
+      "label": "Retired",
+      "sublabel": "Azure copy deleted",
+      "lane": "terminal",
+      "col": 2,
+      "tag": "terminal"
+    }
+  ],
+  "transitions": [
+    {
+      "from": "cloned",
+      "to": "awaiting_freeze",
+      "variant": "security",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "awaiting_freeze",
+      "to": "skipped",
+      "variant": "security",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "reconciling",
+      "to": "repairing",
+      "variant": "security",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "repairing",
+      "to": "failed",
+      "variant": "security",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "cutover",
+      "to": "shadow",
+      "variant": "dashed",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "shadow",
+      "to": "retired",
+      "variant": "emphasis",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Tables move independently",
+      "items": [
+        "The wave is a set of per-table state machines, not one big switch",
+        "Copying and cloning happen while Azure still serves reads and writes",
+        "A table only enters reconciliation after the freeze window opens"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Recoverable middle",
+      "items": [
+        "A failed diff sends the table to Repairing, not straight to Failed",
+        "Repair re-copies only the files the diff named, then reconciliation runs again",
+        "Failed is reserved for a table that cannot be reconciled inside the window"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Retirement is deliberate",
+      "items": [
+        "Shadow reads compare Azure and GCP answers before retirement",
+        "Azure storage is deleted only after shadow reads agree",
+        "Skipped tables are recorded, never silently dropped"
+      ]
+    }
+  ]
+}

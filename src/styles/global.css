@@ -236,6 +236,21 @@ html.theme-transitioning *::after {
   color: var(--ink);
 }
 
+/* The article column itself is intentionally wide (see Layout.astro's main
+   max-width) so diagrams, tables, and code blocks get real screen space on a
+   large monitor instead of sitting tiny in a narrow prose gutter with dead
+   margin on both sides. Plain running text is the one thing that still reads
+   worse at that width, so cap paragraphs and list items to a comfortable
+   measure while every other prose child -- figure, table, pre, callout --
+   is left to fill the full column. */
+.prose > p,
+.prose > ul,
+.prose > ol,
+.prose li > p,
+.prose > blockquote {
+  max-width: 74ch;
+}
+
 .prose h1,
 .prose h2,
 .prose h3,

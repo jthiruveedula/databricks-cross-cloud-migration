@@ -7,6 +7,7 @@ description: 'Reconcile table and file data between source and target after migr
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Data reconciliation
 
@@ -70,6 +71,14 @@ DESCRIBE HISTORY target_catalog.schema.table;`} />
 <Callout client:visible variant="warning" title="Do not ignore small mismatches">
   Even a single-row mismatch can indicate a bug in the migration logic or a permissions issue. Treat every mismatch as a severity-2 finding until explained.
 </Callout>
+
+<ArchifyDiagram
+  client:visible
+  name="table-state.lifecycle"
+  type="lifecycle"
+  title="Where a mismatched table actually goes"
+  caption="Reconciliation is per table, not per wave. A failed diff moves that one table into Repairing and back through the gate; only a table that cannot be reconciled inside the window ends as Failed. Nothing is retired until shadow reads on both clouds agree."
+/>
 
 ## Validation
 

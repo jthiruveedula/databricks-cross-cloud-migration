@@ -7,10 +7,19 @@ description: 'Score discovered assets and workloads for migration risk before wa
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Risk assessment
 
 [Asset inventory](/discovery/asset-inventory) and [dependency mapping](/discovery/dependency-mapping) tell you what exists and how it connects. Risk assessment turns that into a score you can actually sequence waves by — without it, [wave planning](/execution/wave-planning) is just intuition with extra steps.
+
+<ArchifyDiagram
+  client:visible
+  name="risk-assessment.workflow"
+  type="workflow"
+  title="Seven weighted dimensions to a tier, with one inverted signal"
+  caption="Interviews and the dependency graph feed seven ratings, weighted and summed into a tier. An unengaged owner routes through the inverted branch — it raises the score, it doesn't lower it."
+/>
 
 ## Risk dimensions
 

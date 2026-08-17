@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "External Orchestrators: Invisible to a Databricks-Only Inventory",
+    "output": "external-orchestrators.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "inventory",
+        "label": "It won't show up on its own",
+        "focus": [
+          "inventory",
+          "cloud_native"
+        ],
+        "note": "A job triggered from Airflow or ADF doesn't appear in a Databricks-only asset inventory scan."
+      },
+      {
+        "id": "auth",
+        "label": "Auth mechanism decides survival",
+        "focus": [
+          "identify_auth",
+          "cloud_native"
+        ],
+        "note": "Cloud-native identity federation from an orchestrator generally does not survive a cross-cloud move."
+      },
+      {
+        "id": "verify",
+        "label": "Run it, don't just connect it",
+        "focus": [
+          "update",
+          "run_e2e"
+        ],
+        "note": "A connectivity check proves the network path, not that the orchestrated pipeline actually still works."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "inventory",
+      "label": "Inventory"
+    },
+    {
+      "id": "auth",
+      "label": "Identify auth"
+    },
+    {
+      "id": "target",
+      "label": "Repoint + verify"
+    },
+    {
+      "id": "exceptions",
+      "label": "Doesn't survive the move",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "inventory",
+    "identify_auth",
+    "create_target",
+    "update",
+    "run_e2e"
+  ],
+  "nodes": [
+    {
+      "id": "inventory",
+      "lane": "inventory",
+      "col": 0,
+      "type": "frontend",
+      "label": "Inventory",
+      "sublabel": "ask app teams directly"
+    },
+    {
+      "id": "identify_auth",
+      "lane": "auth",
+      "col": 1,
+      "type": "security",
+      "label": "Identify Auth",
+      "sublabel": "PAT, OAuth, native"
+    },
+    {
+      "id": "create_target",
+      "lane": "target",
+      "col": 2,
+      "type": "backend",
+      "label": "Create SP",
+      "sublabel": "scoped to target"
+    },
+    {
+      "id": "update",
+      "lane": "target",
+      "col": 4,
+      "type": "database",
+      "label": "Update Configs",
+      "sublabel": "connections + IDs"
+    },
+    {
+      "id": "run_e2e",
+      "lane": "target",
+      "col": 5,
+      "type": "frontend",
+      "label": "Run End-to-End",
+      "sublabel": "before cutover"
+    },
+    {
+      "id": "cloud_native",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "security",
+      "label": "Cloud-Native",
+      "sublabel": "e.g. ADF + Entra ID",
+      "tag": "doesn't survive"
+    }
+  ],
+  "edges": [
+    {
+      "from": "inventory",
+      "to": "identify_auth",
+      "label": "every connection",
+      "variant": "emphasis"
+    },
+    {
+      "from": "identify_auth",
+      "to": "create_target",
+      "label": "auth confirmed",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "channelX": 280,
+      "labelAt": [
+        280,
+        300
+      ]
+    },
+    {
+      "from": "create_target",
+      "to": "update",
+      "variant": "emphasis"
+    },
+    {
+      "from": "update",
+      "to": "run_e2e",
+      "label": "before cutover",
+      "variant": "emphasis",
+      "labelDy": -20
+    },
+    {
+      "from": "identify_auth",
+      "to": "cloud_native",
+      "label": "target isn't source cloud",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "channelX": 220,
+      "labelAt": [
+        220,
+        420
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Easy to miss in discovery, on purpose",
+      "items": [
+        "Airflow, ADF, Step Functions/Glue, and Cloud Composer jobs don't show up in a Databricks-only scan",
+        "Explicitly inventory every external scheduler with a Databricks connection before trusting the job inventory",
+        "Ask application teams directly — the platform team doesn't always know every trigger that exists"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "The auth mechanism decides what survives",
+      "items": [
+        "A PAT or OAuth service principal migrates cleanly to a target-scoped equivalent",
+        "Cloud-native identity federation — ADF's Entra ID auth, for example — has no equivalent if the target isn't that cloud",
+        "Hardcoded job/cluster IDs referenced directly in DAGs need updating after job recreation, not just the connection"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Run it end to end, not just connectivity",
+      "items": [
+        "A network reachability check proves the path exists, not that the pipeline still works",
+        "Run each orchestrated pipeline against target before cutover, every time",
+        "Composer's VPC networking specifically needs to reach a private-only target endpoint if enforced"
+      ]
+    }
+  ]
+}

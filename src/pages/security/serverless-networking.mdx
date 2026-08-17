@@ -9,6 +9,7 @@ import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Tabs from '../../components/Tabs.tsx';
 import Accordion from '../../components/Accordion.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Serverless networking and egress
 
@@ -18,11 +19,15 @@ This matters more on a cross-cloud move than it looks, for a reason nobody plans
 
 ## The one-paragraph version
 
-Serverless egress is governed by a **network connectivity configuration (NCC)** — an *account-level, regional* object created by an account admin and attached to one or more workspaces in that region. Every private endpoint rule on the NCC applies to every workspace attached to it. That is three properties your classic networking does not have: account-level, regional, and shared.
+Serverless egress is governed by a **network connectivity configuration (NCC)** — an account-level, regional object created by an account admin and attached to one or more workspaces in that region.
 
-<Callout client:visible variant="warning" title="Account-level and regional means it is not the workspace team's to create">
-  A platform engineer with workspace admin cannot create an NCC. It needs an **account admin**, and one NCC serves every attached workspace in the region — so its rules are a shared blast radius. On a migration this is a scheduling dependency, not a technical one: if your account admin is a different team in a different timezone, put the NCC request in during discovery, not the week of cutover.
-</Callout>
+<ArchifyDiagram
+  client:visible
+  name="serverless-networking.workflow"
+  type="workflow"
+  title="Four steps, in order, and who each one belongs to"
+  caption="An account admin creates the NCC — not the workspace team. A private endpoint rule needs its target to exist first. The firewall allow-list is the step most often missed, because it's owned by a team that was never told about the migration."
+/>
 
 ## What differs from the classic plane
 

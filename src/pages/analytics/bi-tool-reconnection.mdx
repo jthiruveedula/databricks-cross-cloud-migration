@@ -7,6 +7,7 @@ description: 'Reconnect Power BI, Tableau, and Looker to the target workspace wi
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # BI tool reconnection
 
@@ -42,12 +43,20 @@ Databricks connections in Power BI now support **Client Credentials (M2M OAuth)*
 - **Tableau**: extracts and live connections both store the JDBC/ODBC connection string (host + HTTP path) plus credential in the data source definition. Simba driver 2.6.36+ (or current) supports both U2M (interactive) and M2M (service principal) OAuth — rebuild the connection with the target host/HTTP path and an M2M credential rather than patching the old one in place.
 - **Looker**: JDBC connections are defined once per Looker connection object and reused by every LookML model built on it — update the connection's host/HTTP path/credential centrally rather than per-explore, and re-run a representative set of explores to confirm query pushdown still resolves against target Unity Catalog objects.
 
+<ArchifyDiagram
+  client:visible
+  name="bi-tool-reconnection.workflow"
+  type="workflow"
+  title="Enumerate, provision M2M, stage, cut over at the freeze point"
+  caption="A BI tool still pointed at source after cutover reads stale data without failing loudly — stage in non-production first and confirm parity before real callers move."
+/>
+
 ## Reconnection sequence
 
 1. During [asset inventory](/discovery/asset-inventory), enumerate every BI tool connection pointed at a source SQL warehouse or cluster — do not rely on the BI team self-reporting the list.
 2. Provision the equivalent service principal + OAuth (M2M) credential in the target workspace, granted against the target Unity Catalog objects the report actually queries.
 3. Stage the reconnection in a non-production copy of the report/dataset first; validate visual and numeric parity against the source-connected version.
-4. Cut over the connection at the same point the underlying SQL warehouse or table goes read-only on source — a BI tool still pointed at source after cutover is silently reading stale data, not failing loudly.
+4. Cut over the connection at the same point the underlying SQL warehouse or table goes read-only on source.
 5. Retire the source-side PAT/credential only after every known BI connection has been confirmed repointed.
 
 ## Validation

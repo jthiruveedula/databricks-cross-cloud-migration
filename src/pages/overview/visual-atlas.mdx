@@ -1,0 +1,183 @@
+---
+title: 'Visual atlas'
+layout: ../../layouts/Layout.astro
+description: 'Interactive diagrams for the migration: architecture, data flow, runbook, event path, per-table state, all six cloud-pair topologies, and the discovery phase that scopes them.'
+hideToc: true
+---
+
+import Callout from '../../components/Callout.tsx';
+import Card from '../../components/Card.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
+import { withBase } from '../../lib/paths';
+
+# Visual atlas
+
+Five views of the same migration, each answering a question the others cannot. The worked example throughout is **Azure → GCP**, but the shapes hold for any cross-cloud pair — swap ADLS Gen2 for S3, Pub/Sub for Kinesis, and the lanes, gates, and states are unchanged. All six cloud-pair architecture diagrams are at the bottom of this page.
+
+Each diagram is interactive: switch light/dark, play the guided views, trace a route between two nodes, or export the current state as PNG, SVG, or WebM. Every diagram also appears inline on the page that owns its subject, linked below.
+
+<Callout client:visible variant="tip" title="Read them in this order">
+  Architecture answers *what exists*. Data flow answers *what moves*. The runbook answers *in what order*. The sequence answers *what a single event experiences*. The lifecycle answers *what happens when one table fails its check*. Skipping to the runbook without the first two is how teams end up sequencing work they have not scoped.
+</Callout>
+
+## 1. What sits on each side
+
+<ArchifyDiagram
+  client:visible
+  name="azure-to-gcp.architecture"
+  type="architecture"
+  title="Estate lift-and-shift: source, migration control plane, target"
+  caption="Four independent lanes — events, compute, storage, catalog. The middle column is the migration machinery itself, which is temporary and should be deleted after decommissioning."
+/>
+
+Owned by [Azure → GCP](/cloud-mappings/azure-to-gcp). The equivalent mapping for other cloud pairs is in the [cross-cloud equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix).
+
+## 2. What actually moves
+
+<ArchifyDiagram
+  client:visible
+  name="table-migration.dataflow"
+  type="dataflow"
+  title="Table and event migration pipeline"
+  caption="Objects, catalog metadata, and event traffic take three separate paths and finish at different times. A table is not migrated when its files land — it is migrated when its DDL, grants, and history are all present on the target."
+/>
+
+Owned by [large-scale data transfer](/execution/large-scale-data-transfer). Catalog specifics are in [metastore migration](/governance/metastore-migration) and [UCX strategy](/governance/ucx-strategy).
+
+## 3. In what order
+
+<ArchifyDiagram
+  client:visible
+  name="cutover-runbook.workflow"
+  type="workflow"
+  title="Cutover runbook, per wave"
+  caption="Everything left of the freeze overlaps with production and is reversible. The reconciliation diff is a blocking gate; repointing consumers is the step a rollback cannot undo cheaply."
+/>
+
+Owned by [wave planning](/execution/wave-planning). The cutover-night handoffs between teams are in [cutover](/execution/cutover), and the reverse path is in [rollback](/execution/rollback).
+
+## 4. What one event experiences
+
+<ArchifyDiagram
+  client:visible
+  name="event-bridge.sequence"
+  type="sequence"
+  title="Event Hubs to Pub/Sub to Delta, one message end to end"
+  caption="The streaming job acks only after the Delta commit, and redelivery past the ack deadline is absorbed by a MERGE on event id — the reason an at-least-once source can safely land in an exactly-once table."
+/>
+
+Owned by [DLT / Lakeflow pipelines](/pipelines/dlt-lakeflow), where the checkpoint-portability decision this diagram depends on is spelled out.
+
+## 5. What happens when one table fails
+
+<ArchifyDiagram
+  client:visible
+  name="table-state.lifecycle"
+  type="lifecycle"
+  title="Per-table migration lifecycle"
+  caption="The wave is a set of per-table state machines, not one switch. A failed diff routes that table to Repairing and back through the gate; Failed is reserved for a table that cannot be reconciled inside the window."
+/>
+
+Owned by [data reconciliation](/validation/data-reconciliation). Mismatch triage is in the same page's *Handling mismatches* section.
+
+## 6. Every cloud pair, same shape
+
+The four-lane architecture above is not Azure→GCP-specific — it is the shape of a Databricks platform reset between *any* two clouds. Each pair below swaps in that cloud's own storage, events, identity, and transfer mechanism; the lanes, the migration-control-plane column, and the cutover-safety cards stay structurally identical. Open a pair inline on its own page, where the diagram sits beside the identity-federation table and path-rewrite examples it corresponds to.
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <Card href={withBase('/cloud-mappings/azure-to-gcp')} title="Azure → GCP" description="ADLS Gen2 → GCS, Event Hubs → Pub/Sub, Entra ID → Google Cloud Identity." />
+  <Card href={withBase('/cloud-mappings/aws-to-azure')} title="AWS → Azure" description="S3 → ADLS Gen2, EventBridge → Event Hubs, IAM Identity Center → Entra ID." />
+  <Card href={withBase('/cloud-mappings/azure-to-aws')} title="Azure → AWS" description="ADLS Gen2 → S3, Event Hubs → EventBridge, Entra ID → IAM Identity Center." />
+  <Card href={withBase('/cloud-mappings/aws-to-gcp')} title="AWS → GCP" description="S3 → GCS, EventBridge → Pub/Sub, IAM Identity Center → Google Cloud Identity." />
+  <Card href={withBase('/cloud-mappings/gcp-to-azure')} title="GCP → Azure" description="GCS → ADLS Gen2, Pub/Sub → Event Hubs, Google Cloud Identity → Entra ID." />
+  <Card href={withBase('/cloud-mappings/gcp-to-aws')} title="GCP → AWS" description="GCS → S3, Pub/Sub → EventBridge, Google Cloud Identity → IAM Identity Center." />
+</div>
+
+The full [cross-cloud equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix) is the construct-by-construct reference these six diagrams are drawn from.
+
+## 7. Discovery, before any of the above
+
+None of the first five diagrams have anything to sequence until discovery produces it. Four more diagrams cover that phase — the fan-out that collects the estate, the graph that clusters it into candidate waves, the scoring that tiers it, and the pattern that automates the data-gathering slice without letting a model touch raw rows.
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <Card href={withBase('/discovery/asset-inventory')} title="Asset inventory" description="Metastore plane and workspace plane, collected separately, cross-referenced on Day 3 into shared-dependency clusters." />
+  <Card href={withBase('/discovery/dependency-mapping')} title="Dependency mapping" description="Lineage to a graph, weakly-connected components to candidate wave boundaries — with the two things a human still has to resolve." />
+  <Card href={withBase('/discovery/risk-assessment')} title="Risk assessment" description="Seven weighted dimensions to a tier, with owner engagement deliberately inverted." />
+  <Card href={withBase('/discovery/ai-assisted-assessment')} title="AI-assisted assessment" description="Deterministic Spark SQL for every section except the narrative, which only ever sees an aggregated report." />
+</div>
+
+## 8. Security, where the migration actually breaks
+
+Six more diagrams cover the security work that's hardest to get right: the circular dependency in an AWS storage credential, secrets that don't migrate, serverless egress owned by a different team, the classic-plane network posture, identity federation's break-glass path, and the one decision every table's residency reduces to.
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <Card href={withBase('/security/target-storage-credentials')} title="Target storage credentials" description="Three passes to break a circular dependency — the storage credential everything else in a metastore migration waits on." />
+  <Card href={withBase('/security/secrets-and-kms')} title="Secrets and KMS" description="Map, decide, recreate, sequence — with the source-cloud credential and the vault-only scope that don't carry over." />
+  <Card href={withBase('/security/serverless-networking')} title="Serverless networking" description="Four ordered steps, and the firewall allow-list step most likely to be owned by a team never told about the migration." />
+  <Card href={withBase('/security/network-security')} title="Network security" description="The classic compute plane's posture, and why serverless deliberately isn't on the same diagram." />
+  <Card href={withBase('/security/identity-federation')} title="Identity federation" description="SSO, then groups, then validate — with a break-glass admin enabled the whole way through." />
+  <Card href={withBase('/security/data-residency')} title="Data residency" description="One decision, four outcomes — and provider-constrained isn't a blocked migration." />
+</div>
+
+## 9. Governance, where isolation actually lives
+
+Six more diagrams cover Unity Catalog governance: the metastore topology every workspace attaches to, the UCX pipeline that upgrades a legacy estate in place, and the four migration patterns — grants, row/column security, external locations, and legacy Hive retirement — that all share the same shape: export, recreate, verify.
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <Card href={withBase('/governance/unity-catalog-strategy')} title="Unity Catalog strategy" description="One metastore per region, workspaces attached, isolation moved to catalogs — a limit, not a design choice." />
+  <Card href={withBase('/governance/ucx-strategy')} title="UCX-assisted migration" description="Assessment, then groups, then tables — three gated workflows, and the cross-cloud limit UCX doesn't cover." />
+  <Card href={withBase('/governance/grants-and-roles')} title="Grants and roles" description="Export as admin, translate, apply top-down, verify — with the silently-filtered export as the exception." />
+  <Card href={withBase('/governance/row-column-security')} title="Row and column-level security" description="Redeploy the UDF, attach, verify — with ABAC as the default for anything migrating in bulk." />
+  <Card href={withBase('/governance/external-locations-and-volumes')} title="External locations and volumes" description="Inventory to unmount in six steps, with cleanup deliberately last." />
+  <Card href={withBase('/governance/legacy-hive-transition')} title="Legacy Hive transition" description="Assessed, upgraded, or federated as a coexistence state — retire now, not on the next migration." />
+</div>
+
+## 10. Compute and pipelines, rebuilt not copied
+
+Six more diagrams cover the layer that actually runs workloads: clusters, policies, and runtimes on the compute side; jobs, external orchestrators, and CI/CD on the pipelines side. The shared thread is the same one running through governance and security — export, translate the cloud-specific parts, recreate, then prove it behaves the same before cutover.
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <Card href={withBase('/compute/cluster-migration')} title="Cluster migration" description="Export, translate node types and access modes, recreate, prove autoscaling still behaves." />
+  <Card href={withBase('/compute/cluster-policies')} title="Cluster policies" description="Five fields that can't be copied verbatim, codified as Terraform, tiered by workload." />
+  <Card href={withBase('/compute/runtime-upgrade')} title="Runtime upgrade" description="Audit every cluster, pick the newest LTS that fits, and hard-skip anything already near end of support." />
+  <Card href={withBase('/pipelines/workflows-jobs')} title="Workflows and jobs" description="Strip source-owned fields, recreate, and keep the ID map every external reference depends on." />
+  <Card href={withBase('/pipelines/cicd-promotion')} title="CI/CD promotion" description="Five things still pointing at the source, Asset Bundles to decouple from the cloud, and fresh Terraform state." />
+  <Card href={withBase('/pipelines/external-orchestrators')} title="External orchestrators" description="Invisible to a Databricks-only inventory, and cloud-native identity federation is the failure mode that doesn't survive the move." />
+</div>
+
+## 11. Analytics and ML, where the version number is always the trap
+
+Six more diagrams close out Analytics and ML. Every one of them turns out to share the same failure mode in a different costume: an ID or version number embedded in a definition, copied verbatim instead of resolved fresh in the target.
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <Card href={withBase('/analytics/dashboards')} title="Dashboards" description="The warehouse ID is embedded in the dashboard, not attached — an un-rewritten one fails or silently queries the wrong warehouse." />
+  <Card href={withBase('/analytics/bi-tool-reconnection')} title="BI tool reconnection" description="Enumerate, provision M2M OAuth, stage, cut over at the freeze point — a missed connection fails silently, not loudly." />
+  <Card href={withBase('/analytics/notebooks-and-repos')} title="Notebooks and repos" description="Git-backed re-clones cleanly; un-versioned notebooks are technical debt about to become permanent." />
+  <Card href={withBase('/ml/mlflow')} title="MLflow" description="Two defaults that pass a demo and fail a real experiment: the 1000-run cap and the latest-value-only metric." />
+  <Card href={withBase('/ml/model-registry')} title="Model registry" description="copy_model_version() doesn't bridge two accounts — cross-cloud is download, re-log, and translate stage to alias." />
+  <Card href={withBase('/ml/serving-and-artifacts')} title="Serving and artifacts" description="A copied entity_version silently serves a different model — resolve the alias at deploy time instead." />
+</div>
+
+## 12. Execution's back half, tooling, and collaboration
+
+The last six close the loop: what the migration destroys rather than moves, the irreversible decommission order, the rollback path that must stay live, hypercare's proof-based exit, the accelerator stack that automates the mechanical parts, and the share/replicate/federate decision for data that never needs to move at all.
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <Card href={withBase('/execution/what-does-not-migrate')} title="What does not migrate" description="Audit logs, run history, notebook revisions — a register of what's exported before decommission or lost forever." />
+  <Card href={withBase('/execution/decommissioning')} title="Decommissioning" description="Nine steps, each foreclosing a rollback option — step 3, verifying every export from the target, is the gate." />
+  <Card href={withBase('/execution/rollback')} title="Rollback" description="Split-brain — both environments writable — is the failure mode this order exists to prevent." />
+  <Card href={withBase('/execution/hypercare')} title="Hypercare" description="Ends on an explicit, pre-agreed proof gate, not a calendar date — otherwise it quietly becomes permanent." />
+  <Card href={withBase('/accelerators/databricks-tooling')} title="Databricks migration tooling" description="UCX, Lakebridge, Replicator, migrate, and Asset Bundles — the accelerator stack and where each one stops." />
+  <Card href={withBase('/collaboration/cross-cloud-collaboration')} title="Cross-cloud data collaboration" description="Share, replicate, or federate — picked by access pattern, never by habit or dual-registered by mistake." />
+</div>
+
+## Editing these diagrams
+
+The diagrams are generated, not hand-drawn. Each one is a typed JSON spec in `diagrams/`, rendered to a self-contained HTML file in `public/diagrams/` by [Archify](https://github.com/tt-a1i/archify):
+
+```bash
+npm run build:diagrams:check   # validate specs at showcase quality
+npm run build:diagrams         # re-render every diagram
+```
+
+Edit the spec and re-render; never hand-edit the HTML. The rendered files are committed so that CI and the Pages deploy never depend on Archify being installed. Full contributor notes are in `CONTRIBUTING.md`.

@@ -8,10 +8,19 @@ import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Tabs from '../../components/Tabs.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Azure → AWS
 
 Moving Databricks from Azure to AWS is a platform reset, not a lift-and-shift. Entra ID federation, ADLS Gen2 paths, and VNet private endpoints have no direct AWS equivalent — each must be redesigned against AWS IAM, S3, and VPC PrivateLink. See the [cross-cloud equivalency matrix](/cloud-mappings/cross-cloud-equivalency-matrix) for the full construct-by-construct reference; this page sequences the Azure → AWS-specific work.
+
+<ArchifyDiagram
+  client:visible
+  name="azure-to-aws.architecture"
+  type="architecture"
+  title="What sits on each side, and what crosses between them"
+  caption="Four independent lanes — events, compute, storage, catalog — each with its own source, its own migration mechanism, and its own target on AWS. Nothing is 'moved': the AWS side is provisioned from code and then loaded."
+/>
 
 ## Sequencing
 

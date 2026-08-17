@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Decommissioning: Each Step Forecloses a Rollback Option",
+    "output": "decommissioning.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "order",
+        "label": "Never skip ahead",
+        "focus": ["pause", "revoke_write"],
+        "note": "Pausing jobs and revoking write access are both fully reversible -- un-pause or re-grant and you are back."
+      },
+      {
+        "id": "gate",
+        "label": "Step 3 is the gate",
+        "focus": ["verify_export", "freeze"],
+        "note": "Verify every export from the target, not the source, before freezing non-admin access."
+      },
+      {
+        "id": "irreversible",
+        "label": "Storage deletion is the point of no return",
+        "focus": ["delete_workspace", "delete_storage"],
+        "note": "Deleting a workspace leaves the metastore and data intact. Deleting storage leaves nothing recoverable."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "order", "label": "Order of operations" },
+    { "id": "gate", "label": "Verification gate" },
+    { "id": "exceptions", "label": "Nothing recoverable", "variant": "exception" }
+  ],
+  "mainPath": ["pause", "revoke_write", "verify_export", "freeze", "delete_workspace"],
+  "nodes": [
+    {
+      "id": "pause",
+      "lane": "order",
+      "col": 0,
+      "type": "frontend",
+      "label": "Pause Jobs",
+      "sublabel": "source pipelines",
+      "tag": "fully reversible"
+    },
+    {
+      "id": "revoke_write",
+      "lane": "order",
+      "col": 1,
+      "type": "security",
+      "label": "Revoke Write",
+      "sublabel": "keep read access"
+    },
+    {
+      "id": "verify_export",
+      "lane": "gate",
+      "col": 2,
+      "type": "database",
+      "label": "Verify Export",
+      "sublabel": "queried FROM target",
+      "tag": "the gate"
+    },
+    {
+      "id": "freeze",
+      "lane": "gate",
+      "col": 3,
+      "type": "security",
+      "label": "Freeze Access",
+      "sublabel": "revoke non-admin"
+    },
+    {
+      "id": "delete_workspace",
+      "lane": "order",
+      "col": 5,
+      "type": "cloud",
+      "label": "Delete WS",
+      "sublabel": "metastore survives"
+    },
+    {
+      "id": "delete_storage",
+      "lane": "exceptions",
+      "col": 5,
+      "type": "security",
+      "label": "Delete Storage",
+      "sublabel": "after retention window",
+      "tag": "nothing recoverable"
+    }
+  ],
+  "edges": [
+    {
+      "from": "pause",
+      "to": "revoke_write",
+      "variant": "emphasis"
+    },
+    {
+      "from": "revoke_write",
+      "to": "verify_export",
+      "label": "reads confirmed",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [260, 205]
+    },
+    {
+      "from": "verify_export",
+      "to": "freeze",
+      "variant": "emphasis"
+    },
+    {
+      "from": "freeze",
+      "to": "delete_workspace",
+      "label": "window closes",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [500, 205]
+    },
+    {
+      "from": "delete_workspace",
+      "to": "delete_storage",
+      "label": "after lifecycle-tiered retention",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [625, 420]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Every step forecloses a rollback option",
+      "items": [
+        "Pausing jobs and revoking write access are both fully reversible -- un-pause or re-grant and you are back",
+        "Never skip ahead because a later step is cheaper -- the order exists because each step depends on the last being clean"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Step 3 is the gate -- everything after is mechanical",
+      "items": [
+        "Verify every export by querying it FROM the target, not assuming the job that wrote it succeeded",
+        "Two failure modes this catches: an export written somewhere the target can't read, and a job that silently stopped early"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Deleting a workspace is not deleting the data",
+      "items": [
+        "Workspace deletion removes objects only -- metastore and storage survive",
+        "Metastore deletion removes catalog structure and grants -- storage still survives",
+        "Storage deletion is the only truly irreversible step -- keep it on a lifecycle policy for a quarter first"
+      ]
+    }
+  ]
+}

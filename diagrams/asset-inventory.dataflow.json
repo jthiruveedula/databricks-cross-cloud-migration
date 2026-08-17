@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Five-Day Asset Inventory: Two Planes to One Catalog",
+    "output": "asset-inventory.dataflow.html",
+    "quality_profile": "showcase",
+    "viewBox": [1080, 500],
+    "animation": "trace",
+    "views": [
+      { "id": "two-planes", "label": "Two planes", "focus": ["workspaces","metastore","workspace_assets"], "note": "The metastore plane and the workspace plane are collected separately and cover different things." },
+      { "id": "cross-refs", "label": "Day 3: cross-references", "focus": ["metastore","workspace_assets","crossrefs"], "note": "Cross-references turn two counts into blockers and shared dependencies that plan the wave." },
+      { "id": "signoff", "label": "Decision to sign-off", "focus": ["crossrefs","decisions","catalog"], "note": "Every asset gets an owner and a retire/defer/migrate decision before the catalog is considered done." }
+    ]
+  },
+  "stages": [
+    { "label": "Day 1" },
+    { "label": "Days 1-2" },
+    { "label": "Day 3" },
+    { "label": "Days 3-4" },
+    { "label": "Day 5" }
+  ],
+  "nodes": [
+    { "id": "workspaces", "type": "frontend", "label": "Workspace List", "sublabel": "Accounts API + system tables", "stage": 0, "row": 1, "width": 132, "height": 64, "tag": "account-wide" },
+
+    { "id": "metastore", "type": "database", "label": "Metastore Plane", "sublabel": "catalogs, tables, grants", "stage": 1, "row": 0, "width": 132, "height": 64, "tag": "dbxmig inventory" },
+    { "id": "workspace_assets", "type": "backend", "label": "Workspace Plane", "sublabel": "jobs, clusters, ACLs", "stage": 1, "row": 2, "width": 132, "height": 64, "tag": "dbxmig workspace" },
+
+    { "id": "crossrefs", "type": "security", "label": "dbxmig crossrefs", "sublabel": "blockers + shared refs", "stage": 2, "row": 1, "width": 132, "height": 64, "tag": "deterministic" },
+
+    { "id": "decisions", "type": "frontend", "label": "Owner + Decision", "sublabel": "retire, defer, migrate", "stage": 3, "row": 1, "width": 132, "height": 64, "tag": "project manager" },
+
+    { "id": "catalog", "type": "database", "label": "Master Asset Catalog", "sublabel": "count, owner, decision", "stage": 4, "row": 1, "width": 132, "height": 64, "tag": "signed off" }
+  ],
+  "flows": [
+    { "id": "to-metastore", "from": "workspaces", "to": "metastore", "label": "scope", "classification": "day 1", "variant": "default" },
+    { "id": "to-workspace", "from": "workspaces", "to": "workspace_assets", "label": "scope", "classification": "day 2", "variant": "default" },
+    { "id": "meta-refs", "from": "metastore", "to": "crossrefs", "label": "grants + lineage", "classification": "read-only", "variant": "emphasis" },
+    { "id": "ws-refs", "from": "workspace_assets", "to": "crossrefs", "label": "ACLs + configs", "classification": "read-only", "variant": "emphasis" },
+    { "id": "refs-decide", "from": "crossrefs", "to": "decisions", "label": "blockers found", "classification": "must fix", "variant": "security" },
+    { "id": "decide-catalog", "from": "decisions", "to": "catalog", "label": "sign-off", "classification": "per asset class", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Two planes, two collections", "items": ["Metastore plane holds catalogs, schemas, tables, grants — collected once, account-wide", "Workspace plane holds jobs, clusters, dashboards, secrets and object ACLs — collected per workspace", "Unity Catalog grants are not the whole permission story: object ACLs live in a separate API"] },
+    { "dot": "rose", "title": "Day 3 is the one people skip", "items": ["Counts alone don't tell you sequencing — cross-references do", "A shared SQL warehouse or cluster policy means those assets cannot land in different waves", "dbxmig crossrefs finds broken references deterministically, no model involved"] },
+    { "dot": "emerald", "title": "What ships to wave planning", "items": ["Every asset class carries a count, an owner, and a retire/defer/migrate decision", "Shared-reference clusters are the direct input to wave design", "An inventory without Day 3 is 60% complete and often believed finished"] }
+  ]
+}

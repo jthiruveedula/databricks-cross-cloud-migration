@@ -8,6 +8,7 @@ import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Accordion from '../../components/Accordion.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # What does not migrate
 
@@ -18,6 +19,8 @@ Nothing failed during that migration. Reconciliation was clean, every dashboard 
 <Callout client:visible variant="warning" title="Every item on this page has the same deadline: before the source is decommissioned">
   These are one-way losses. Once the source workspace and metastore are gone, none of it is recoverable at any price. The export window is between "target is live" and "source is deleted" — and the pressure at that point is all in the direction of deleting the source, because it is still costing money. Put the exports in the cutover plan, not the hypercare backlog.
 </Callout>
+
+<ArchifyDiagram client:visible name="what-does-not-migrate.lifecycle" type="lifecycle" title="Export it or lose it" caption="Anything not deliberately cloned before decommission is gone the moment the source is deleted — hover any state for detail." />
 
 ## The register
 

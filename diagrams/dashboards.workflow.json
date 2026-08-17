@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Dashboards: The Warehouse ID Is Embedded, Not Attached",
+    "output": "dashboards.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "export",
+        "label": "Rewrite before create",
+        "focus": [
+          "export",
+          "rewrite"
+        ],
+        "note": "A Lakeview dashboard carries its datasets and warehouse ID inside its own definition, not as a separate attachment."
+      },
+      {
+        "id": "create",
+        "label": "Strip server-owned fields",
+        "focus": [
+          "rewrite",
+          "strip"
+        ],
+        "note": "dashboard_id, create_time, update_time, etag, and lifecycle_state all belong to the source, not the target."
+      },
+      {
+        "id": "parity",
+        "label": "Renders cleanly, fails on every query",
+        "focus": [
+          "create",
+          "parity"
+        ],
+        "note": "A dashboard with an un-rewritten warehouse_id imports fine, shows its layout, and fails or silently queries the wrong warehouse."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "export",
+      "label": "Export"
+    },
+    {
+      "id": "rewrite",
+      "label": "Rewrite + strip"
+    },
+    {
+      "id": "create",
+      "label": "Create + verify"
+    },
+    {
+      "id": "exceptions",
+      "label": "Looks fine, isn't",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "export",
+    "rewrite",
+    "strip",
+    "create",
+    "parity"
+  ],
+  "nodes": [
+    {
+      "id": "export",
+      "lane": "export",
+      "col": 0,
+      "type": "database",
+      "label": "Export JSON",
+      "sublabel": "Lakeview definition"
+    },
+    {
+      "id": "rewrite",
+      "lane": "rewrite",
+      "col": 1,
+      "type": "backend",
+      "label": "Rewrite IDs",
+      "sublabel": "warehouse + datasets"
+    },
+    {
+      "id": "strip",
+      "lane": "rewrite",
+      "col": 3,
+      "type": "security",
+      "label": "Strip Fields",
+      "sublabel": "server-owned"
+    },
+    {
+      "id": "create",
+      "lane": "create",
+      "col": 4,
+      "type": "cloud",
+      "label": "Create",
+      "sublabel": "in target"
+    },
+    {
+      "id": "parity",
+      "lane": "create",
+      "col": 5,
+      "type": "frontend",
+      "label": "Visual Parity",
+      "sublabel": "side by side vs. source"
+    },
+    {
+      "id": "stale_read",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "security",
+      "label": "Un-rewritten",
+      "sublabel": "wrong warehouse",
+      "tag": "silent, not loud"
+    }
+  ],
+  "edges": [
+    {
+      "from": "export",
+      "to": "rewrite",
+      "label": "dashboard.json",
+      "variant": "emphasis"
+    },
+    {
+      "from": "rewrite",
+      "to": "strip",
+      "variant": "emphasis"
+    },
+    {
+      "from": "strip",
+      "to": "create",
+      "label": "clean payload",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "create",
+      "to": "parity",
+      "variant": "emphasis"
+    },
+    {
+      "from": "rewrite",
+      "to": "stale_read",
+      "label": "if warehouse_id skipped",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "The warehouse ID is embedded, not attached",
+      "items": [
+        "A Lakeview dashboard carries its datasets and warehouse_id inside its own definition",
+        "Recreating without rewriting that ID produces a dashboard that imports cleanly and fails on every query",
+        "Or, if a warehouse with that ID happens to exist in target, it quietly runs against the wrong one"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Same workspace-scoped-ID problem as everywhere else",
+      "items": [
+        "Strip dashboard_id, create_time, update_time, etag, and lifecycle_state before posting to target",
+        "The create flag is --json with an @path, not --json-file",
+        "The same pattern as queries, jobs, and pipelines: resolve the target ID, never carry the source one"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Visual parity is more than 'it opens'",
+      "items": [
+        "Render migrated and source dashboards side by side for the same date range and filters",
+        "Date/time filters and aggregation defaults are where timezone and shape differences hide",
+        "For external BI tools, confirm the connection points at target — a cached schema can look connected while still querying source"
+      ]
+    }
+  ]
+}

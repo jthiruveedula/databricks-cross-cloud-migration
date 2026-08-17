@@ -8,6 +8,7 @@ import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import Accordion from '../../components/Accordion.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Wave planning
 
@@ -34,6 +35,14 @@ Applies to any migration with more than a handful of dependency-chain clusters. 
 <Callout client:visible variant="warning" title="A dashboard has no data until its pipeline has migrated too">
   If Wave 1 moves "the dashboards" and Wave 2 moves "the batch pipelines" as separate asset-type waves, Wave 1's dashboards have nothing current to query -- the job that refreshes their source tables is still running against source, not target. Every wave below bundles a reporting/domain's tables, the pipeline(s) that populate them, *and* the dashboards that read them together; "Analytics and BI" names the wave's business domain, not a list of only-dashboards.
 </Callout>
+
+<ArchifyDiagram
+  client:visible
+  name="cutover-runbook.workflow"
+  type="workflow"
+  title="What every wave runs, from assessment to repointed consumers"
+  caption="The same sequence repeats per wave. Everything left of the freeze is reversible and can overlap with production; the reconciliation diff is the blocking gate, and repointing consumers is the one step a rollback cannot undo cheaply."
+/>
 
 ## Sample wave structure
 

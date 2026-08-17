@@ -1,0 +1,266 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Unity Catalog Topology: One Metastore Per Region, Not Per Preference",
+    "output": "unity-catalog-strategy.architecture.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "attach",
+        "label": "One metastore, many workspaces",
+        "focus": [
+          "account",
+          "metastore",
+          "ws_prod",
+          "ws_dev"
+        ],
+        "note": "Every workspace in a region attaches to the one metastore that region has — this is a limit, not a design choice."
+      },
+      {
+        "id": "isolate",
+        "label": "Isolation moves to catalogs",
+        "focus": [
+          "metastore",
+          "catalog_sales",
+          "catalog_finance"
+        ],
+        "note": "The catalog namespace is shared by every team landing in the region, so naming is an account-wide decision made once."
+      },
+      {
+        "id": "dr",
+        "label": "DR means a second metastore",
+        "focus": [
+          "account",
+          "metastore",
+          "metastore_dr"
+        ],
+        "note": "Foreign catalogs are not cross-region — active-active or DR requires a second metastore and replicated Delta tables."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "account",
+      "type": "external",
+      "label": "Databricks Account",
+      "sublabel": "spans every cloud subscription",
+      "pos": [
+        460,
+        60
+      ],
+      "size": [
+        220,
+        60
+      ]
+    },
+    {
+      "id": "groups",
+      "type": "security",
+      "label": "Account-Level Groups",
+      "sublabel": "converted before attach",
+      "pos": [
+        790,
+        60
+      ],
+      "size": [
+        220,
+        60
+      ]
+    },
+    {
+      "id": "metastore",
+      "type": "database",
+      "label": "Metastore",
+      "sublabel": "one per account, per region",
+      "pos": [
+        460,
+        250
+      ],
+      "size": [
+        220,
+        60
+      ]
+    },
+    {
+      "id": "ws_prod",
+      "type": "backend",
+      "label": "Workspace: Prod",
+      "sublabel": "attached",
+      "pos": [
+        130,
+        250
+      ],
+      "size": [
+        220,
+        60
+      ]
+    },
+    {
+      "id": "ws_dev",
+      "type": "backend",
+      "label": "Workspace: Dev",
+      "sublabel": "attached",
+      "pos": [
+        130,
+        410
+      ],
+      "size": [
+        220,
+        60
+      ]
+    },
+    {
+      "id": "catalog_sales",
+      "type": "database",
+      "label": "Catalog: sales",
+      "sublabel": "shared namespace",
+      "pos": [
+        790,
+        250
+      ],
+      "size": [
+        220,
+        60
+      ]
+    },
+    {
+      "id": "catalog_finance",
+      "type": "database",
+      "label": "Catalog: finance",
+      "sublabel": "isolation boundary",
+      "pos": [
+        790,
+        410
+      ],
+      "size": [
+        220,
+        60
+      ]
+    },
+    {
+      "id": "metastore_dr",
+      "type": "database",
+      "label": "Metastore (Region B)",
+      "sublabel": "DR / secondary",
+      "pos": [
+        1120,
+        250
+      ],
+      "size": [
+        220,
+        60
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Region A",
+      "wraps": [
+        "metastore",
+        "ws_prod",
+        "ws_dev",
+        "catalog_sales",
+        "catalog_finance"
+      ],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "Region B (DR)",
+      "wraps": [
+        "metastore_dr"
+      ],
+      "pad": 30
+    }
+  ],
+  "connections": [
+    {
+      "from": "account",
+      "to": "metastore",
+      "label": "one per region",
+      "variant": "emphasis",
+      "labelDy": 24
+    },
+    {
+      "from": "account",
+      "to": "groups",
+      "label": "centralizes identity"
+    },
+    {
+      "from": "account",
+      "to": "metastore_dr",
+      "label": "second region",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "top",
+      "via": [
+        [
+          570,
+          20
+        ],
+        [
+          1230,
+          20
+        ]
+      ]
+    },
+    {
+      "from": "metastore",
+      "to": "ws_prod",
+      "label": "attaches",
+      "variant": "emphasis"
+    },
+    {
+      "from": "metastore",
+      "to": "ws_dev",
+      "label": "attaches",
+      "variant": "emphasis",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "from": "metastore",
+      "to": "catalog_sales",
+      "variant": "security"
+    },
+    {
+      "from": "metastore",
+      "to": "catalog_finance",
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "left"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "A limit, not a preference",
+      "items": [
+        "Databricks is explicit: only one metastore per region, per account",
+        "The account sits above every cloud subscription in the tenant, so separate subscriptions don't buy separate metastores",
+        "Cross-cloud migration always means a new metastore in the target account and region"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Isolation is catalogs, not metastores",
+      "items": [
+        "Every team landing in a region shares the same metastore and catalog namespace",
+        "Catalog naming is an account-wide decision made before the first migration, not a per-team one",
+        "See metastore migration for the collision this causes when a second team arrives"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Identity is centralized above the metastore",
+      "items": [
+        "Unity Catalog identity lives at the account level, above any single workspace",
+        "Convert workspace-local groups to account-level groups before attaching to the target metastore",
+        "Skipping this breaks grants and duplicates group names in every workspace that attaches"
+      ]
+    }
+  ]
+}

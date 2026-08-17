@@ -1,0 +1,310 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Table and Event Migration Pipeline: ADLS Gen2 to GCS Lakehouse",
+    "output": "table-migration.dataflow.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "file-path",
+        "label": "File path",
+        "focus": [
+          "adls",
+          "sts",
+          "gcs",
+          "clone"
+        ],
+        "note": "Delta files and transaction logs move by bulk copy, then incremental catch-up."
+      },
+      {
+        "id": "catalog-path",
+        "label": "Catalog path",
+        "focus": [
+          "hms",
+          "ucx",
+          "uc"
+        ],
+        "note": "Schemas, tables, views and grants are exported and replayed onto Unity Catalog."
+      },
+      {
+        "id": "event-path",
+        "label": "Event path",
+        "focus": [
+          "evhub",
+          "bridge",
+          "pubsub",
+          "streaming"
+        ],
+        "note": "Azure event traffic is bridged to Pub/Sub and consumed by Structured Streaming."
+      }
+    ],
+    "viewBox": [
+      1080,
+      500
+    ],
+    "animation": "trace"
+  },
+  "stages": [
+    {
+      "label": "Azure source"
+    },
+    {
+      "label": "Transfer"
+    },
+    {
+      "label": "Land on GCP"
+    },
+    {
+      "label": "Rebuild"
+    },
+    {
+      "label": "Consume"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "adls",
+      "type": "cloud",
+      "label": "ADLS Gen2",
+      "sublabel": "Delta + _delta_log",
+      "stage": 0,
+      "row": 0,
+      "tag": "source",
+      "width": 132,
+      "height": 64
+    },
+    {
+      "id": "hms",
+      "type": "database",
+      "label": "Metastore",
+      "sublabel": "Hive + Unity Catalog",
+      "stage": 0,
+      "row": 1,
+      "tag": "DDL",
+      "width": 132,
+      "height": 64
+    },
+    {
+      "id": "evhub",
+      "type": "messagebus",
+      "label": "Event Hubs",
+      "sublabel": "capture + Event Grid",
+      "stage": 0,
+      "row": 2,
+      "tag": "events",
+      "width": 132,
+      "height": 64
+    },
+    {
+      "id": "sts",
+      "type": "cloud",
+      "label": "Storage Transfer",
+      "sublabel": "bulk then incremental",
+      "stage": 1,
+      "row": 0,
+      "tag": "copy",
+      "width": 132,
+      "height": 64
+    },
+    {
+      "id": "ucx",
+      "type": "backend",
+      "label": "UCX export",
+      "sublabel": "DDL + grants",
+      "stage": 1,
+      "row": 1,
+      "tag": "assess",
+      "width": 132,
+      "height": 64
+    },
+    {
+      "id": "bridge",
+      "type": "messagebus",
+      "label": "Event bridge",
+      "sublabel": "Functions relay",
+      "stage": 1,
+      "row": 2,
+      "tag": "dual-feed",
+      "width": 132,
+      "height": 64
+    },
+    {
+      "id": "gcs",
+      "type": "cloud",
+      "label": "GCS lakehouse",
+      "sublabel": "raw object landing",
+      "stage": 2,
+      "row": 0,
+      "tag": "CMEK",
+      "width": 132,
+      "height": 64
+    },
+    {
+      "id": "uc",
+      "type": "database",
+      "label": "Unity Catalog (GCP)",
+      "sublabel": "external locations",
+      "stage": 2,
+      "row": 1,
+      "tag": "governed",
+      "width": 132,
+      "height": 64
+    },
+    {
+      "id": "pubsub",
+      "type": "messagebus",
+      "label": "Pub/Sub",
+      "sublabel": "topics + subs",
+      "stage": 2,
+      "row": 2,
+      "tag": "at-least-once",
+      "width": 132,
+      "height": 64
+    },
+    {
+      "id": "clone",
+      "type": "backend",
+      "label": "DEEP CLONE",
+      "sublabel": "managed Delta rebuild",
+      "stage": 3,
+      "row": 0,
+      "tag": "batch",
+      "width": 132,
+      "height": 64
+    },
+    {
+      "id": "streaming",
+      "type": "backend",
+      "label": "Structured Streaming",
+      "sublabel": "checkpoint replay",
+      "stage": 3,
+      "row": 2,
+      "tag": "continuous",
+      "width": 132,
+      "height": 64
+    },
+    {
+      "id": "consumers",
+      "type": "frontend",
+      "label": "SQL Warehouses + ML",
+      "sublabel": "BI, notebooks, models",
+      "stage": 4,
+      "row": 1,
+      "tag": "verified",
+      "width": 132,
+      "height": 64
+    }
+  ],
+  "flows": [
+    {
+      "id": "objects",
+      "from": "adls",
+      "to": "sts",
+      "label": "read files",
+      "classification": "bulk",
+      "variant": "emphasis"
+    },
+    {
+      "id": "copy",
+      "from": "sts",
+      "to": "gcs",
+      "label": "copy",
+      "classification": "verified",
+      "variant": "emphasis"
+    },
+    {
+      "id": "register",
+      "from": "gcs",
+      "to": "clone",
+      "label": "register",
+      "classification": "path",
+      "variant": "default"
+    },
+    {
+      "id": "ddl",
+      "from": "hms",
+      "to": "ucx",
+      "label": "table DDL",
+      "classification": "metadata",
+      "variant": "default"
+    },
+    {
+      "id": "replay",
+      "from": "ucx",
+      "to": "uc",
+      "label": "recreate",
+      "classification": "grants",
+      "variant": "security"
+    },
+    {
+      "id": "capture",
+      "from": "evhub",
+      "to": "bridge",
+      "label": "capture",
+      "classification": "ordered",
+      "variant": "default"
+    },
+    {
+      "id": "publish",
+      "from": "bridge",
+      "to": "pubsub",
+      "label": "publish",
+      "classification": "dual-write",
+      "variant": "emphasis"
+    },
+    {
+      "id": "subscribe",
+      "from": "pubsub",
+      "to": "streaming",
+      "label": "subscribe",
+      "classification": "at-least-once",
+      "variant": "emphasis"
+    },
+    {
+      "id": "curated",
+      "from": "clone",
+      "to": "consumers",
+      "label": "curated",
+      "classification": "reconciled",
+      "variant": "emphasis"
+    },
+    {
+      "id": "appends",
+      "from": "streaming",
+      "to": "consumers",
+      "label": "appends",
+      "classification": "incremental",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Two clocks, one cutover",
+      "items": [
+        "Bulk copy runs for days while Azure stays writable",
+        "Final incremental pass runs only after Azure goes read-only",
+        "Streaming checkpoints are rebuilt, never copied across clouds"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "What DEEP CLONE buys",
+      "items": [
+        "Delta history and time travel survive the move",
+        "Managed tables land under Unity Catalog on GCS",
+        "OPTIMIZE and Z-ORDER are re-run because file layout does not transfer"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Reconciliation gate",
+      "items": [
+        "Row counts and column checksums diffed per table",
+        "Grants compared against the exported Azure ACL set",
+        "A table is released to consumers only after its diff is empty"
+      ]
+    }
+  ]
+}

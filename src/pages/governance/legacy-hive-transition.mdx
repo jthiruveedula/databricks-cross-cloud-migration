@@ -7,6 +7,7 @@ description: 'Upgrade legacy Hive metastore assets to Unity Catalog during migra
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Legacy Hive transition
 
@@ -43,6 +44,14 @@ databricks labs ucx ensure-assessment-run
 
 # 3. Export the readiness report before touching any source object
 databricks labs ucx export-assessment`} />
+
+<ArchifyDiagram
+  client:visible
+  name="legacy-hive-transition.lifecycle"
+  type="lifecycle"
+  title="Retire now, not on the next migration"
+  caption="Federation buys time for tables not ready to upgrade yet — it's a coexistence state, not a replacement for upgrading wave by wave."
+/>
 
 ## Upgrade paths
 

@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Job Migration: Strip, Recreate, Keep the ID Map",
+    "output": "workflows-jobs.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "strip",
+        "label": "Server fields don't travel",
+        "focus": [
+          "export",
+          "strip"
+        ],
+        "note": "job_id, created_time, and creator_user_name belong to the source workspace — post only the settings object."
+      },
+      {
+        "id": "map",
+        "label": "The new job_id breaks things downstream",
+        "focus": [
+          "recreate",
+          "rewrite"
+        ],
+        "note": "Every external orchestrator reference and run-now call needs the source-to-target job ID map from this step."
+      },
+      {
+        "id": "trigger",
+        "label": "File-arrival triggers redesign, not reconfigure",
+        "focus": [
+          "rewrite",
+          "file_trigger"
+        ],
+        "note": "The cloud-native event source underneath the trigger has no cross-cloud equivalent to point at."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "export",
+      "label": "Export + strip"
+    },
+    {
+      "id": "recreate",
+      "label": "Recreate"
+    },
+    {
+      "id": "rewrite",
+      "label": "Rewrite references"
+    },
+    {
+      "id": "exceptions",
+      "label": "Needs a redesign",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "export",
+    "strip",
+    "recreate",
+    "rewrite"
+  ],
+  "nodes": [
+    {
+      "id": "export",
+      "lane": "export",
+      "col": 0,
+      "type": "database",
+      "label": "Export Jobs",
+      "sublabel": "verify count vs. UI"
+    },
+    {
+      "id": "strip",
+      "lane": "export",
+      "col": 1,
+      "type": "backend",
+      "label": "Strip Fields",
+      "sublabel": "job_id, created_time"
+    },
+    {
+      "id": "recreate",
+      "lane": "recreate",
+      "col": 3,
+      "type": "security",
+      "label": "Recreate",
+      "sublabel": "new job_id assigned",
+      "tag": "keep the ID map"
+    },
+    {
+      "id": "rewrite",
+      "lane": "rewrite",
+      "col": 4,
+      "type": "frontend",
+      "label": "Rewrite Refs",
+      "sublabel": "notebook, warehouse"
+    },
+    {
+      "id": "file_trigger",
+      "lane": "exceptions",
+      "col": 1,
+      "type": "security",
+      "label": "File-Arrival",
+      "sublabel": "cloud-native event",
+      "tag": "redesign, not config"
+    }
+  ],
+  "edges": [
+    {
+      "from": "export",
+      "to": "strip",
+      "label": "settings only",
+      "variant": "emphasis",
+      "labelDy": -20
+    },
+    {
+      "from": "strip",
+      "to": "recreate",
+      "label": "clean payload",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "recreate",
+      "to": "rewrite",
+      "label": "target ID map",
+      "variant": "emphasis",
+      "labelDy": 11
+    },
+    {
+      "from": "strip",
+      "to": "file_trigger",
+      "label": "trigger uses file arrival",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Verify the count before trusting the export",
+      "items": [
+        "Jobs list endpoints paginate — check the exported count against the workspace UI",
+        "A silently truncated export migrates a page and reports success",
+        "Post only the settings object; job_id, created_time, and creator_user_name are source-owned"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "The new job_id is what breaks things downstream",
+      "items": [
+        "Every external orchestrator reference and run-now call is pinned to the old number",
+        "Keep a source-to-target job ID map — the same artifact model and query migrations need for their own IDs",
+        "dbxmig bundle does this transformation, including turning workspace-scoped IDs into variables"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "File-arrival triggers don't survive a config edit",
+      "items": [
+        "S3 event notifications, ADLS Gen2 events, and GCS Pub/Sub notifications are three different mechanisms",
+        "Migrating this trigger across clouds means re-implementing it against the target's native event source",
+        "Budget this as a redesign task, not a trigger-config change"
+      ]
+    }
+  ]
+}

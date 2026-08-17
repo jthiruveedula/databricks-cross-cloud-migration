@@ -7,6 +7,7 @@ description: 'Migrate interactive clusters, job clusters, pools, and policies to
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Cluster migration
 
@@ -46,6 +47,14 @@ Map node types by workload profile (CPU, memory, GPU, local SSD) rather than by 
 | Shared (legacy) | Shared (UC) or Single user |
 | High concurrency | Shared (UC) |
 | Standard | Single user |
+
+<ArchifyDiagram
+  client:visible
+  name="cluster-migration.workflow"
+  type="workflow"
+  title="Export, translate, recreate, prove it autoscales"
+  caption="Legacy shared and high-concurrency access modes don't carry over to Unity Catalog — that conversion happens at the translate step, not as an afterthought."
+/>
 
 ## Migration steps
 
