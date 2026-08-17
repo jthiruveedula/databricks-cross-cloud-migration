@@ -53,7 +53,7 @@ If any domain is not signed off, the answer is no-go — reschedule rather than 
 | 9 | Open support channel | Migration PMO |
 
 <Callout client:visible variant="warning" title="Pausing a job disables future triggers — it does not stop a run already in flight">
-  Step 2 stops new runs from being scheduled; it does nothing to a job that started five minutes before the freeze. Proceeding straight to final sync while a source job is still writing is the exact split-brain precondition [rollback](/execution/rollback) exists to prevent — the sync captures a state the source is still mutating underneath it. Poll the Jobs API's `active_only=true` filter on `List job runs` (active states: `QUEUED`, `PENDING`, `RUNNING`, `TERMINATING`) after step 2, and do not proceed to step 4 until it returns zero across every source job — or the drain hits a hard timeout, in which case treat it as a no-go, not a "close enough."
+  Step 2 stops new runs from being scheduled; it does nothing to a job that started five minutes before the freeze. Proceeding straight to final sync while a source job is still writing is the exact split-brain precondition [rollback](/execution/rollback) exists to prevent — the sync captures a state the source is still mutating underneath it. Poll the Jobs API's `active_only=true` filter on `List job runs` (active states: `QUEUED`, `PENDING`, `RUNNING`, `TERMINATING`) after step 2, and do not proceed to step 4 until it returns zero across every source job — or the drain hits a hard timeout, in which case treat it as a no-go, not a "close enough." `dbxmig cutover-drain --side source` runs exactly this poll-with-timeout loop against a live workspace instead of leaving it to a person watching a dashboard.
 </Callout>
 
 ## Final sync and read-only mode
@@ -91,7 +91,8 @@ If cutover fails:
 
 ## Automation opportunity
 
-- Use a cutover runbook script that pauses jobs, polls `active_only=true` until drained, runs final sync, validates, and enables target jobs.
+- `dbxmig cutover-drain` runs step 3's poll for you: it checks `active_only=true` on the named workspace on an interval and exits non-zero on a hard timeout instead of a silent "close enough" — see the [automation toolkit](/templates/automation-toolkit). It is read-only: it answers "is it safe to proceed," it does not pause jobs (step 2) or run the sync (step 4) itself.
+- Step 2 (pausing jobs) and step 4 (final sync) are still manual or bundle-specific — [Asset Bundles](/pipelines/cicd-promotion) can set a job's schedule to `PAUSED` at deploy time, but that's a static flag, not an orchestrated pause across every job on the workspace.
 - Integrate with orchestration tools for dependency-aware job startup.
 
 <Checklist client:visible title="Cutover checklist" items={[

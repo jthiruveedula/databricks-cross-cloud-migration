@@ -9,7 +9,8 @@ run in order:
     dbxmig ddl         # emit the target SQL for review
     dbxmig grants      # emit the translated GRANT statements
     dbxmig apply       # execute, resumably (--execute to leave dry-run)
-    dbxmig reconcile   # prove the target matches the source
+    dbxmig cutover-drain  # cutover night: poll source until zero active runs
+    dbxmig reconcile   # prove the target matches the source (add --live for data checksums)
 
 ``apply`` is dry-run by default and prints the statements it would issue.
 Executing for real takes an explicit ``--execute``, because a metastore
@@ -23,6 +24,7 @@ import csv
 import json
 import os
 import sys
+import time
 from typing import List, Optional, Sequence
 
 from . import __version__
@@ -35,6 +37,7 @@ from .collisions import detect as detect_collisions
 from .collisions import render as render_collisions
 from .config import ConfigError, MigrationConfig, load_config, load_principal_map
 from .crossrefs import coverage_gaps, merge, scan, scan_source_tree, to_rows
+from .cutover import check_drain
 from .ddl import (
     add_constraint,
     create_catalog,
@@ -71,7 +74,7 @@ from .grants import (
 )
 from .llm import Assistant, NullLlmClient
 from .models import Inventory
-from .reconcile import reconcile_inventories
+from .reconcile import reconcile_inventories, reconcile_live
 from .report import (
     crossref_summary,
     full_report,
@@ -665,8 +668,62 @@ def cmd_reconcile(config: MigrationConfig, args: argparse.Namespace) -> int:
     source = _load_inventory(args.inventory)
     target = _load_inventory(args.target_inventory)
     report = reconcile_inventories(source, target, config.source_prefixes())
+    if args.live:
+        # Only checksum tables that already cleared metadata reconciliation --
+        # a missing table or schema drift should block before we ever touch a
+        # warehouse for that table.
+        already_blocked = {f.obj for f in report.blockers}
+        target_index = target.table_index()
+        wanted = set(args.tables) if args.tables else None
+        live_tables = [
+            t
+            for t in source.tables
+            if t.full_name in target_index
+            and t.full_name not in already_blocked
+            and (wanted is None or t.full_name in wanted)
+        ]
+        source_gateway = _gateway(config, args, side="source")
+        target_gateway = _gateway(config, args, side="target")
+        live_report = reconcile_live(source_gateway, target_gateway, live_tables)
+        report.checked += live_report.checked
+        report.findings.extend(live_report.findings)
     _write(args.out, reconciliation_summary(report))
     return report.exit_code()
+
+
+def cmd_cutover_drain(config: MigrationConfig, args: argparse.Namespace) -> int:
+    """Poll the drain gate [cutover](/execution/cutover) step 3 describes, until it clears.
+
+    Read-only: this answers "is it safe to proceed to final sync", it does
+    not pause anything itself. A timeout is a no-go, not a "close enough" --
+    it exits non-zero either way so it composes cleanly into a go/no-go
+    script.
+    """
+    if getattr(args, "fixture", None):
+        raise ConfigError(
+            "cutover-drain needs a live workspace -- fixtures do not model job runs"
+        )
+    gateway = _gateway(config, args, side=args.side)
+    if not isinstance(gateway, DatabricksGateway):
+        raise ConfigError("cutover-drain needs a live workspace ({0}.host)".format(args.side))
+    client = gateway.client
+
+    deadline = time.monotonic() + args.timeout
+    while True:
+        status = check_drain(client)
+        print(status.summary(), file=sys.stderr)
+        if status.drained:
+            return EXIT_OK
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            print(
+                "DRAIN TIMEOUT after {0}s -- treat as no-go, not close enough".format(
+                    args.timeout
+                ),
+                file=sys.stderr,
+            )
+            return EXIT_FINDINGS
+        time.sleep(max(0, min(args.poll_interval, remaining)))
 
 
 def cmd_report(config: MigrationConfig, args: argparse.Namespace) -> int:
@@ -834,7 +891,45 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("reconcile", help="compare a target inventory against the source")
     add_common(p)
     p.add_argument("-t", "--target-inventory", required=True, help="target inventory JSON")
+    p.add_argument(
+        "--live",
+        action="store_true",
+        help=(
+            "also run row-count + aggregate-hash checksum reconciliation against live "
+            "source and target warehouses (needs source.host/target.host or --fixture)"
+        ),
+    )
+    p.add_argument(
+        "--tables",
+        nargs="*",
+        help="restrict --live checksum reconciliation to these full table names",
+    )
+    p.add_argument(
+        "--fixture",
+        help=(
+            "run --live against a fixture gateway instead of live workspaces -- the same "
+            "fixture is used for both source and target, so this proves the wiring, not "
+            "an actual cross-environment result"
+        ),
+    )
     p.set_defaults(func=cmd_reconcile)
+
+    p = sub.add_parser(
+        "cutover-drain",
+        help="poll the Jobs API until zero active runs, or a hard timeout -- read-only",
+    )
+    p.add_argument(
+        "--side",
+        choices=["source", "target"],
+        default="source",
+        help="which workspace to poll (cutover step 3 checks source before final sync)",
+    )
+    p.add_argument(
+        "--timeout", type=int, default=900, help="seconds before giving up (default: 900 = 15m)"
+    )
+    p.add_argument("--poll-interval", type=int, default=15, help="seconds between polls")
+    p.add_argument("--fixture", help=argparse.SUPPRESS)
+    p.set_defaults(func=cmd_cutover_drain)
 
     p = sub.add_parser("report", help="one markdown report covering inventory, plan, and gaps")
     add_common(p)

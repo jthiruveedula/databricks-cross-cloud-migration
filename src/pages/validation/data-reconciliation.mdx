@@ -103,7 +103,8 @@ If reconciliation fails beyond tolerance, halt cutover and re-sync. Do not proce
 
 ## Automation opportunity
 
-- Run reconciliation queries via a Databricks job and store results in a Delta table.
+- `dbxmig reconcile --live` runs this exact `SUM(xxhash64(...))` query against both source and target warehouses and blocks on any row-count or hash mismatch — see the [automation toolkit](/templates/automation-toolkit). It's scoped to tables that already passed metadata reconciliation (object counts, schema match); it does not yet cover volumes/files or clone provenance from the CLI.
+- Run reconciliation queries via a Databricks job and store results in a Delta table for a historical trend, not just a pass/fail at cutover.
 - Generate alerts when any table exceeds tolerance.
 
 <Checklist client:visible title="Data reconciliation" items={[

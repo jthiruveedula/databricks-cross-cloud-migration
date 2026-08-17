@@ -17,9 +17,12 @@ Every check returns a ``Finding`` with a severity. Severity 1 blocks cutover.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence
 
-from .models import Column, Inventory
+from .models import Column, Inventory, Table
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle avoided at runtime
+    from .gateway import Gateway
 
 SEV_BLOCKER = 1
 SEV_WARNING = 2
@@ -178,6 +181,113 @@ def check_clone_provenance(
     return []
 
 
+def checksum_query(full_name: str, columns: Sequence[str]) -> str:
+    """The order-independent aggregate-hash query documented in data-reconciliation.
+
+    ``SUM(xxhash64(...))`` is commutative, so two tables compare with a single
+    row on each side regardless of size or row order -- no ``ORDER BY``, and
+    no per-row diffing. Run this identically against source and target and
+    compare the results with :func:`compare_checksums`.
+    """
+    cols = ", ".join(columns) if columns else "*"
+    return "SELECT COUNT(*) AS cnt, SUM(xxhash64({0})) AS agg_hash FROM {1}".format(
+        cols, full_name
+    )
+
+
+def compare_checksums(
+    obj: str, source_row: Dict[str, Any], target_row: Dict[str, Any]
+) -> Optional[Finding]:
+    """Compare one table's checksum-query result across source and target.
+
+    Each argument is the single-row result of :func:`checksum_query` run
+    against that side. Row count is checked first so a mismatch reports the
+    more specific, more actionable cause instead of just "hashes differ".
+    """
+    source_count = int(source_row.get("cnt") or 0)
+    target_count = int(target_row.get("cnt") or 0)
+    if source_count != target_count:
+        return Finding(
+            "checksum",
+            obj,
+            SEV_BLOCKER,
+            "row count differs: source={0} target={1}".format(source_count, target_count),
+        )
+    source_hash = source_row.get("agg_hash")
+    target_hash = target_row.get("agg_hash")
+    if source_hash != target_hash:
+        return Finding(
+            "checksum",
+            obj,
+            SEV_BLOCKER,
+            "row counts match ({0}) but aggregate hash differs: source={1} target={2}".format(
+                source_count, source_hash, target_hash
+            ),
+        )
+    return None
+
+
+def reconcile_live(
+    source_gateway: "Gateway",
+    target_gateway: "Gateway",
+    tables: Sequence[Table],
+) -> ReconciliationReport:
+    """Row-count + aggregate-hash reconciliation against live warehouses.
+
+    :func:`reconcile_inventories` is metadata-only: it catches a table that
+    never migrated or whose schema drifted, but says nothing about whether the
+    *data* inside a table that exists on both sides actually matches. This is
+    the check the runbook's data-reconciliation page describes. Run it only
+    against tables that already passed :func:`reconcile_inventories` -- a
+    missing table or schema mismatch there should block before this ever
+    queries a warehouse.
+    """
+    report = ReconciliationReport()
+    for table in tables:
+        report.checked += 1
+        columns = [c.name for c in table.columns] or None
+        query = checksum_query(table.full_name, columns or ["*"])
+        source_rows = source_gateway.query_rows(query)
+        target_rows = target_gateway.query_rows(query)
+        if not source_rows or not target_rows:
+            side = "source" if not source_rows else "target"
+            report.add(
+                Finding(
+                    "checksum",
+                    table.full_name,
+                    SEV_BLOCKER,
+                    "checksum query returned no rows on {0}".format(side),
+                )
+            )
+            continue
+        finding = compare_checksums(table.full_name, source_rows[0], target_rows[0])
+        if finding:
+            report.add(finding)
+    return report
+
+
+def reconcile_clone_provenance(
+    target_gateway: "Gateway",
+    tables: Sequence[Table],
+    expected_source_for: "Any",
+) -> ReconciliationReport:
+    """Live clone-provenance check: was each target table actually CLONEd, and from where.
+
+    ``expected_source_for`` is a callable ``full_name -> str`` returning the
+    source table name each target table should have been cloned from --
+    typically the corresponding source table's own ``full_name``.
+    """
+    report = ReconciliationReport()
+    for table in tables:
+        report.checked += 1
+        history = target_gateway.query_rows(
+            "DESCRIBE HISTORY {0} LIMIT 5".format(table.full_name)
+        )
+        expected_source = expected_source_for(table.full_name)
+        report.findings.extend(check_clone_provenance(table.full_name, history, expected_source))
+    return report
+
+
 def compare_object_counts(source: Inventory, target: Inventory) -> List[Finding]:
     """Whole-estate completeness check. Catches an entire schema that never ran."""
     findings: List[Finding] = []
@@ -247,8 +357,10 @@ def reconcile_inventories(
 ) -> ReconciliationReport:
     """Metadata-only reconciliation: counts, schemas, and residual source paths.
 
-    Row counts and clone provenance need a live warehouse; they are driven by
-    the CLI's ``reconcile`` command against a gateway, using the helpers above.
+    Table-data row counts and clone provenance need a live warehouse and are
+    not run here -- see :func:`reconcile_live` and
+    :func:`reconcile_clone_provenance`, wired into the CLI's ``reconcile
+    --live`` flag.
     """
     report = ReconciliationReport()
     report.findings.extend(compare_object_counts(source, target))
