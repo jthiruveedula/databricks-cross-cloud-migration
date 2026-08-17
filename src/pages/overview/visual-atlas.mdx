@@ -24,7 +24,6 @@ Each diagram is interactive: switch light/dark, play the guided views, trace a r
 
 <ArchifyDiagram
   client:visible
-  height={920}
   name="azure-to-gcp.architecture"
   type="architecture"
   title="Estate lift-and-shift: source, migration control plane, target"
@@ -37,7 +36,6 @@ Owned by [Azure → GCP](/cloud-mappings/azure-to-gcp). The equivalent mapping f
 
 <ArchifyDiagram
   client:visible
-  height={920}
   name="table-migration.dataflow"
   type="dataflow"
   title="Table and event migration pipeline"
@@ -50,7 +48,6 @@ Owned by [large-scale data transfer](/execution/large-scale-data-transfer). Cata
 
 <ArchifyDiagram
   client:visible
-  height={920}
   name="cutover-runbook.workflow"
   type="workflow"
   title="Cutover runbook, per wave"
@@ -63,7 +60,6 @@ Owned by [wave planning](/execution/wave-planning). The cutover-night handoffs b
 
 <ArchifyDiagram
   client:visible
-  height={920}
   name="event-bridge.sequence"
   type="sequence"
   title="Event Hubs to Pub/Sub to Delta, one message end to end"
@@ -76,7 +72,6 @@ Owned by [DLT / Lakeflow pipelines](/pipelines/dlt-lakeflow), where the checkpoi
 
 <ArchifyDiagram
   client:visible
-  height={920}
   name="table-state.lifecycle"
   type="lifecycle"
   title="Per-table migration lifecycle"
@@ -109,6 +104,19 @@ None of the first five diagrams have anything to sequence until discovery produc
   <Card href={withBase('/discovery/dependency-mapping')} title="Dependency mapping" description="Lineage to a graph, weakly-connected components to candidate wave boundaries — with the two things a human still has to resolve." />
   <Card href={withBase('/discovery/risk-assessment')} title="Risk assessment" description="Seven weighted dimensions to a tier, with owner engagement deliberately inverted." />
   <Card href={withBase('/discovery/ai-assisted-assessment')} title="AI-assisted assessment" description="Deterministic Spark SQL for every section except the narrative, which only ever sees an aggregated report." />
+</div>
+
+## 8. Security, where the migration actually breaks
+
+Six more diagrams cover the security work that's hardest to get right: the circular dependency in an AWS storage credential, secrets that don't migrate, serverless egress owned by a different team, the classic-plane network posture, identity federation's break-glass path, and the one decision every table's residency reduces to.
+
+<div className="grid gap-4 sm:grid-cols-2">
+  <Card href={withBase('/security/target-storage-credentials')} title="Target storage credentials" description="Three passes to break a circular dependency — the storage credential everything else in a metastore migration waits on." />
+  <Card href={withBase('/security/secrets-and-kms')} title="Secrets and KMS" description="Map, decide, recreate, sequence — with the source-cloud credential and the vault-only scope that don't carry over." />
+  <Card href={withBase('/security/serverless-networking')} title="Serverless networking" description="Four ordered steps, and the firewall allow-list step most likely to be owned by a team never told about the migration." />
+  <Card href={withBase('/security/network-security')} title="Network security" description="The classic compute plane's posture, and why serverless deliberately isn't on the same diagram." />
+  <Card href={withBase('/security/identity-federation')} title="Identity federation" description="SSO, then groups, then validate — with a break-glass admin enabled the whole way through." />
+  <Card href={withBase('/security/data-residency')} title="Data residency" description="One decision, four outcomes — and provider-constrained isn't a blocked migration." />
 </div>
 
 ## Editing these diagrams

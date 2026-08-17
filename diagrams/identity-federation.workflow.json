@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Identity Federation: Reconfigured, Not Copied",
+    "output": "identity-federation.workflow.html",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "config",
+        "label": "SSO first",
+        "focus": [
+          "sso",
+          "breakglass"
+        ],
+        "note": "Federation is the first step in the target account — keep a break-glass admin enabled in case it locks you out."
+      },
+      {
+        "id": "groups",
+        "label": "Groups before grants",
+        "focus": [
+          "scim",
+          "convert_groups"
+        ],
+        "note": "A workspace-local group must become an account-level group before grants and workspace attachments work correctly."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "config",
+      "label": "Configure SSO"
+    },
+    {
+      "id": "provision",
+      "label": "Provision SCIM"
+    },
+    {
+      "id": "groups",
+      "label": "Convert groups"
+    },
+    {
+      "id": "validate",
+      "label": "Validate"
+    },
+    {
+      "id": "exceptions",
+      "label": "Break-glass",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "sso",
+    "scim",
+    "convert_groups",
+    "validate"
+  ],
+  "nodes": [
+    {
+      "id": "sso",
+      "lane": "config",
+      "col": 0,
+      "type": "security",
+      "label": "Configure SSO",
+      "sublabel": "SAML/OIDC in target"
+    },
+    {
+      "id": "scim",
+      "lane": "provision",
+      "col": 1,
+      "type": "backend",
+      "label": "SCIM App",
+      "sublabel": "target IdP"
+    },
+    {
+      "id": "convert_groups",
+      "lane": "groups",
+      "col": 2,
+      "type": "database",
+      "label": "Convert Groups",
+      "sublabel": "to account level"
+    },
+    {
+      "id": "validate",
+      "lane": "validate",
+      "col": 3,
+      "type": "frontend",
+      "label": "Validate",
+      "sublabel": "non-admin SSO test"
+    },
+    {
+      "id": "breakglass",
+      "lane": "exceptions",
+      "col": 0,
+      "type": "security",
+      "label": "Break-Glass",
+      "sublabel": "admin stays enabled",
+      "tag": "if federation fails"
+    }
+  ],
+  "edges": [
+    {
+      "from": "sso",
+      "to": "scim",
+      "label": "account configured",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "scim",
+      "to": "convert_groups",
+      "label": "groups provisioned",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "convert_groups",
+      "to": "validate",
+      "label": "grants resolve",
+      "variant": "emphasis",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "sso",
+      "to": "breakglass",
+      "label": "lockout risk",
+      "role": "branch",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Federation is rebuilt, not migrated",
+      "items": [
+        "SAML/OIDC and SCIM are reconfigured against the target account, because the cloud identity provider changes or is scoped differently",
+        "Configure this first in the target account, before anything else depends on it",
+        "Service principals need OAuth-token authentication confirmed too, not just human SSO"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Workspace-local groups are the trap",
+      "items": [
+        "Grants and workspace attachments only work correctly against account-level groups",
+        "Convert before migrating, not after — the mechanics are export, recreate at account level, reassign, retire",
+        "Not all identity providers flatten nested groups the same way — verify, don't assume"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Keep a way back in",
+      "items": [
+        "A local account admin stays enabled through this whole sequence as break-glass access",
+        "Test SSO with a non-admin user, not the admin doing the configuring",
+        "If federation fails, reconfigure and retest against the same break-glass account, not a new one"
+      ]
+    }
+  ]
+}

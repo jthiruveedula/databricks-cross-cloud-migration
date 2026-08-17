@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { withBase } from '../lib/paths';
 
 /**
@@ -9,12 +9,23 @@ import { withBase } from '../lib/paths';
  * so they render in an iframe. That isolation is the point: the diagram's own
  * stylesheet and runtime cannot collide with the site's.
  *
- * The one thing isolation costs us is the theme. An iframed document does not
- * inherit the site's `.dark` class, so a reader in dark mode would otherwise get a
- * white rectangle in the middle of a dark page. Archify reads a `?theme=` query
- * param on load, so we pass the site's current theme and re-pass it whenever the
- * site toggle flips. Hydrate with `client:visible` for that sync to run; without a
- * client directive the frame still renders, it just keeps Archify's own default.
+ * Two things isolation costs, and this component pays both back:
+ *
+ * 1. Theme. An iframed document does not inherit the site's `.dark` class, so a
+ *    reader in dark mode would otherwise get a bright rectangle mid-page. Archify
+ *    reads a `?theme=` query param on load; this component passes the site's
+ *    current theme and re-passes it whenever the site toggle flips.
+ *
+ * 2. Height. Archify's viewer only self-fits to its viewport above 1024px wide;
+ *    inside a prose column the frame is narrower than that, so the document lays
+ *    out at its own natural height. Rather than hand-tune a pixel guess per
+ *    diagram (fragile -- it goes stale the moment the spec changes rows), this
+ *    component measures the iframe's own contentDocument.scrollHeight once it has
+ *    loaded and sizes the frame to fit exactly, with a small settle-retry for
+ *    web-font reflow. Same-origin (both site and diagram are served from
+ *    public/diagrams/ on this domain) so contentDocument access is unrestricted.
+ *    The `height` prop becomes a display-while-measuring fallback only; pass it
+ *    for a nicer first paint, but it is no longer required to be accurate.
  *
  * Regenerate the embedded HTML with `npm run build:diagrams` after editing a spec
  * in diagrams/ -- never hand-edit the file under public/diagrams/.
@@ -30,12 +41,9 @@ interface Props {
   /** One sentence under the frame explaining what to look for. */
   caption?: string;
   /**
-   * Frame height in px. Archify's viewer only auto-fits a diagram to its viewport
-   * above 1024px wide; inside a prose column the frame is narrower than that, so the
-   * document lays out at its natural height and the frame must be tall enough to hold
-   * it or the reader gets a scrollbar inside a scrollbar. 1060px clears every diagram
-   * in this repo at prose width (the tallest, the sequence, needs 1038px). A page that gives the frame >= 1024px (e.g. one with
-   * `hideToc`) can pass something shorter and let the viewer do the fitting.
+   * Optional starting height in px, shown only until the real height is measured.
+   * Omit it and the frame still ends up correctly sized -- this only avoids an
+   * initial resize jump on first paint.
    */
   height?: number;
 }
@@ -44,11 +52,18 @@ function currentTheme(): 'dark' | 'light' {
   return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
 }
 
-export default function ArchifyDiagram({ name, title, type, caption, height = 1060 }: Props) {
+const MIN_HEIGHT = 480;
+// A few settle passes catch late web-font swaps and image decodes that change
+// layout after the initial load event fires, without polling indefinitely.
+const SETTLE_DELAYS_MS = [50, 250, 700, 1500];
+
+export default function ArchifyDiagram({ name, title, type, caption, height }: Props) {
   const base = withBase(`/diagrams/${name}.html`);
   // Undefined until hydration: server-rendered markup must not guess a theme, or the
   // first paint can disagree with the reader's stored preference.
   const [theme, setTheme] = useState<'dark' | 'light' | undefined>(undefined);
+  const [frameHeight, setFrameHeight] = useState<number | undefined>(height);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     setTheme(currentTheme());
@@ -60,6 +75,20 @@ export default function ArchifyDiagram({ name, title, type, caption, height = 10
   }, []);
 
   const src = theme ? `${base}?theme=${theme}` : base;
+
+  const measure = () => {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc?.documentElement) return;
+    const measured = doc.documentElement.scrollHeight;
+    if (measured > 0) setFrameHeight(Math.max(MIN_HEIGHT, measured));
+  };
+
+  useEffect(() => {
+    const timers = SETTLE_DELAYS_MS.map((delay) => window.setTimeout(measure, delay));
+    return () => timers.forEach((t) => window.clearTimeout(t));
+    // Re-measure whenever the src changes (a theme swap remounts the iframe via `key`).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src]);
 
   return (
     <figure className="my-8">
@@ -82,11 +111,13 @@ export default function ArchifyDiagram({ name, title, type, caption, height = 10
 
       <iframe
         key={src}
+        ref={iframeRef}
         src={src}
         title={title}
         loading="lazy"
-        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)]"
-        style={{ height: `${height}px` }}
+        onLoad={measure}
+        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] transition-[height] duration-200"
+        style={{ height: `${frameHeight ?? MIN_HEIGHT}px` }}
       />
 
       {caption && (

@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Data Residency: Four Outcomes, Decided in Design",
+    "output": "data-residency.lifecycle.html",
+    "viewBox": [
+      980,
+      680
+    ],
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "classify",
+        "label": "Classify the constrained subset",
+        "focus": [
+          "classify",
+          "decision"
+        ],
+        "note": "Classify enough to find what's constrained, then treat the rest as unconstrained by exception — not the whole estate."
+      },
+      {
+        "id": "outcomes",
+        "label": "Four outcomes, one decision",
+        "focus": [
+          "unconstrained",
+          "region_fixed",
+          "govern_remote",
+          "out_of_scope"
+        ],
+        "note": "Every table lands in one of four places, decided in design, not discovered at cutover."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Classify and decide"
+    },
+    {
+      "id": "terminal",
+      "label": "Constrained outcomes"
+    }
+  ],
+  "states": [
+    {
+      "id": "classify",
+      "type": "start",
+      "label": "Classify",
+      "sublabel": "tags, masks, filters",
+      "lane": "main",
+      "col": 0,
+      "step": "01",
+      "tag": "existing signals first"
+    },
+    {
+      "id": "decision",
+      "type": "decision",
+      "label": "Four Questions",
+      "sublabel": "jurisdiction, category",
+      "lane": "main",
+      "col": 1,
+      "step": "02",
+      "tag": "human signs off"
+    },
+    {
+      "id": "unconstrained",
+      "type": "success",
+      "label": "Unconstrained",
+      "sublabel": "migrate normally",
+      "lane": "main",
+      "col": 2,
+      "step": "03",
+      "tag": "most of the estate"
+    },
+    {
+      "id": "region_fixed",
+      "type": "active",
+      "label": "Region-Fixed",
+      "sublabel": "target region is fixed",
+      "lane": "terminal",
+      "col": 0,
+      "tag": "not chosen"
+    },
+    {
+      "id": "govern_remote",
+      "type": "external",
+      "label": "Govern Remotely",
+      "sublabel": "stays put, federated",
+      "lane": "terminal",
+      "col": 1,
+      "tag": "Delta Sharing / UC federation"
+    },
+    {
+      "id": "out_of_scope",
+      "type": "failure",
+      "label": "Out of Scope",
+      "sublabel": "legal or contractual barrier",
+      "lane": "terminal",
+      "col": 2,
+      "tag": "workload may be too"
+    }
+  ],
+  "transitions": [
+    {
+      "from": "classify",
+      "to": "decision",
+      "variant": "emphasis"
+    },
+    {
+      "from": "decision",
+      "to": "unconstrained",
+      "label": "no constraint found",
+      "variant": "emphasis",
+      "labelDy": -25
+    },
+    {
+      "from": "decision",
+      "to": "region_fixed",
+      "label": "jurisdiction bound",
+      "variant": "dashed",
+      "labelAt": [
+        402,
+        430
+      ]
+    },
+    {
+      "from": "decision",
+      "to": "govern_remote",
+      "label": "provider-constrained",
+      "variant": "security",
+      "labelAt": [
+        556,
+        430
+      ]
+    },
+    {
+      "from": "decision",
+      "to": "out_of_scope",
+      "label": "legal barrier",
+      "variant": "security",
+      "labelAt": [
+        710,
+        430
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Classify enough, not everything",
+      "items": [
+        "Existing Unity Catalog tags, column masks, and row filters are classification decisions someone already made — harvest them first",
+        "An existing mask or row filter is also a migration task, since neither survives a clone",
+        "An LLM can draft the candidate list; only the data protection owner signs the final one"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Provider-constrained isn't a blocked migration",
+      "items": [
+        "Unity Catalog federation and Delta Sharing govern data where it sits, permanently",
+        "This is exactly the case remote governance vs. migration was designed to answer",
+        "A residency finding rarely has to stop the whole programme"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "What survives the move besides the bytes",
+      "items": [
+        "A Unity Catalog metastore is regional — a second jurisdiction means a second metastore",
+        "A customer-managed key does not travel; the target needs its own, in the right region",
+        "The audit trail proving compliance is destroyed by decommissioning unless exported first"
+      ]
+    }
+  ]
+}
