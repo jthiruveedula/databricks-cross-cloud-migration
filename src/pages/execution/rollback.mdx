@@ -25,15 +25,30 @@ Trigger rollback if any of the following occur during or after cutover:
 - Target performance violates SLA for an extended period.
 - Business stakeholders revoke sign-off.
 
+<Callout client:visible variant="prerequisite" title="Attach a number to every criterion above before cutover, not during the incident">
+  "Extended period" and "large user group" are placeholders, not thresholds. Before cutover, agree and record: an **RTO** (maximum time from trigger to source fully re-enabled and serving) and an **RPO** (maximum data written to target that can be lost or must be replayed if discarded — see Step 3 below). A common starting point is RTO measured in hours for the freeze-window archetype and RPO of zero for anything that failed data reconciliation, but the actual numbers are workload- and SLA-specific — set them per wave in the [wave scoring model](/execution/wave-planning#wave-scoring-model), not once for the whole programme. Without stated numbers, "did we hit our RTO" is unanswerable after the fact.
+</Callout>
+
+<Callout client:visible variant="warning" title="Name who can pull the trigger before you need them to">
+  [Cutover](/execution/cutover) names a domain owner per sign-off; rollback needs the mirror image — a single named decision authority (often the migration lead, with platform and business owners as required concurrers) who can declare rollback without a meeting. An undefined "we" deciding under incident pressure is where RTO gets missed.
+</Callout>
+
 ## Rollback steps
 
-1. **Stop target writes:** Pause all target jobs, pipelines, and user writes.
+1. **Stop target writes:** Pause all target jobs, pipelines, and user writes. Then verify it, the same way [cutover](/execution/cutover) verifies source is drained before final sync — poll the Jobs API `active_only=true` on target until it returns zero. Re-enabling source while target is still writing is split-brain in the opposite direction from the one cutover guards against, and it is checked with exactly the same rigor here.
 2. **Preserve evidence:** Capture logs, error messages, and state of target objects.
-3. **Assess data drift:** Determine whether any data was written to target after cutover. If so, decide whether to replay it into source or discard it.
+3. **Assess data drift:** Determine whether any data was written to target after cutover. If so, decide whether to replay it into source or discard it — this decision is bounded by the RPO agreed above, not made fresh under pressure. Discarding data beyond the agreed RPO is itself a finding, not a routine choice.
 4. **Re-enable source:** Start source jobs in reverse dependency order.
 5. **Redirect users:** Switch endpoints, DNS, or connection strings back to source.
 6. **Communicate:** Notify users of the rollback and expected next steps.
-7. **Post-incident review:** Document root cause before attempting another cutover.
+7. **Post-incident review:** Document root cause before attempting another cutover, and record actual time-to-restore against the RTO target.
+
+## Rollback at wave granularity
+
+[Bulk migration](/execution/bulk-migration) and [wave planning](/execution/wave-planning) both roll back per wave, not migration-wide: a failed Wave 3 reverts Wave 3 only, and completed earlier waves stay on target. The steps above still apply, scoped to that wave's assets, with two additions specific to partial rollback:
+
+- **Check shared references first.** The **shared-references** table from `dbxmig crossrefs` (see [wave planning](/execution/wave-planning#inputs-required)) lists what a wave shares with others — a cluster policy, secret scope, or storage prefix. Reverting a wave that shares one of these with an already-committed wave means either leaving the shared object on target (most common — don't revert what the completed wave still depends on) or explicitly coordinating a joint rollback across both waves. Never revert a shared object unilaterally.
+- **Consumers outside the failed wave may already read from target.** If a dashboard or downstream job in a *different*, already-cut-over wave reads the failed wave's tables, reverting those tables to source breaks that consumer. Identify cross-wave readers from [dependency mapping](/discovery/dependency-mapping) before reverting, not after the complaint.
 
 ## Rollback by asset type
 
@@ -70,7 +85,11 @@ If rollback is not viable due to source decommissioning or business pressure, ch
 
 <Checklist client:visible title="Rollback readiness" items={[
   { id: 'criteria', label: 'Rollback criteria defined and agreed' },
+  { id: 'rtorpo', label: 'RTO and RPO numbers agreed per wave, not left as qualitative language' },
+  { id: 'authority', label: 'Single named decision authority for triggering rollback' },
   { id: 'runbook', label: 'Step-by-step rollback runbook written' },
+  { id: 'drain', label: 'Target-drain verification (zero active target runs) planned before source re-enable' },
+  { id: 'shared', label: 'Shared-references table checked before any per-wave rollback' },
   { id: 'test', label: 'Rollback tested in pilot wave' },
   { id: 'evidence', label: 'Evidence-capture checklist prepared' },
   { id: 'comm', label: 'Rollback communication template ready' },

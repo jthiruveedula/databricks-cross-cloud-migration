@@ -284,12 +284,12 @@ mlflow.set_registry_uri("databricks-uc")        # Unity Catalog model registry (
 
 - Source data changed after sync.
 - Partition filter applied incorrectly.
-- Non-deterministic ordering in checksum query.
+- Per-row hash compared without an order-independent aggregate — comparing individual row hashes (or an `ORDER BY`-dependent query) makes the comparison sensitive to row order and doesn't scale past a handful of rows.
 
 **Resolution:**
 
 1. Re-run sync during a freeze window.
-2. Add `ORDER BY` primary key to checksum query.
+2. Use an order-independent aggregate hash — `SUM(xxhash64(...))` per table, compared as a single `COUNT` + 8-byte sum — instead of ordering or diffing individual rows; see [data reconciliation](/validation/data-reconciliation) for the full query.
 3. Investigate specific partitions causing mismatch.
 
 <Callout client:visible variant="tip" title="Log everything">
