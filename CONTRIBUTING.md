@@ -51,7 +51,8 @@ npm run build
    time by a remark plugin (`src/remark-base-path-links.mjs`, wired via `markdown.remarkPlugins` in
    `astro.config.mjs`). This only rewrites **markdown-syntax** links (`[text](/path)`) — a raw
    `<a href="/path">` inside JSX bypasses the plugin entirely and will 404 in production. Don't use
-   raw anchor tags for internal links.
+   raw anchor tags for internal links. Run `npm run check:internal-links` (CI runs it too) to catch
+   a link pointing at a renamed or deleted page before it ships.
 
 5. **Use the existing components**, don't invent new patterns for the same job:
    - `<Callout variant="warning|tip|prerequisite|decision">` for anything that needs visual weight.
