@@ -17,6 +17,7 @@ from .grants import GrantDiff, GrantTranslation
 from .models import Inventory
 from .reconcile import ReconciliationReport
 from .rewrite import Rewriter
+from .waveplan import WavePlan
 from .workspace import ASSET_CLASSES, WorkspaceInventory, owner_hint
 
 
@@ -156,6 +157,33 @@ def reconciliation_summary(report: ReconciliationReport) -> str:
             _table(["Sev", "Check", "Object", "Detail"], rows),
         ]
     )
+
+
+def wave_plan_summary(plan: WavePlan) -> str:
+    """Render a computed [wave plan](/execution/wave-planning) as markdown.
+
+    Clusters with no manual score entry score 1 (lowest) on every judgment
+    factor -- they land in an early wave by default, not a late one, since an
+    unscored cluster should be treated as unreviewed rather than as
+    low-risk-and-ready.
+    """
+    sections = ["## Wave plan", ""]
+    by_wave = plan.by_wave()
+    for wave in sorted(by_wave):
+        clusters = by_wave[wave]
+        rows = [
+            [
+                cluster.cluster_id,
+                str(len(cluster.members)),
+                "{0:.2f}".format(cluster.weighted_score),
+                ", ".join(cluster.members),
+            ]
+            for cluster in clusters
+        ]
+        sections.append("### Wave {0} ({1} cluster(s))".format(wave, len(clusters)))
+        sections.append("")
+        sections.append(_table(["Cluster", "Members", "Score", "Assets"], rows))
+    return "\n".join(sections)
 
 
 def grant_diff_summary(diff: GrantDiff) -> str:

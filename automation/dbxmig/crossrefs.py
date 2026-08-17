@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from dataclasses import asdict, dataclass, field
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from .rewrite import Rewriter
 from .workspace import WorkspaceInventory
@@ -108,6 +108,18 @@ class CrossRefReport:
             if label not in holders:
                 holders.append(label)
         return {ref: sorted(holders) for ref, holders in index.items() if len(holders) >= minimum}
+
+    def all_asset_labels(self) -> List[str]:
+        """Every asset that produced at least one finding, in ``shared_references``' label format.
+
+        Used to seed [wave-plan](wave-planning)'s clustering with singleton
+        clusters for assets that share nothing with anyone -- without this,
+        an asset with zero shared references would simply be absent from the
+        plan instead of appearing as its own one-member wave-1 candidate.
+        """
+        return sorted(
+            {"{0}:{1}".format(f.asset_class, f.asset_name or f.asset_id) for f in self.findings}
+        )
 
 
 def _texts_of(row: Dict[str, Any]) -> str:
@@ -508,6 +520,23 @@ def scan_source_tree(
                 with_lines=True,
             )
     return _dedupe(report)
+
+
+def to_dicts(report: CrossRefReport) -> List[Dict[str, str]]:
+    """Full-fidelity JSON serialization -- round-trips through :func:`from_dicts`.
+
+    Unlike :func:`to_rows`, this is meant to be read back in, not just
+    exported to a tracker -- it's how ``dbxmig crossrefs --json`` hands its
+    output to ``dbxmig wave-plan``.
+    """
+    return [asdict(finding) for finding in report.findings]
+
+
+def from_dicts(rows: Iterable[Mapping[str, str]]) -> CrossRefReport:
+    report = CrossRefReport()
+    for row in rows:
+        report.add(CrossRef(**dict(row)))
+    return report
 
 
 def merge(*reports: CrossRefReport) -> CrossRefReport:

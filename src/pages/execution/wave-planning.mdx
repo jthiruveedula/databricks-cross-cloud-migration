@@ -133,6 +133,7 @@ Rollback is performed per wave. If a wave fails, revert the workloads in that wa
 
 ## Automation opportunity
 
+- `dbxmig wave-plan --crossrefs crossrefs.json` clusters assets by the shared-references signal above (union-find over `dbxmig crossrefs --json`'s output) and scores each cluster on this page's weighted formula — see the [automation toolkit](/templates/automation-toolkit). It derives `dependency_count` from cluster size automatically; the other four factors (criticality, risk tolerance, data size, owner readiness) are organizational judgment calls it cannot observe, so pass them via `--scores` or accept the default of 1 (earliest wave) rather than trust an invented number.
 - Generate wave manifests from dependency graphs.
 - Use orchestration tools to trigger validation and cutover steps per wave.
 

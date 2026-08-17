@@ -397,6 +397,39 @@ def test_crossrefs_csv_is_written_when_asked(tmp_path):
     assert len(lines) > 5
 
 
+def test_crossrefs_json_round_trips_into_wave_plan(tmp_path, capsys):
+    json_path = str(tmp_path / "crossrefs.json")
+    code = main(
+        [
+            "-c",
+            write_config(tmp_path),
+            "crossrefs",
+            "-w",
+            WORKSPACE_FIXTURE,
+            "--json",
+            json_path,
+            "-o",
+            str(tmp_path / "r.md"),
+        ]
+    )
+    assert code == EXIT_FINDINGS  # the fixture has real blockers; --json still writes
+    assert os.path.exists(json_path)
+
+    plan_code = main(
+        [
+            "-c",
+            write_config(tmp_path),
+            "wave-plan",
+            "--crossrefs",
+            json_path,
+        ]
+    )
+    assert plan_code == EXIT_OK
+    out = capsys.readouterr().out
+    assert "## Wave plan" in out
+    assert "### Wave 1" in out
+
+
 def test_crossrefs_source_scan_adds_notebook_findings_with_lines(tmp_path, capsys):
     src = tmp_path / "src"
     (src / "etl").mkdir(parents=True)
