@@ -33,6 +33,9 @@ from .acls import diff as acl_diff
 from .acls import summary as acl_summary
 from .acls import to_rows as acl_rows
 from .bundle import generate_bundle
+from .cloud.aws import AwsAssetAdapter
+from .cloud.azure import AzureAssetAdapter
+from .cloud.gcp import GcpAssetAdapter
 from .collisions import detect as detect_collisions
 from .collisions import render as render_collisions
 from .config import ConfigError, MigrationConfig, load_config, load_principal_map
@@ -532,6 +535,24 @@ def cmd_crossrefs(config: MigrationConfig, args: argparse.Namespace) -> int:
     return EXIT_FINDINGS if report.blockers else EXIT_OK
 
 
+_CLOUD_ADAPTERS = {
+    "azure": AzureAssetAdapter,
+    "aws": AwsAssetAdapter,
+    "gcp": GcpAssetAdapter,
+}
+
+
+def cmd_cloud_inventory(config: MigrationConfig, args: argparse.Namespace) -> int:
+    """Discover cloud-native resources (Key Vaults, S3 buckets, VPCs, ...) outside Unity Catalog."""
+    with open(args.scope, "r", encoding="utf-8") as handle:
+        scope = json.load(handle)
+    adapter = _CLOUD_ADAPTERS[args.provider]()
+    assets = adapter.discover(scope)
+    _write(args.out, json.dumps([a.to_dict() for a in assets], indent=2, sort_keys=True))
+    print("discovered {0} {1} asset(s)".format(len(assets), args.provider), file=sys.stderr)
+    return EXIT_OK
+
+
 def cmd_wave_plan(config: MigrationConfig, args: argparse.Namespace) -> int:
     """Cluster assets that share a reference and assign them to waves.
 
@@ -843,6 +864,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", help="also write the full report as JSON, for `dbxmig wave-plan --crossrefs`"
     )
     p.set_defaults(func=cmd_crossrefs)
+
+    p = sub.add_parser(
+        "cloud-inventory",
+        help="discover cloud-native resources (Key Vaults, S3 buckets, VPCs, ...) outside UC",
+    )
+    p.add_argument(
+        "--provider", required=True, choices=sorted(_CLOUD_ADAPTERS), help="cloud to query"
+    )
+    p.add_argument(
+        "--scope",
+        required=True,
+        help="JSON file naming what to query -- e.g. {\"subscriptions\": [...]} for azure, "
+        "{\"project\": \"...\"} for gcp, {\"resource_types\": [...]} for aws",
+    )
+    p.add_argument("-o", "--out", help="write the discovered assets here instead of stdout")
+    p.set_defaults(func=cmd_cloud_inventory)
 
     p = sub.add_parser(
         "wave-plan",
