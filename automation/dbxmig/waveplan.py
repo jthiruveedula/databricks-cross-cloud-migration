@@ -18,7 +18,10 @@ factor rather than a silently invented number.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+
+if TYPE_CHECKING:
+    from .ownership import OwnershipRecord
 
 #: Weights and factor names mirror wave-planning.mdx's scoring model exactly:
 #: score = 0.30*criticality + 0.25*dependency_count + 0.20*risk_tolerance
@@ -86,6 +89,10 @@ class ClusterScore:
     risk_tolerance: int = 1
     data_size: int = 1
     owner_readiness: int = 1
+    #: Distinct business domains touched by this cluster's members, from
+    #: ``ownership.cluster_domains``. More than one means a cross-domain
+    #: dependency chain landed in a single wave -- worth a second look.
+    domains: List[str] = field(default_factory=list)
 
     @property
     def cluster_id(self) -> str:
@@ -164,7 +171,27 @@ def build_wave_plan(
     manual_scores: Optional[Mapping[str, Mapping[str, int]]] = None,
     all_assets: Optional[Iterable[str]] = None,
     thresholds: Tuple[Tuple[float, int], ...] = DEFAULT_THRESHOLDS,
+    ownership: Optional[Mapping[str, "OwnershipRecord"]] = None,
 ) -> WavePlan:
+    """Build the plan; ``ownership`` (see ``ownership.py``) supplies criticality
+    and domain where a cluster has no explicit ``manual_scores`` entry.
+    Explicit ``manual_scores`` always win over an ownership-derived default.
+    """
     clusters = cluster_assets(shared_references, all_assets=all_assets)
-    scores = score_clusters(clusters, manual_scores)
+    merged_scores: Dict[str, Dict[str, int]] = {
+        cluster_id: dict(factors) for cluster_id, factors in (manual_scores or {}).items()
+    }
+    domains: Dict[str, List[str]] = {}
+    if ownership:
+        from .ownership import cluster_domains, cluster_manual_scores
+
+        for cluster_id, derived in cluster_manual_scores(clusters, ownership).items():
+            merged = dict(derived)
+            merged.update(merged_scores.get(cluster_id, {}))  # explicit overrides win
+            merged_scores[cluster_id] = merged
+        domains = cluster_domains(clusters, ownership)
+
+    scores = score_clusters(clusters, merged_scores)
+    for score in scores:
+        score.domains = domains.get(score.cluster_id, [])
     return WavePlan(clusters=scores, thresholds=thresholds)
