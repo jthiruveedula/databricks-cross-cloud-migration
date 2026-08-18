@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .rewrite import Rewriter
+from .streaming import StreamingReport
 from .workspace import WorkspaceInventory
 
 #: Fields the source workspace owns. Present in an API response, meaningless or
@@ -340,6 +341,7 @@ def generate_bundle(
         "instance_pools",
     ),
     pause_schedules: bool = True,
+    streaming_report: Optional[StreamingReport] = None,
 ) -> GeneratedBundle:
     """Build the full set of bundle files from a workspace inventory."""
     result = GeneratedBundle()
@@ -402,7 +404,7 @@ def generate_bundle(
     root["targets"] = {target_name: {"mode": "production", "workspace": workspace_block}}
     result.files["databricks.yml"] = _yaml(root)
 
-    result.files["REVIEW.md"] = _review_markdown(result, inventory)
+    result.files["REVIEW.md"] = _review_markdown(result, inventory, streaming_report)
     return result
 
 
@@ -416,7 +418,11 @@ def _unique(existing: Dict[str, Any], key: str) -> str:
     return "{0}_{1}".format(key, index)
 
 
-def _review_markdown(result: GeneratedBundle, inventory: WorkspaceInventory) -> str:
+def _review_markdown(
+    result: GeneratedBundle,
+    inventory: WorkspaceInventory,
+    streaming_report: Optional[StreamingReport] = None,
+) -> str:
     lines = [
         "# Bundle review",
         "",
@@ -471,6 +477,18 @@ def _review_markdown(result: GeneratedBundle, inventory: WorkspaceInventory) -> 
             lines.append("| {0} | {1} |".format(kind, reason))
     else:
         lines.append("_none_")
+
+    if streaming_report is not None and streaming_report.assets:
+        lines.extend(["", "## Streaming and event-driven assets", ""])
+        lines.append("| Kind | Name | Source | Migration strategy |")
+        lines.append("|---|---|---|---|")
+        for asset in streaming_report.assets:
+            strategy = asset.migration_strategy or "**NEEDS DECISION**"
+            lines.append(
+                "| {0} | {1} | {2} | {3} |".format(
+                    asset.kind, asset.name, asset.source_type or "-", strategy
+                )
+            )
 
     lines.extend(
         [

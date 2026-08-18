@@ -17,6 +17,7 @@ from .grants import GrantDiff, GrantTranslation
 from .models import Inventory
 from .reconcile import ReconciliationReport
 from .rewrite import Rewriter
+from .streaming import StreamingReport
 from .waveplan import WavePlan
 from .workspace import ASSET_CLASSES, WorkspaceInventory, owner_hint
 
@@ -69,6 +70,7 @@ def gap_report(
     rewriter: Rewriter,
     inventory: Inventory,
     grant_translation: Optional[GrantTranslation] = None,
+    streaming_report: Optional[StreamingReport] = None,
 ) -> str:
     """Everything that will not migrate on its own, in one place."""
     sections: List[str] = ["## Gaps requiring a decision", ""]
@@ -120,6 +122,20 @@ def gap_report(
         sections.append(
             _table(
                 ["Source principal"], [[p] for p in grant_translation.unmapped_principals]
+            )
+        )
+
+    if streaming_report is not None and streaming_report.unassigned:
+        sections.append("### Streaming assets with no migration strategy")
+        sections.append("")
+        sections.append(
+            "A human must set one of rebuild_and_replay / dual_write_dual_read / "
+            "replicate_topic / retire before these can be planned.\n"
+        )
+        sections.append(
+            _table(
+                ["Kind", "Name", "Source"],
+                [[a.kind, a.name, a.source_type or "-"] for a in streaming_report.unassigned],
             )
         )
 

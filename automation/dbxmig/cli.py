@@ -89,6 +89,8 @@ from .report import (
     workspace_summary,
 )
 from .state import STATUS_BLOCKED, STATUS_DONE, STATUS_FAILED, Journal
+from .streaming import StreamingAsset, StreamingReport
+from .streaming import discover as discover_streaming
 from .waveplan import DEFAULT_THRESHOLDS, build_wave_plan
 from .workspace import (
     ASSET_CLASSES,
@@ -105,6 +107,11 @@ EXIT_USAGE = 2
 def _load_inventory(path: str) -> Inventory:
     with open(path, "r", encoding="utf-8") as handle:
         return Inventory.from_dict(json.load(handle))
+
+
+def _load_streaming(path: str) -> StreamingReport:
+    with open(path, "r", encoding="utf-8") as handle:
+        return StreamingReport(assets=[StreamingAsset.from_dict(a) for a in json.load(handle)])
 
 
 def _write(path: Optional[str], content: str) -> None:
@@ -210,7 +217,8 @@ def cmd_gaps(config: MigrationConfig, args: argparse.Namespace) -> int:
     translation = translate_grants(
         inventory.grants, principal_map, config.catalog_map, strict=False
     )
-    content = gap_report(plan, config.rewriter(), inventory, translation)
+    streaming_report = _load_streaming(args.streaming) if args.streaming else None
+    content = gap_report(plan, config.rewriter(), inventory, translation, streaming_report)
 
     # The target metastore is shared by every workspace in its region, so the
     # names this plan intends to create may already belong to someone else.
@@ -243,6 +251,7 @@ def cmd_gaps(config: MigrationConfig, args: argparse.Namespace) -> int:
         or plan.cycles
         or translation.unmapped_principals
         or (collisions is not None and collisions.fatal)
+        or (streaming_report is not None and streaming_report.unassigned)
     )
     return EXIT_FINDINGS if has_gaps else EXIT_OK
 
@@ -581,9 +590,29 @@ def cmd_wave_plan(config: MigrationConfig, args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_streaming(config: MigrationConfig, args: argparse.Namespace) -> int:
+    """Discover streaming/DLT assets and flag the ones with no migration strategy."""
+    inventory = _load_workspace(args.workspace)
+    report = discover_streaming(inventory, source_root=args.source)
+    _write(args.out, json.dumps(report.to_dicts(), indent=2, sort_keys=True))
+    print(
+        "discovered {0} streaming asset(s), {1} unassigned".format(
+            len(report.assets), len(report.unassigned)
+        ),
+        file=sys.stderr,
+    )
+    for asset in report.unassigned:
+        print(
+            "needs a migration_strategy: {0} ({1})".format(asset.name, asset.kind),
+            file=sys.stderr,
+        )
+    return EXIT_FINDINGS if report.unassigned else EXIT_OK
+
+
 def cmd_bundle(config: MigrationConfig, args: argparse.Namespace) -> int:
     """Emit Declarative Automation Bundle YAML from the workspace inventory."""
     inventory = _load_workspace(args.workspace)
+    streaming_report = _load_streaming(args.streaming) if args.streaming else None
     result = generate_bundle(
         inventory,
         bundle_name=args.name,
@@ -591,6 +620,7 @@ def cmd_bundle(config: MigrationConfig, args: argparse.Namespace) -> int:
         target_host=config.target.host,
         rewriter=config.rewriter(),
         pause_schedules=not args.no_pause,
+        streaming_report=streaming_report,
     )
     out_dir = args.out or "bundle"
     for relative, content in sorted(result.files.items()):
@@ -906,6 +936,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_wave_plan)
 
     p = sub.add_parser(
+        "streaming", help="discover Structured Streaming / DLT assets and their migration strategy"
+    )
+    p.add_argument("-w", "--workspace", default="workspace.json", help="workspace inventory JSON")
+    p.add_argument(
+        "-s", "--source", help="also scan this directory of exported notebooks / repo source"
+    )
+    p.add_argument("-o", "--out", help="write the discovered assets here instead of stdout")
+    p.set_defaults(func=cmd_streaming)
+
+    p = sub.add_parser(
         "bundle", help="generate Declarative Automation Bundle YAML from the workspace inventory"
     )
     p.add_argument("-w", "--workspace", default="workspace.json", help="workspace inventory JSON")
@@ -917,6 +957,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="keep original schedules instead of emitting every job PAUSED",
     )
+    p.add_argument("--streaming", help="`dbxmig streaming --json` output, to include in REVIEW.md")
     p.set_defaults(func=cmd_bundle)
 
     p = sub.add_parser(
@@ -947,6 +988,9 @@ def build_parser() -> argparse.ArgumentParser:
             "A metastore is shared per region, so another team's catalog can absorb "
             "this migration without raising an error"
         ),
+    )
+    p.add_argument(
+        "--streaming", help="`dbxmig streaming --json` output, to flag unassigned strategies"
     )
     p.set_defaults(func=cmd_gaps)
 
