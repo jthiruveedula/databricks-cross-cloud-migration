@@ -57,7 +57,11 @@ class GcpAssetAdapter(CloudAssetAdapter):
         get = row.get if isinstance(row, dict) else (lambda k, d=None: getattr(row, k, d))
         name = str(get("name", ""))
         resource = get("resource", {}) or {}
-        resource_get = resource.get if isinstance(resource, dict) else (lambda k, d=None: getattr(resource, k, d))
+        resource_get = (
+            resource.get
+            if isinstance(resource, dict)
+            else (lambda k, d=None: getattr(resource, k, d))
+        )
         data = resource_get("data", {}) or {}
         data_get = data.get if isinstance(data, dict) else (lambda k, d=None: getattr(data, k, d))
         return CloudAsset(

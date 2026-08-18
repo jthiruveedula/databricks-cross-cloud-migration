@@ -40,7 +40,8 @@ def test_azure_adapter_discovers_and_maps_resource_type():
     client = FakeAzureClient(
         [
             {
-                "id": "/subscriptions/sub-1/resourceGroups/rg1/providers/Microsoft.KeyVault/vaults/kv1",
+                "id": "/subscriptions/sub-1/resourceGroups/rg1/providers/Microsoft.KeyVault"
+                "/vaults/kv1",
                 "name": "kv1",
                 "type": "microsoft.keyvault/vaults",
                 "location": "eastus",
@@ -104,12 +105,11 @@ def test_aws_adapter_paginates():
     client = FakeAwsClient({})
 
     def search(QueryString, NextToken=None, **kwargs):
+        row_a = {"Arn": "arn:aws:s3:::a", "OwningAccountId": "1", "ResourceType": "s3:bucket"}
+        row_b = {"Arn": "arn:aws:s3:::b", "OwningAccountId": "1", "ResourceType": "s3:bucket"}
         if NextToken is None:
-            return {
-                "Resources": [{"Arn": "arn:aws:s3:::a", "OwningAccountId": "1", "ResourceType": "s3:bucket"}],
-                "NextToken": "page2",
-            }
-        return {"Resources": [{"Arn": "arn:aws:s3:::b", "OwningAccountId": "1", "ResourceType": "s3:bucket"}]}
+            return {"Resources": [row_a], "NextToken": "page2"}
+        return {"Resources": [row_b]}
 
     client.search = search
     adapter = AwsAssetAdapter(client=client)

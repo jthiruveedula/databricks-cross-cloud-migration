@@ -867,9 +867,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser(
         "cloud-inventory",
-        help="discover cloud-native resources (Key Vaults, S3 buckets, VPCs, ...) outside Unity Catalog",
+        help="discover cloud-native resources (Key Vaults, S3 buckets, VPCs, ...) outside UC",
     )
-    p.add_argument("--provider", required=True, choices=sorted(_CLOUD_ADAPTERS), help="cloud to query")
+    p.add_argument(
+        "--provider", required=True, choices=sorted(_CLOUD_ADAPTERS), help="cloud to query"
+    )
     p.add_argument(
         "--scope",
         required=True,

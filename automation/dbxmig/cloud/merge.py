@@ -62,7 +62,9 @@ def _reference_matches(reference: str, asset: CloudAsset) -> bool:
     return name_l in reference_l or reference_l in asset.asset_id.lower()
 
 
-def merge_with_workspace_inventory(cloud_assets: Iterable[CloudAsset], crossref_findings: Iterable[Any]) -> AssetGraph:
+def merge_with_workspace_inventory(
+    cloud_assets: Iterable[CloudAsset], crossref_findings: Iterable[Any]
+) -> AssetGraph:
     """Build a unified graph of cloud assets and the workspace assets that reference them.
 
     ``crossref_findings`` is the ``CrossRef`` list from ``crossrefs.py``
@@ -71,7 +73,9 @@ def merge_with_workspace_inventory(cloud_assets: Iterable[CloudAsset], crossref_
     graph = AssetGraph()
     cloud_assets = list(cloud_assets)
     for asset in cloud_assets:
-        graph.nodes.append(AssetNode(id=asset.asset_id, kind="cloud", label=asset.name, raw=asset.to_dict()))
+        graph.nodes.append(
+            AssetNode(id=asset.asset_id, kind="cloud", label=asset.name, raw=asset.to_dict())
+        )
 
     seen_workspace: Set[str] = set()
     for finding in crossref_findings:
@@ -79,9 +83,13 @@ def merge_with_workspace_inventory(cloud_assets: Iterable[CloudAsset], crossref_
         if workspace_id not in seen_workspace:
             seen_workspace.add(workspace_id)
             graph.nodes.append(
-                AssetNode(id=workspace_id, kind="workspace", label=finding.asset_name or finding.asset_id)
+                AssetNode(
+                    id=workspace_id, kind="workspace", label=finding.asset_name or finding.asset_id
+                )
             )
         for asset in cloud_assets:
             if _reference_matches(finding.reference, asset):
-                graph.edges.append(AssetEdge(source=workspace_id, target=asset.asset_id, relation=finding.kind))
+                graph.edges.append(
+                    AssetEdge(source=workspace_id, target=asset.asset_id, relation=finding.kind)
+                )
     return graph

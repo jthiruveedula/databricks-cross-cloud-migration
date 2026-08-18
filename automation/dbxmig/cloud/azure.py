@@ -21,9 +21,10 @@ RESOURCE_TYPES = {
     "microsoft.network/virtualnetworks": "vnet",
 }
 
-_QUERY = "Resources | where type in ({0}) | project id, name, type, location, resourceGroup, subscriptionId, tags, properties".format(
-    ", ".join("'{0}'".format(t) for t in RESOURCE_TYPES)
-)
+_QUERY = (
+    "Resources | where type in ({0}) "
+    "| project id, name, type, location, resourceGroup, subscriptionId, tags, properties"
+).format(", ".join("'{0}'".format(t) for t in RESOURCE_TYPES))
 
 
 class AzureAssetAdapter(CloudAssetAdapter):
@@ -36,7 +37,9 @@ class AzureAssetAdapter(CloudAssetAdapter):
     def _build_client() -> Any:
         try:
             from azure.identity import DefaultAzureCredential  # type: ignore import-not-found
-            from azure.mgmt.resourcegraph import ResourceGraphClient  # type: ignore import-not-found
+            from azure.mgmt.resourcegraph import (  # type: ignore import-not-found
+                ResourceGraphClient,
+            )
         except ImportError as exc:  # pragma: no cover - depends on optional extra
             raise RuntimeError(
                 "azure-mgmt-resourcegraph is not installed. Install the live extra:\n"
@@ -60,7 +63,9 @@ class AzureAssetAdapter(CloudAssetAdapter):
         client only cares that it receives *something* naming the query.
         """
         try:
-            from azure.mgmt.resourcegraph.models import QueryRequest  # type: ignore import-not-found
+            from azure.mgmt.resourcegraph.models import (  # type: ignore import-not-found
+                QueryRequest,
+            )
         except ImportError:
             return {"subscriptions": subscriptions, "query": _QUERY}
         return QueryRequest(subscriptions=subscriptions, query=_QUERY)
