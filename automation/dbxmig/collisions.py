@@ -140,6 +140,7 @@ def detect(
     target_schemas = {s.full_name.lower(): s for s in target.schemas}
     target_tables = {t.full_name.lower(): t for t in target.tables}
     target_volumes = {v.full_name.lower(): v for v in target.volumes}
+    target_functions = {f.full_name.lower(): f for f in target.functions}
 
     for catalog in source.catalogs:
         name = catalog_map.get(catalog.name, catalog.name)
@@ -176,6 +177,30 @@ def detect(
                     "still report success"
                 ),
                 source_name=table.full_name,
+                target_owner=existing.owner,
+            )
+        )
+
+    # Unlike a table's CREATE ... IF NOT EXISTS, ddl.create_function() emits
+    # CREATE OR REPLACE FUNCTION -- a name collision here is not a no-op, it
+    # is a destructive overwrite of whatever function another team already
+    # has at that name in a metastore shared across workspaces.
+    for function in source.functions:
+        name = rewriter.rewrite_full_name(function.full_name)
+        existing = target_functions.get(name.lower())
+        if existing is None:
+            continue
+        found.append(
+            Collision(
+                kind="function",
+                target_name=name,
+                severity=FATAL,
+                reason=(
+                    "a function already exists at this name. CREATE OR REPLACE FUNCTION "
+                    "would overwrite it, not skip it -- confirm this is the same function "
+                    "before applying"
+                ),
+                source_name=function.full_name,
                 target_owner=existing.owner,
             )
         )

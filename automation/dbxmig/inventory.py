@@ -7,10 +7,17 @@ views correctly, and it is not returned by the tables API. It comes from
 ``system.access.table_lineage``, with a regex fallback over the view body for
 estates where lineage has not been enabled long enough to be complete.
 
-**Completeness over convenience.** Row filters, column masks, constraints, tags,
-and column comments are all pulled, because each one is an access-control or
+**Completeness over convenience.** Row filters, column masks, foreign keys
+(with their parent-table reference), partition columns, constraints, and
+column comments are all pulled, because each one is an access-control or
 correctness property that silently disappears if the migration only copies
 columns and rows.
+
+Known gap: Unity Catalog governed tags need a separate tag-assignments API
+call this module does not yet make, so ``Table.tags`` stays empty on a live
+export. Not guessed at here rather than risk a call that looks right but
+silently returns nothing -- see the toolkit's `cloud-inventory`/`gaps`
+commands for where a gap like this belongs once closed.
 """
 
 from __future__ import annotations
@@ -208,16 +215,30 @@ def _export_catalog_contents(client: Any, inventory: Inventory, catalog_name: st
 
 def _build_table(catalog_name: str, schema_name: str, raw: Any) -> Table:
     columns: List[Column] = []
+    partition_columns: List[Any] = []  # (partition_index, name), sorted below
+    column_masks: Dict[str, str] = {}
     for position, column in enumerate(_attr(raw, "columns", []) or []):
+        name = str(_attr(column, "name", ""))
         columns.append(
             Column(
-                name=str(_attr(column, "name", "")),
+                name=name,
                 type_text=str(_attr(column, "type_text", "STRING")),
                 nullable=bool(_attr(column, "nullable", True)),
                 comment=_attr(column, "comment"),
                 position=int(_attr(column, "position", position)),
             )
         )
+        # partition_index/mask are both established Unity Catalog column
+        # fields -- table_type/data_source_format/tags below need a separate
+        # governed-tags API call this module does not yet make, tracked as a
+        # known gap rather than guessed at.
+        partition_index = _attr(column, "partition_index")
+        if partition_index is not None:
+            partition_columns.append((int(partition_index), name))
+        mask = _attr(column, "mask")
+        function_name = _attr(mask, "function_name") if mask is not None else None
+        if function_name:
+            column_masks[name] = str(function_name)
     constraints: List[Constraint] = []
     for constraint in _attr(raw, "table_constraints", []) or []:
         for kind, key in (
@@ -228,11 +249,24 @@ def _build_table(catalog_name: str, schema_name: str, raw: Any) -> Table:
             payload = _attr(constraint, key)
             if payload is None:
                 continue
+            definition = ", ".join(_attr(payload, "child_columns", []) or [])
+            if kind == "FOREIGN_KEY":
+                # ddl._foreign_key() requires a "REFERENCES parent(cols)" clause
+                # to emit anything but a BLOCKED placeholder -- without the
+                # parent table and columns here, every live-collected foreign
+                # key is unconditionally blocked regardless of whether the
+                # parent already exists in the target.
+                parent_table = str(_attr(payload, "parent_table", "") or "")
+                parent_columns = _attr(payload, "parent_columns", []) or []
+                if parent_table:
+                    definition += " REFERENCES " + parent_table
+                    if parent_columns:
+                        definition += "({0})".format(", ".join(parent_columns))
             constraints.append(
                 Constraint(
                     name=str(_attr(payload, "name", kind.lower())),
                     kind=kind,
-                    definition=", ".join(_attr(payload, "child_columns", []) or []),
+                    definition=definition,
                 )
             )
     view_definition = _attr(raw, "view_definition")
@@ -244,6 +278,7 @@ def _build_table(catalog_name: str, schema_name: str, raw: Any) -> Table:
         data_source_format=_enum_value(_attr(raw, "data_source_format")) or "DELTA",
         storage_location=_attr(raw, "storage_location"),
         columns=columns,
+        partition_columns=[name for _, name in sorted(partition_columns)],
         constraints=constraints,
         properties=dict(_attr(raw, "properties", {}) or {}),
         comment=_attr(raw, "comment"),
@@ -251,6 +286,7 @@ def _build_table(catalog_name: str, schema_name: str, raw: Any) -> Table:
         view_definition=view_definition,
         depends_on=parse_view_dependencies(view_definition),
         row_filter=_attr(getattr(raw, "row_filter", None), "function_name"),
+        column_masks=column_masks,
     )
 
 

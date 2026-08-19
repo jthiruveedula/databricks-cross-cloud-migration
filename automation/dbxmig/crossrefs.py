@@ -36,6 +36,26 @@ _SECRET_CALL = re.compile(
 _SECRET_REF = re.compile(r"\{\{\s*secrets\s*/\s*([^/}]+)\s*/\s*([^}]+?)\s*\}\}")
 _MOUNT = re.compile(r"(?:dbfs:)?/mnt/[A-Za-z0-9._\-/]+")
 _INSTANCE_PROFILE = re.compile(r"arn:aws:iam::\d{12}:instance-profile/[A-Za-z0-9+=,.@_\-/]+")
+#: Azure user-assigned managed identity resource id -- the AWS-instance-profile
+#: equivalent for a cluster's cloud identity on Azure.
+_AZURE_MANAGED_IDENTITY = re.compile(
+    r"/subscriptions/[0-9a-f-]+/resourcegroups/[^/\s'\"]+/providers/"
+    r"Microsoft\.ManagedIdentity/userAssignedIdentities/[^\s'\"]+",
+    re.IGNORECASE,
+)
+#: GCP service account email -- the same role on GCP.
+_GCP_SERVICE_ACCOUNT = re.compile(r"[a-z0-9-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com")
+
+#: (pattern, owning cloud, human label) -- each cloud's native compute-identity
+#: mechanism, none of which carry to a *different* cloud. Checked against the
+#: actual target cloud (see ``scan``'s ``target_cloud``) rather than assumed
+#: to always block: an AWS instance profile referenced in an AWS-to-AWS move
+#: is a same-cloud, same-account question, not a cross-cloud one.
+_CLOUD_IDENTITY_PATTERNS = (
+    (_INSTANCE_PROFILE, "aws", "AWS instance profile"),
+    (_AZURE_MANAGED_IDENTITY, "azure", "Azure managed identity"),
+    (_GCP_SERVICE_ACCOUNT, "gcp", "GCP service account"),
+)
 _WORKSPACE_URL = re.compile(
     r"https://(?:adb-\d+\.\d+\.azuredatabricks\.net"
     r"|[a-z0-9-]+\.cloud\.databricks\.com"
@@ -164,6 +184,7 @@ def scan(
     inventory: WorkspaceInventory,
     rewriter: Optional[Rewriter] = None,
     known_scopes: Optional[Iterable[str]] = None,
+    target_cloud: Optional[str] = None,
 ) -> CrossRefReport:
     """Extract every migration-relevant reference from a workspace inventory.
 
@@ -171,6 +192,13 @@ def scan(
     that has no rule becomes a blocker instead of an informational note — which
     is the whole difference between "we listed the paths" and "we know which
     paths will break".
+
+    ``target_cloud`` (``"aws"``/``"azure"``/``"gcp"``, from ``config.target.cloud``)
+    decides whether a cloud-native identity reference (an AWS instance
+    profile, an Azure managed identity, a GCP service account) is a
+    cross-cloud blocker or a same-cloud "confirm it exists in the target
+    account" note. Left unset, every one is treated as a blocker -- the same
+    fail-safe default as an unmapped storage path.
     """
     report = CrossRefReport()
     scope_names = {s for s in (known_scopes or [])}
@@ -200,6 +228,7 @@ def scan(
                 _texts_of(row),
                 rewriter,
                 scope_names,
+                target_cloud=target_cloud,
             )
             _scan_structured_ids(
                 report, asset_class, asset_id, asset_name, row, policy_ids, warehouse_ids, pool_ids
@@ -217,6 +246,7 @@ def _scan_blob(
     rewriter: Optional[Rewriter],
     scope_names: "set",
     with_lines: bool = False,
+    target_cloud: Optional[str] = None,
 ) -> None:
     """Apply every pattern to one blob of text.
 
@@ -287,19 +317,37 @@ def _scan_blob(
                 )
             )
 
-    for match in _INSTANCE_PROFILE.finditer(blob):
-        report.add(
-            CrossRef(
-                asset_class,
-                asset_id,
-                asset_name,
-                "cloud_identity",
-                match.group(0),
-                SEV_BLOCKER,
-                "AWS instance profile has no equivalent in the target cloud",
-                at(match.start()),
+    for pattern, owning_cloud, label in _CLOUD_IDENTITY_PATTERNS:
+        for match in pattern.finditer(blob):
+            if target_cloud is None:
+                # Target cloud not supplied -- fail safe, same as before this
+                # was cloud-aware: treat it as cross-cloud rather than guess.
+                severity = SEV_BLOCKER
+                reason = "{0} has no equivalent in the target cloud".format(label)
+            elif target_cloud == owning_cloud:
+                # Same-cloud move: the identity mechanism itself carries over,
+                # but the specific identity is scoped to a source account/
+                # subscription/project that may not be the target's.
+                severity = SEV_ATTENTION
+                reason = (
+                    "{0} is native to the target cloud -- confirm it exists in the "
+                    "target account/subscription/project".format(label)
+                )
+            else:
+                severity = SEV_BLOCKER
+                reason = "{0} has no equivalent on {1}".format(label, target_cloud)
+            report.add(
+                CrossRef(
+                    asset_class,
+                    asset_id,
+                    asset_name,
+                    "cloud_identity",
+                    match.group(0),
+                    severity,
+                    reason,
+                    at(match.start()),
+                )
             )
-        )
 
     for match in _WORKSPACE_URL.finditer(blob):
         report.add(
@@ -480,6 +528,7 @@ def scan_source_tree(
     rewriter: Optional[Rewriter] = None,
     known_scopes: Optional[Iterable[str]] = None,
     extensions: Sequence[str] = SOURCE_EXTENSIONS,
+    target_cloud: Optional[str] = None,
 ) -> CrossRefReport:
     """Scan exported notebooks and source files for the same references.
 
@@ -518,6 +567,7 @@ def scan_source_tree(
                 rewriter,
                 scope_names,
                 with_lines=True,
+                target_cloud=target_cloud,
             )
     return _dedupe(report)
 
