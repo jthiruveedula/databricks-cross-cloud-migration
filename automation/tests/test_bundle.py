@@ -10,6 +10,7 @@ from dbxmig.bundle import (
     SERVER_OWNED_FIELDS,
     generate_bundle,
     job_resource,
+    simple_resource,
     variable_name,
 )
 from dbxmig.rewrite import PathRule, Rewriter
@@ -199,6 +200,22 @@ def test_warehouse_channel_becomes_a_nested_object(workspace, rewriter):
         generate_bundle(workspace, rewriter=rewriter), "sql_warehouses", "sql_warehouses"
     )
     assert warehouses["finance_bi"]["channel"] == {"name": "CHANNEL_NAME_CURRENT"}
+
+
+def test_simple_resource_keeps_an_explicit_zero_value():
+    # auto_stop_mins=0 means "never auto-stop" -- a real, meaningful setting,
+    # not "field was absent". Dropping it would let the target fall back to
+    # Databricks' platform default instead of reproducing the source.
+    row = {"name": "always_on_wh", "auto_stop_mins": 0, "cluster_size": "Small"}
+    _, body = simple_resource(row, ("name", "auto_stop_mins", "cluster_size"), None, {})
+    assert body["auto_stop_mins"] == 0
+
+
+def test_simple_resource_still_drops_absent_fields():
+    row = {"name": "wh", "auto_stop_mins": None, "cluster_size": ""}
+    _, body = simple_resource(row, ("name", "auto_stop_mins", "cluster_size"), None, {})
+    assert "auto_stop_mins" not in body
+    assert "cluster_size" not in body
 
 
 def test_warehouse_fields_are_renamed_to_bundle_names(workspace, rewriter):

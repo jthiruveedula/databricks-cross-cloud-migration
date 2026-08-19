@@ -275,7 +275,11 @@ def simple_resource(
     body: Dict[str, Any] = {}
     for source_field in fields:
         value = row.get(source_field)
-        if value in (None, "", 0, [], {}):
+        # Not "falsy" -- 0 is a real, meaningful value for fields like
+        # auto_stop_mins (always-on) or min_idle_instances, and dropping it
+        # here means the target gets Databricks' platform default instead of
+        # the source's explicit 0.
+        if value is None or value == "" or value == [] or value == {}:
             continue
         # Route through the dict form so the key-based rules apply: an
         # instance pool's node_type_id is as cloud-specific as a cluster's and

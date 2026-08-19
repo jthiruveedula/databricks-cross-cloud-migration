@@ -34,6 +34,19 @@ def test_empty_target_has_no_collisions(inventory, config):
     assert "No object in the target metastore" in render(report)
 
 
+def test_existing_function_is_fatal_not_a_silent_overwrite(inventory, config):
+    """create_function() emits CREATE OR REPLACE -- a collision here overwrites, not skips."""
+    target = _target(
+        functions=[{"catalog": "prod_gcp", "schema": "sales", "name": "mask_email"}]
+    )
+    report = detect(inventory, target, config.rewriter(), config.catalog_map)
+
+    hits = [c for c in report.fatal if c.kind == "function"]
+    assert len(hits) == 1
+    assert hits[0].target_name == "prod_gcp.sales.mask_email"
+    assert "CREATE OR REPLACE FUNCTION" in hits[0].reason
+
+
 def test_catalog_owned_by_another_team_is_fatal(inventory, config):
     """The scenario the module exists for: their prod_gcp absorbs our migration."""
     target = _target(catalogs=[{"name": "prod_gcp", "owner": "warehouse-team"}])

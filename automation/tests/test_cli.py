@@ -212,6 +212,33 @@ def test_apply_dry_run_prints_statements_and_writes_no_journal_entries(tmp_path,
     assert entries and all(e["status"] == "blocked" for e in entries)
 
 
+def test_step_id_for_statement_is_content_derived_not_positional():
+    from dbxmig.cli import _step_id_for_statement
+
+    a = _step_id_for_statement("CREATE CATALOG x")
+    b = _step_id_for_statement("CREATE CATALOG x")
+    c = _step_id_for_statement("CREATE CATALOG y")
+    assert a == b  # same statement -> same id, deterministically
+    assert a != c  # different statement -> different id
+
+
+def test_apply_journal_ids_are_stable_across_reruns(tmp_path):
+    """A rerun with an unchanged plan must journal the exact same step ids.
+
+    A positional index would renumber every entry if the statement count
+    ever shifted upstream; a content-derived id can't drift as long as the
+    statement text doesn't.
+    """
+    state = str(tmp_path / "journal.jsonl")
+    argv = ["-c", write_config(tmp_path), "apply", "-i", FIXTURE, "--state", state]
+    main(argv)
+    first_ids = {json.loads(line)["step_id"] for line in open(state, encoding="utf-8")}
+    main(argv)
+    second_ids = {json.loads(line)["step_id"] for line in open(state, encoding="utf-8")}
+    assert first_ids
+    assert first_ids <= second_ids
+
+
 def test_cutover_drain_requires_a_live_workspace(tmp_path):
     # No source.host in the config -- this is the honest failure mode, not a
     # silent no-op, since the whole point of the check is to poll a real

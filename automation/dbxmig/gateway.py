@@ -25,7 +25,9 @@ class Gateway:
 
     read_only: bool = True
 
-    def fetch_inventory(self, catalogs: Optional[Sequence[str]] = None) -> Inventory:
+    def fetch_inventory(
+        self, catalogs: Optional[Sequence[str]] = None, lineage_days: int = 90
+    ) -> Inventory:
         raise NotImplementedError
 
     def execute(self, statement: str) -> Dict[str, Any]:
@@ -50,7 +52,9 @@ class FixtureGateway(Gateway):
     query_results: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
     read_only: bool = True
 
-    def fetch_inventory(self, catalogs: Optional[Sequence[str]] = None) -> Inventory:
+    def fetch_inventory(
+        self, catalogs: Optional[Sequence[str]] = None, lineage_days: int = 90
+    ) -> Inventory:
         data = self.inventory_data
         if data is None:
             if not self.inventory_path:
@@ -123,10 +127,14 @@ class DatabricksGateway(Gateway):
 
     # ---- reads ----------------------------------------------------------
 
-    def fetch_inventory(self, catalogs: Optional[Sequence[str]] = None) -> Inventory:
+    def fetch_inventory(
+        self, catalogs: Optional[Sequence[str]] = None, lineage_days: int = 90
+    ) -> Inventory:
         from .inventory import export_inventory
 
-        return export_inventory(self._client, catalogs)
+        return export_inventory(
+            self._client, catalogs, lineage_days=lineage_days, warehouse_id=self.warehouse_id
+        )
 
     # ---- writes ---------------------------------------------------------
 

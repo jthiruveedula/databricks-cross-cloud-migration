@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import sys
@@ -112,6 +113,21 @@ def _load_inventory(path: str) -> Inventory:
         return Inventory.from_dict(json.load(handle))
 
 
+def _step_id_for_statement(statement: str) -> str:
+    """Content-addressed journal step id for one rendered DDL statement.
+
+    A positional index (``"sql:{index}"``) shifts every time the plan's
+    statement count changes upstream -- an added/removed table, a config
+    change that alters how many statements a table's DDL bundle emits -- and
+    the journal has no way to tell that the id it recorded "done" now means
+    a completely different statement. Hashing the statement text instead
+    means the id only ever matches the exact SQL that was journalled: if the
+    statement changes for any reason, resume treats it as new work rather
+    than silently skipping it.
+    """
+    return "sql:" + hashlib.sha1(statement.encode("utf-8")).hexdigest()[:12]
+
+
 def _load_streaming(path: str) -> StreamingReport:
     with open(path, "r", encoding="utf-8") as handle:
         return StreamingReport(assets=[StreamingAsset.from_dict(a) for a in json.load(handle)])
@@ -164,7 +180,7 @@ def _principal_map(config: MigrationConfig) -> PrincipalMap:
 
 def cmd_inventory(config: MigrationConfig, args: argparse.Namespace) -> int:
     gateway = _gateway(config, args)
-    inventory = gateway.fetch_inventory(config.source.catalogs or None)
+    inventory = gateway.fetch_inventory(config.source.catalogs or None, config.lineage_days)
     inventory.cloud = inventory.cloud or config.source.cloud
     _write(args.out, json.dumps(inventory.to_dict(), indent=2, sort_keys=True))
     if args.out:
@@ -530,12 +546,16 @@ def cmd_workspace(config: MigrationConfig, args: argparse.Namespace) -> int:
 def cmd_crossrefs(config: MigrationConfig, args: argparse.Namespace) -> int:
     """Report what each workspace asset depends on, and what will break."""
     inventory = _load_workspace(args.workspace)
-    report = scan(inventory, config.rewriter())
+    target_cloud = config.target.cloud or None
+    report = scan(inventory, config.rewriter(), target_cloud=target_cloud)
     if args.source:
         # Asset metadata cannot see a path hardcoded on line 88 of a notebook.
         # Scanning the exported source closes that half, with a line number.
         scopes = {str(r.get("scope", "")) for r in inventory.rows("secret_scopes")}
-        report = merge(report, scan_source_tree(args.source, config.rewriter(), scopes))
+        report = merge(
+            report,
+            scan_source_tree(args.source, config.rewriter(), scopes, target_cloud=target_cloud),
+        )
     if args.csv:
         with open(args.csv, "w", encoding="utf-8", newline="") as handle:
             csv.writer(handle).writerows(to_rows(report))
@@ -733,8 +753,8 @@ def cmd_apply(config: MigrationConfig, args: argparse.Namespace) -> int:
     executed = 0
     skipped = 0
     failed = 0
-    for index, statement in enumerate(statements):
-        step_id = "sql:{0:05d}".format(index)
+    for statement in statements:
+        step_id = _step_id_for_statement(statement)
         if statement.startswith("-- BLOCKED"):
             journal.record(step_id, STATUS_BLOCKED, detail=statement)
             continue

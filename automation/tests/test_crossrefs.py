@@ -103,6 +103,56 @@ def test_aws_instance_profile_blocks_on_a_cross_cloud_move(workspace, rewriter):
     assert "legacy-etl-role" in identity[0].reference
 
 
+def test_aws_instance_profile_is_only_an_attention_note_on_an_aws_to_aws_move(workspace, rewriter):
+    """Same-cloud: the identity mechanism carries over, the specific role may not."""
+    report = scan(workspace, rewriter, target_cloud="aws")
+    identity = findings_of(report, "cloud_identity")
+    assert identity and identity[0].severity == SEV_ATTENTION
+    assert "legacy-etl-role" in identity[0].reference
+
+
+def test_azure_managed_identity_blocks_on_a_move_to_a_different_cloud():
+    inventory = WorkspaceInventory(
+        assets={
+            "clusters": [
+                {
+                    "cluster_id": "c",
+                    "name": "c",
+                    "code": (
+                        "/subscriptions/11111111-1111-1111-1111-111111111111/"
+                        "resourcegroups/prod-rg/providers/Microsoft.ManagedIdentity/"
+                        "userAssignedIdentities/etl-identity"
+                    ),
+                }
+            ]
+        },
+        results=[],
+    )
+    report = scan(inventory, target_cloud="gcp")
+    identity = findings_of(report, "cloud_identity")
+    assert identity and identity[0].severity == SEV_BLOCKER
+    assert "etl-identity" in identity[0].reference
+
+
+def test_gcp_service_account_is_an_attention_note_on_a_gcp_to_gcp_move():
+    inventory = WorkspaceInventory(
+        assets={
+            "clusters": [
+                {
+                    "cluster_id": "c",
+                    "name": "c",
+                    "code": "etl-runner@my-project.iam.gserviceaccount.com",
+                }
+            ]
+        },
+        results=[],
+    )
+    report = scan(inventory, target_cloud="gcp")
+    identity = findings_of(report, "cloud_identity")
+    assert identity and identity[0].severity == SEV_ATTENTION
+    assert "etl-runner@my-project.iam.gserviceaccount.com" in identity[0].reference
+
+
 def test_hardcoded_workspace_url_blocks():
     inventory = WorkspaceInventory(
         assets={
