@@ -51,6 +51,32 @@ dbxmig -c examples/migration.fixture.yaml bundle     -w tests/fixtures/workspace
 `gaps` exits non-zero when anything needs a decision. That makes it usable as a
 CI gate on the migration itself, not just a report you read once.
 
+## Discovery beyond Unity Catalog
+
+Three commands close gaps a metastore/workspace export can't see on its own.
+None of them guess at a decision only a person can make -- each surfaces what
+it can't resolve instead of defaulting it.
+
+```bash
+# Cloud-native resources outside Unity Catalog -- Key Vaults, S3 buckets, VPCs, ...
+# Requires only a read-only role (Reader / ResourceExplorerReadOnlyAccess / cloudasset.viewer).
+dbxmig -c migration.yaml cloud-inventory --provider azure --scope scope.json -o cloud.json
+dbxmig -c migration.yaml cloud-inventory --provider aws --scope scope.json \
+  --merge-with-crossrefs crossrefs.json -o graph.json   # join against crossrefs's findings
+
+# Structured Streaming queries and DLT/Lakeflow pipelines. migration_strategy
+# is left null on every asset until a human sets it -- gaps/bundle flag the rest.
+dbxmig -c migration.yaml streaming -w workspace.json -s ../src -o streaming.json
+
+# Business ownership and criticality feeding wave-plan's scoring, instead of
+# every unscored cluster defaulting to "lowest risk" with no visibility into why.
+dbxmig -c migration.yaml wave-plan --crossrefs crossrefs.json --ownership-file owners.csv
+```
+
+`owners.csv` is `asset_label,business_owner,domain,criticality_tier,...` --
+`asset_label` matches `crossrefs`'s `"{asset_class}:{name}"` format. YAML works
+too, keyed by label.
+
 ## The sequence
 
 | Command | What it does | Needs a workspace |
@@ -58,15 +84,19 @@ CI gate on the migration itself, not just a report you read once.
 | `validate` | Check the config before anything else runs | no |
 | `inventory` | Export the source **metastore** to JSON | yes (source) |
 | `workspace` | Collect the **workspace plane** — jobs, clusters, policies, pools, warehouses, dashboards, queries, alerts, secret scopes, repos, principals, object ACLs — as JSON plus one CSV per asset class | yes (source) |
-| `crossrefs` | What each workspace asset depends on and what breaks: storage paths, secrets, policies, warehouses, IAM identities, plus which assets must move in the same wave. `--source DIR` also scans exported notebooks and repo code, reporting a file and line number | no |
+| `crossrefs` | What each workspace asset depends on and what breaks: storage paths, secrets, policies, warehouses, IAM identities, plus which assets must move in the same wave. `--source DIR` also scans exported notebooks and repo code, reporting a file and line number. `cloud_identity` findings (AWS instance profile, Azure managed identity, GCP service account) are scored against `config.target.cloud` — a same-cloud match is an attention note, a cross-cloud one blocks | no |
+| `cloud-inventory` | Discover cloud-native resources outside Unity Catalog — Azure Resource Graph, AWS Resource Explorer, or GCP Cloud Asset Inventory. `--merge-with-crossrefs` joins the result against a `crossrefs --json` export into one asset graph | read-only cloud API |
+| `streaming` | Discover Structured Streaming queries and DLT/Lakeflow pipeline configs. Every asset gets a `migration_strategy` field the toolkit never assigns itself — a human sets it to `rebuild_and_replay` / `dual_write_dual_read` / `replicate_topic` / `retire`, or it's flagged as a gap | yes (source) |
 | `plan` | Order every object by dependency into executable steps | no |
-| `gaps` | **Read this one.** Everything that will not migrate on its own | no |
+| `wave-plan` | Cluster assets sharing a reference and assign them to waves by weighted score. `--ownership-file` feeds in business owner/criticality/domain metadata; an asset with no entry is flagged, never defaulted | no |
+| `gaps` | **Read this one.** Everything that will not migrate on its own. `--streaming` adds unassigned streaming migration strategies to the report | no |
 | `ddl` | Emit target SQL, idempotent, in dependency order | no |
 | `grants` | Emit translated `GRANT` and `SET OWNER` statements | no |
 | `acls` | Replay **workspace object ACLs** — jobs, clusters, pools, warehouses, pipelines, policies — as a name-resolved script | no |
+| `bundle` | Generate Declarative Automation Bundle YAML from the workspace inventory. `--streaming` lists streaming assets and their migration strategy in `REVIEW.md` | no |
 | `apply` | Execute the plan, resumably (dry-run unless `--execute`) | yes (target) |
 | `verify` | Prove the target holds the **grants and object ACLs** the migration intended — diffs expected against actual | no |
-| `reconcile` | Prove the target matches the source | no |
+| `reconcile` | Prove the target matches the source. `row_count_tolerance` in the config absorbs expected in-flight drift instead of hard-blocking on it | no |
 | `report` | One markdown file covering all of the above | no |
 
 ```bash
@@ -133,7 +163,10 @@ Deliberately out of scope, and reported as manual work rather than pretended:
 - **Registered model versions.** Model artifacts move with the MLflow client, not
   with DDL.
 - **Materialized views and streaming tables.** Recreate the Lakeflow/DLT pipeline
-  and let it refresh; `CLONE` rejects them as source or target.
+  and let it refresh; `CLONE` rejects them as source or target. `dbxmig streaming`
+  discovers the pipeline configs and any Structured Streaming queries in source,
+  but still requires a human to set each one's `migration_strategy` —
+  never assigned automatically.
 - **Row filters and column masks.** Not copied by `CLONE`; re-bound after the
   masking functions exist in the target.
 - **Connections, shares, and recipients.** Recorded in the inventory and listed
@@ -144,7 +177,7 @@ Deliberately out of scope, and reported as manual work rather than pretended:
 ## Tests
 
 ```bash
-pytest          # 215 tests, no credentials, no network
+pytest          # 306 tests, no credentials, no network
 ruff check .
 ```
 
