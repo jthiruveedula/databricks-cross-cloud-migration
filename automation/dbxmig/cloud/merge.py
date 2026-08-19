@@ -69,6 +69,12 @@ def merge_with_workspace_inventory(
 
     ``crossref_findings`` is the ``CrossRef`` list from ``crossrefs.py``
     (``asset_class``, ``asset_id``, ``asset_name``, ``kind``, ``reference``).
+
+    Workspace node ids use ``crossrefs.CrossRefReport``'s own
+    ``"{asset_class}:{asset_name or asset_id}"`` label format (see
+    ``shared_references``/``all_asset_labels``) rather than inventing a
+    different one -- so a node here joins directly against a wave-plan
+    cluster label for the same asset instead of silently never matching it.
     """
     graph = AssetGraph()
     cloud_assets = list(cloud_assets)
@@ -79,7 +85,7 @@ def merge_with_workspace_inventory(
 
     seen_workspace: Set[str] = set()
     for finding in crossref_findings:
-        workspace_id = "{0}:{1}".format(finding.asset_class, finding.asset_id)
+        workspace_id = "{0}:{1}".format(finding.asset_class, finding.asset_name or finding.asset_id)
         if workspace_id not in seen_workspace:
             seen_workspace.add(workspace_id)
             graph.nodes.append(

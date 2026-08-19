@@ -196,22 +196,38 @@ def checksum_query(full_name: str, columns: Sequence[str]) -> str:
 
 
 def compare_checksums(
-    obj: str, source_row: Dict[str, Any], target_row: Dict[str, Any]
+    obj: str, source_row: Dict[str, Any], target_row: Dict[str, Any], tolerance_rows: int = 0
 ) -> Optional[Finding]:
     """Compare one table's checksum-query result across source and target.
 
     Each argument is the single-row result of :func:`checksum_query` run
     against that side. Row count is checked first so a mismatch reports the
     more specific, more actionable cause instead of just "hashes differ".
+
+    ``tolerance_rows`` (``MigrationConfig.row_count_tolerance``) absorbs
+    expected in-flight drift on a table still being written during the
+    checksum window. A count within tolerance but not exact still can't be
+    hash-compared -- the aggregate hash is only meaningful over identical row
+    sets -- so it warns instead of blocking, rather than silently skipping
+    the check.
     """
     source_count = int(source_row.get("cnt") or 0)
     target_count = int(target_row.get("cnt") or 0)
-    if source_count != target_count:
+    delta = abs(source_count - target_count)
+    if delta > tolerance_rows:
         return Finding(
             "checksum",
             obj,
             SEV_BLOCKER,
             "row count differs: source={0} target={1}".format(source_count, target_count),
+        )
+    if delta:
+        return Finding(
+            "checksum",
+            obj,
+            SEV_WARNING,
+            "row count within tolerance (delta={0} <= {1}) but not exact -- "
+            "aggregate hash not comparable across different row sets".format(delta, tolerance_rows),
         )
     source_hash = source_row.get("agg_hash")
     target_hash = target_row.get("agg_hash")
@@ -231,6 +247,7 @@ def reconcile_live(
     source_gateway: "Gateway",
     target_gateway: "Gateway",
     tables: Sequence[Table],
+    tolerance_rows: int = 0,
 ) -> ReconciliationReport:
     """Row-count + aggregate-hash reconciliation against live warehouses.
 
@@ -260,7 +277,7 @@ def reconcile_live(
                 )
             )
             continue
-        finding = compare_checksums(table.full_name, source_rows[0], target_rows[0])
+        finding = compare_checksums(table.full_name, source_rows[0], target_rows[0], tolerance_rows)
         if finding:
             report.add(finding)
     return report

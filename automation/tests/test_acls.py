@@ -189,5 +189,11 @@ def test_diff_finds_missing_and_extra_entries():
 
 def test_entries_from_inventory_round_trips_for_diffing(workspace):
     entries = entries_from_inventory(workspace)
-    assert len(entries) == len(workspace.rows("object_acls"))
+    # IS_OWNER is excluded -- whoever runs the migration owns every object it
+    # creates in the target, so it has no counterpart on the expected side.
+    non_owner_rows = [
+        r for r in workspace.rows("object_acls") if r.get("permission_level") != "IS_OWNER"
+    ]
+    assert len(entries) == len(non_owner_rows)
+    assert all(e.permission_level != "IS_OWNER" for e in entries)
     assert diff(entries, entries) == {"missing_in_target": [], "extra_in_target": []}

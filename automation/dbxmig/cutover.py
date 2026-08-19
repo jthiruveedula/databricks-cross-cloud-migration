@@ -28,6 +28,17 @@ ACTIVE_LIFECYCLE_STATES = frozenset(
     {"PENDING", "RUNNING", "TERMINATING", "QUEUED", "BLOCKED", "WAITING_FOR_RETRY"}
 )
 
+#: Every life cycle state the Jobs API enum defines. A run in one of these
+#: minus ``ACTIVE_LIFECYCLE_STATES`` is definitely finished, even though
+#: ``active_only=True`` should never have returned it in the first place --
+#: that mismatch is exactly the semantics shift the check above guards
+#: against. A state in neither set (``UNKNOWN``, or a future addition to the
+#: enum this toolkit hasn't seen yet) is treated as active: fail safe means
+#: blocking the drain gate on an unrecognized state, not clearing it.
+_TERMINAL_LIFECYCLE_STATES = (
+    frozenset({"TERMINATED", "SKIPPED", "INTERNAL_ERROR"}) - ACTIVE_LIFECYCLE_STATES
+)
+
 
 def _attr(obj: Any, name: str, default: Any = None) -> Any:
     if obj is None:
@@ -74,6 +85,11 @@ def active_job_runs(client: Any) -> List[ActiveRun]:
         status = _attr(run, "status") or _attr(run, "state")
         life_cycle = _attr(status, "state") or _attr(status, "life_cycle_state") or status
         state = str(_attr(life_cycle, "value", life_cycle) or "UNKNOWN").upper()
+        # Re-check against the known terminal states instead of trusting
+        # active_only=True alone. A state this toolkit doesn't recognize at
+        # all is kept (fail safe: block the drain gate), not dropped.
+        if state in _TERMINAL_LIFECYCLE_STATES:
+            continue
         runs.append(
             ActiveRun(
                 run_id=int(_attr(run, "run_id", 0) or 0),

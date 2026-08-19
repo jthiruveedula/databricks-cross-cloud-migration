@@ -324,7 +324,15 @@ def diff(expected: Sequence[AclEntry], actual: Sequence[AclEntry]) -> Dict[str, 
 
 
 def entries_from_inventory(inventory: WorkspaceInventory) -> List[AclEntry]:
-    """Read a collected inventory's ACLs as entries, for diffing a target."""
+    """Read a collected inventory's ACLs as entries, for diffing a target.
+
+    Excludes ``NON_REPLAYABLE_LEVELS`` (IS_OWNER) for the same reason
+    ``build_acl_plan`` does -- whoever runs the migration owns every object it
+    creates in the target, so a raw target read always contains an IS_OWNER
+    entry that has no counterpart in the (already-filtered) expected side. Without
+    this, ``dbxmig verify`` reports IS_OWNER as "extra in target" on every object,
+    every run.
+    """
     return [
         AclEntry(
             str(r.get("object_type", "")),
@@ -333,4 +341,5 @@ def entries_from_inventory(inventory: WorkspaceInventory) -> List[AclEntry]:
             str(r.get("permission_level", "")).upper(),
         )
         for r in inventory.rows("object_acls")
+        if str(r.get("permission_level", "")).upper() not in NON_REPLAYABLE_LEVELS
     ]
