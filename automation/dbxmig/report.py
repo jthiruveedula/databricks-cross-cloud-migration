@@ -240,13 +240,14 @@ def full_report(
     rewriter: Rewriter,
     grant_translation: Optional[GrantTranslation] = None,
     reconciliation: Optional[ReconciliationReport] = None,
+    streaming_report: Optional[StreamingReport] = None,
 ) -> str:
     parts = [
         "# Metastore migration report",
         "",
         inventory_summary(inventory),
         plan_summary(plan),
-        gap_report(plan, rewriter, inventory, grant_translation),
+        gap_report(plan, rewriter, inventory, grant_translation, streaming_report),
     ]
     if reconciliation is not None:
         parts.append(reconciliation_summary(reconciliation))

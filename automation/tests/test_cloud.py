@@ -170,7 +170,7 @@ def test_merge_links_crossref_to_matching_cloud_asset():
         breaks="storage mount",
     )
     graph = merge_with_workspace_inventory([asset], [finding])
-    assert {n.id for n in graph.nodes} == {"arn:aws:s3:::acme-raw", "job:1"}
+    assert {n.id for n in graph.nodes} == {"arn:aws:s3:::acme-raw", "job:nightly"}
     assert len(graph.edges) == 1
     assert graph.edges[0].target == "arn:aws:s3:::acme-raw"
 

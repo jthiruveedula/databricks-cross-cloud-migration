@@ -36,6 +36,7 @@ from .bundle import generate_bundle
 from .cloud.aws import AwsAssetAdapter
 from .cloud.azure import AzureAssetAdapter
 from .cloud.gcp import GcpAssetAdapter
+from .cloud.merge import merge_with_workspace_inventory
 from .collisions import detect as detect_collisions
 from .collisions import render as render_collisions
 from .config import ConfigError, MigrationConfig, load_config, load_principal_map
@@ -559,6 +560,18 @@ def cmd_cloud_inventory(config: MigrationConfig, args: argparse.Namespace) -> in
         scope = json.load(handle)
     adapter = _CLOUD_ADAPTERS[args.provider]()
     assets = adapter.discover(scope)
+    if args.merge_with_crossrefs:
+        with open(args.merge_with_crossrefs, "r", encoding="utf-8") as handle:
+            crossref_report = from_dicts(json.load(handle))
+        graph = merge_with_workspace_inventory(assets, crossref_report.findings)
+        _write(args.out, json.dumps(graph.to_dict(), indent=2, sort_keys=True))
+        print(
+            "discovered {0} {1} asset(s); merged graph has {2} node(s), {3} edge(s)".format(
+                len(assets), args.provider, len(graph.nodes), len(graph.edges)
+            ),
+            file=sys.stderr,
+        )
+        return EXIT_OK
     _write(args.out, json.dumps([a.to_dict() for a in assets], indent=2, sort_keys=True))
     print("discovered {0} {1} asset(s)".format(len(assets), args.provider), file=sys.stderr)
     return EXIT_OK
@@ -774,7 +787,9 @@ def cmd_reconcile(config: MigrationConfig, args: argparse.Namespace) -> int:
         ]
         source_gateway = _gateway(config, args, side="source")
         target_gateway = _gateway(config, args, side="target")
-        live_report = reconcile_live(source_gateway, target_gateway, live_tables)
+        live_report = reconcile_live(
+            source_gateway, target_gateway, live_tables, config.row_count_tolerance
+        )
         report.checked += live_report.checked
         report.findings.extend(live_report.findings)
     _write(args.out, reconciliation_summary(report))
@@ -827,7 +842,10 @@ def cmd_report(config: MigrationConfig, args: argparse.Namespace) -> int:
     if args.target_inventory:
         target = _load_inventory(args.target_inventory)
         reconciliation = reconcile_inventories(inventory, target, config.source_prefixes())
-    content = full_report(inventory, plan, config.rewriter(), translation, reconciliation)
+    streaming_report = _load_streaming(args.streaming) if args.streaming else None
+    content = full_report(
+        inventory, plan, config.rewriter(), translation, reconciliation, streaming_report
+    )
     _write(args.out, content)
     return EXIT_OK
 
@@ -913,6 +931,11 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="JSON file naming what to query -- e.g. {\"subscriptions\": [...]} for azure, "
         "{\"project\": \"...\"} for gcp, {\"resource_types\": [...]} for aws",
+    )
+    p.add_argument(
+        "--merge-with-crossrefs",
+        help="`dbxmig crossrefs --json` output -- write the merged AssetGraph instead of "
+        "the plain asset list",
     )
     p.add_argument("-o", "--out", help="write the discovered assets here instead of stdout")
     p.set_defaults(func=cmd_cloud_inventory)
@@ -1086,6 +1109,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("report", help="one markdown report covering inventory, plan, and gaps")
     add_common(p)
     p.add_argument("-t", "--target-inventory", help="include reconciliation against this target")
+    p.add_argument(
+        "--streaming", help="`dbxmig streaming --json` output, to flag unassigned strategies"
+    )
     p.set_defaults(func=cmd_report)
 
     return parser

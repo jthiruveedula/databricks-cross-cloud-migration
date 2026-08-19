@@ -156,6 +156,23 @@ def test_checksum_mismatch_with_matching_counts_reports_hash_drift():
     assert "aggregate hash differs" in finding.detail
 
 
+def test_row_count_mismatch_within_tolerance_warns_instead_of_blocking():
+    source = {"cnt": 100, "agg_hash": 111}
+    target = {"cnt": 98, "agg_hash": 999}  # hash would differ anyway -- not comparable
+    finding = compare_checksums("t", source, target, tolerance_rows=5)
+    assert finding is not None
+    assert not finding.blocking
+    assert "within tolerance" in finding.detail
+
+
+def test_row_count_mismatch_beyond_tolerance_still_blocks():
+    source = {"cnt": 100, "agg_hash": 111}
+    target = {"cnt": 80, "agg_hash": 111}
+    finding = compare_checksums("t", source, target, tolerance_rows=5)
+    assert finding is not None and finding.blocking
+    assert "row count differs" in finding.detail
+
+
 def _table(name: str = "orders") -> Table:
     return Table(
         catalog="prod",
