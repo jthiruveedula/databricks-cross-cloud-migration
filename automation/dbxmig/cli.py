@@ -77,6 +77,8 @@ from .grants import (
 )
 from .llm import Assistant, NullLlmClient
 from .models import Inventory
+from .ownership import load_ownership
+from .ownership import unowned as unowned_labels
 from .reconcile import reconcile_inventories, reconcile_live
 from .report import (
     crossref_summary,
@@ -579,15 +581,19 @@ def cmd_wave_plan(config: MigrationConfig, args: argparse.Namespace) -> int:
     if args.scores:
         with open(args.scores, "r", encoding="utf-8") as handle:
             manual_scores = json.load(handle)
+    ownership = load_ownership(args.ownership_file) if args.ownership_file else {}
+    all_labels = report.all_asset_labels()
     shared = report.shared_references(minimum=args.minimum_holders)
     plan = build_wave_plan(
         shared,
         manual_scores=manual_scores,
-        all_assets=report.all_asset_labels(),
+        all_assets=all_labels,
         thresholds=DEFAULT_THRESHOLDS,
+        ownership=ownership,
     )
-    _write(args.out, wave_plan_summary(plan))
-    return EXIT_OK
+    unowned_assets = unowned_labels(all_labels, ownership) if ownership else []
+    _write(args.out, wave_plan_summary(plan, unowned_assets))
+    return EXIT_FINDINGS if unowned_assets else EXIT_OK
 
 
 def cmd_streaming(config: MigrationConfig, args: argparse.Namespace) -> int:
@@ -931,6 +937,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=2,
         help="minimum assets sharing a reference before they're clustered together (default: 2)",
+    )
+    p.add_argument(
+        "--ownership-file",
+        help="CSV or YAML: asset_label -> {business_owner, criticality_tier, domain, ...} "
+        "(see ownership.py). Unowned assets are flagged, never defaulted quietly.",
     )
     p.add_argument("-o", "--out", help="write the plan here instead of stdout")
     p.set_defaults(func=cmd_wave_plan)

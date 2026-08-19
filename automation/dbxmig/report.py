@@ -175,13 +175,14 @@ def reconciliation_summary(report: ReconciliationReport) -> str:
     )
 
 
-def wave_plan_summary(plan: WavePlan) -> str:
+def wave_plan_summary(plan: WavePlan, unowned_assets: Optional[Sequence[str]] = None) -> str:
     """Render a computed [wave plan](/execution/wave-planning) as markdown.
 
     Clusters with no manual score entry score 1 (lowest) on every judgment
     factor -- they land in an early wave by default, not a late one, since an
     unscored cluster should be treated as unreviewed rather than as
-    low-risk-and-ready.
+    low-risk-and-ready. ``unowned_assets`` (see ``ownership.unowned``) lists
+    every asset with no ownership entry at all, separate from scoring.
     """
     sections = ["## Wave plan", ""]
     by_wave = plan.by_wave()
@@ -192,13 +193,25 @@ def wave_plan_summary(plan: WavePlan) -> str:
                 cluster.cluster_id,
                 str(len(cluster.members)),
                 "{0:.2f}".format(cluster.weighted_score),
+                ", ".join(cluster.domains) or "-",
                 ", ".join(cluster.members),
             ]
             for cluster in clusters
         ]
         sections.append("### Wave {0} ({1} cluster(s))".format(wave, len(clusters)))
         sections.append("")
-        sections.append(_table(["Cluster", "Members", "Score", "Assets"], rows))
+        sections.append(_table(["Cluster", "Members", "Score", "Domain(s)", "Assets"], rows))
+    if unowned_assets:
+        sections.extend(
+            [
+                "",
+                "### Unowned assets",
+                "",
+                "No entry in the ownership file -- scored at the lowest (safest) criticality "
+                "by default, not because they were reviewed and found low-risk.\n",
+                _table(["Asset"], [[label] for label in unowned_assets]),
+            ]
+        )
     return "\n".join(sections)
 
 
