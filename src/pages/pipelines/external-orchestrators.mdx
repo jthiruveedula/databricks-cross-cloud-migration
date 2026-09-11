@@ -77,6 +77,7 @@ Keep source orchestrator connections and job definitions intact and pointed at s
 
 ## Automation opportunity
 
+- Where the decision is to fold the orchestrator into Lakeflow rather than repoint it, [`databricks-solutions/flowx`](https://github.com/databricks-solutions/flowx) converts Azure Data Factory and Airflow pipelines into Lakeflow Jobs packaged as bundles — deterministic translation for its published activity/operator types, LLM-assisted for the rest. Run its discover phase during [discovery](/discovery/dependency-mapping) to get the inventory and complexity report before anyone commits to a date; treat every agentically-translated activity as needing review. See [Databricks migration tooling](/accelerators/databricks-tooling).
 - Store orchestrator connection configs as code (Airflow connections as JSON/Terraform, ADF linked services as ARM/Bicep) so the cutover is a reviewable config change, not a manual UI edit per environment.
 - Build a smoke-test DAG/pipeline per orchestrator that only exercises the Databricks connection, so connectivity issues surface before the first real pipeline run.
 

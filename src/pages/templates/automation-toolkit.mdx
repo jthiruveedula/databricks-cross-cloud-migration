@@ -76,7 +76,7 @@ So `gaps` takes `--target-inventory` and compares intended names against what th
 
 Omitting the flag is allowed, because a genuinely greenfield region has nothing to compare against — but the report then says the check did not run rather than staying quiet about it.
 
-## The sixteen commands, in the order you run them
+## The nineteen commands, in the order you run them
 
 | Command | Does | Needs a workspace |
 |---|---|---|
@@ -84,13 +84,16 @@ Omitting the flag is allowed, because a genuinely greenfield region has nothing 
 | `inventory` | Exports the source metastore to JSON | yes (source) |
 | `workspace` | Collects the *workspace* plane — jobs, clusters, dashboards, object ACLs — which the metastore inventory does not cover | yes (source) |
 | `crossrefs` | Scans a source tree for references to objects that are moving, so the code changes land in the same wave as the data — add `--json` to feed `wave-plan` | no |
+| `cloud-inventory` | Discovers cloud-native resources outside Unity Catalog — Key Vaults, S3 buckets, VPCs — and merges them against `crossrefs` findings | no (needs a read-only cloud role) |
 | `wave-plan` | Clusters assets sharing a reference and scores/assigns them to waves, per [wave planning](/execution/wave-planning)'s formula | no |
+| `streaming` | Finds Structured Streaming queries and DLT/Lakeflow pipelines and leaves `migration_strategy` unset until a human sets it | no |
 | `plan` | Orders every object by dependency into executable steps | no |
 | `gaps` | Everything with no automated path, plus names already taken in the target — **read this first** | no |
 | `ddl` | Emits idempotent target SQL, in dependency order | no |
 | `grants` | Emits translated `GRANT` and `SET OWNER` statements | no |
 | `acls` | Replays **workspace object ACLs** — the permission system Unity Catalog grants do not cover | no |
 | `bundle` | Generates Declarative Automation Bundle YAML for jobs and pipelines, with every workspace-scoped id turned into a variable | no |
+| `handoff` | Emits the ready-made accelerators' own config files — [databricks-replicator](https://github.com/databricks-solutions/databricks-replicator), [workspace-migration](https://github.com/databricks-solutions/workspace-migration) — from this migration's scope, path rules and principal map, plus a routing note naming what none of them move | no |
 | `apply` | Executes, resumably — dry-run unless `--execute` | yes (target) |
 | `verify` | Proves the target holds the grants and object ACLs the migration intended | no |
 | `reconcile` | Compares target against source, exits non-zero on a blocker — metadata-only by default; add `--live` for row-count + aggregate-hash checksum reconciliation against both warehouses | no (yes with `--live`) |
@@ -110,6 +113,10 @@ dbxmig -c target.yaml    inventory -o target-before.json
 dbxmig -c migration.yaml gaps      -i inventory.json -o gaps.md \\
                                    --target-inventory target-before.json
 
+# The accelerators that will actually move the data get their configs from the
+# same scope -- so a filter cannot drift between this toolkit and theirs.
+dbxmig -c migration.yaml handoff   -i inventory.json -o ./handoff
+
 dbxmig -c migration.yaml ddl       -i inventory.json -o target.sql    # review as a diff
 dbxmig -c migration.yaml grants    -i inventory.json -o grants.sql
 dbxmig -c migration.yaml apply     -i inventory.json                  # dry run, prints SQL
@@ -128,8 +135,8 @@ dbxmig -c migration.yaml reconcile -i inventory.json -t target-inventory.json --
 # a hard 15-minute timeout, before final sync (step 4) touches anything.
 dbxmig -c migration.yaml cutover-drain --side source --timeout 900`} />
 
-<Callout client:visible variant="tip" title="Three of the sixteen need credentials outright; reconcile is optional-in and cutover-drain is cutover-only">
-  `inventory` and `workspace` read the source; `apply` writes to the target. `reconcile` runs against JSON on disk unless `--live` is passed, in which case it also reads both warehouses to checksum table data. `cutover-drain` always needs a live workspace — it has nothing to poll otherwise. Everything else — planning, collision detection, DDL generation, grant translation, bundle output, verification — runs against JSON on disk. Most of the migration can be generated, reviewed, and signed off before anyone holds a token for the target account, which in a regulated environment is usually the long pole rather than the technical work.
+<Callout client:visible variant="tip" title="Three of the nineteen need credentials outright; reconcile is optional-in and cutover-drain is cutover-only">
+  `inventory` and `workspace` read the source; `apply` writes to the target. `cloud-inventory` needs a read-only role on the cloud account rather than a Databricks token. `reconcile` runs against JSON on disk unless `--live` is passed, in which case it also reads both warehouses to checksum table data. `cutover-drain` always needs a live workspace — it has nothing to poll otherwise. Everything else — planning, collision detection, DDL generation, grant translation, bundle output, verification — runs against JSON on disk. Most of the migration can be generated, reviewed, and signed off before anyone holds a token for the target account, which in a regulated environment is usually the long pole rather than the technical work.
 </Callout>
 
 ## One config file is the whole contract
@@ -215,6 +222,7 @@ Reported as manual work rather than pretended. Each of these is a genuine limit,
 | Row filters, column masks | Not copied by `CLONE`; re-bound after the masking functions exist |
 | Connections, shares, recipients | Recreated by hand, and recipients need new activation links |
 | Anything outside the metastore | Jobs, clusters, dashboards, secrets, audit history — see the rest of this runbook |
+| Moving the data itself, at scale | Databricks already ships and field-maintains accelerators for it. `handoff` emits *their* configs from this migration's scope rather than re-implementing a worse copy — see [Databricks migration tooling](/accelerators/databricks-tooling) |
 
 ## Which pages it implements
 
@@ -226,10 +234,11 @@ Reported as manual work rather than pretended. Each of these is a genuine limit,
 | [Dependency mapping](/discovery/dependency-mapping) | View dependency edges, from lineage with a parse fallback |
 | [Data reconciliation](/validation/data-reconciliation) | Object counts, schema drift, clone provenance, residual source paths |
 | [AI-assisted migration](/accelerators/ai-assisted-migration) | The deterministic-core / gated-LLM-edge pattern, implemented |
+| [Databricks migration tooling](/accelerators/databricks-tooling) | `handoff` generates the accelerators' own config files and the routing note for what none of them move |
 
 ## Testing and status
 
-<CodeBlock client:visible language="bash" code={`pytest        # 264 tests, no credentials, no network
+<CodeBlock client:visible language="bash" code={`pytest        # 316 tests, no credentials, no network
 ruff check .`} />
 
 Both run in CI on every pull request that touches `automation/`, and the Python is scanned by CodeQL alongside the site code — this generates and executes SQL against a customer's metastore, so it is treated as application code rather than sample snippets.

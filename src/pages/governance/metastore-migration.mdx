@@ -429,6 +429,8 @@ Grants are additive and fixed forward, never rolled back. `SET MANAGED` conversi
 
 Everything on this page except the storage credential is derivable from an inventory export. The [automation toolkit](/templates/automation-toolkit) implements it: `gaps` reports what has no automated path before you start, `ddl` emits the ordered SQL as a reviewable file, `grants` translates principals and replays ownership, `apply` runs it resumably, and `reconcile` proves the result. Use [UCX](/governance/ucx-strategy) for the legacy Hive assessment upstream of all of it.
 
+At estate scale the object-by-object DDL path stops being the right tool: [`databricks-replicator`](https://github.com/databricks-solutions/databricks-replicator) does incremental, cloud-agnostic table and metadata replication over Deep Clone and D2D Delta Sharing, and [`workspace-migration`](https://github.com/databricks-solutions/workspace-migration) covers the UC objects it skips — functions, models, row filters, column masks, ABAC policies, connections and Delta Sharing objects. `dbxmig handoff` generates both tools' config files from the same migration config used above, so the catalog scope, storage-path rewrites and principal map cannot drift between them. See [Databricks migration tooling](/accelerators/databricks-tooling).
+
 <Checklist client:visible title="Metastore migration" items={[
   { id: 'metastore', label: 'Target metastore created, target workspace attached, region confirmed' },
   { id: 'credential', label: 'Storage credential created and validated for read AND write' },

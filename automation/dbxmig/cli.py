@@ -77,6 +77,7 @@ from .grants import (
     expected_grants_after_translation,
     translate_grants,
 )
+from .handoff import generate_handoff
 from .llm import Assistant, NullLlmClient
 from .models import Inventory
 from .ownership import load_ownership
@@ -681,6 +682,37 @@ def cmd_bundle(config: MigrationConfig, args: argparse.Namespace) -> int:
     return EXIT_FINDINGS if result.needs_review() else EXIT_OK
 
 
+def cmd_handoff(config: MigrationConfig, args: argparse.Namespace) -> int:
+    """Emit ready-made accelerator configs from this migration's own config.
+
+    The Databricks Solutions accelerators already move UC objects between
+    metastores and clouds; what was manual was re-typing this migration's
+    scope, path rewrites and principal map into each of their config files.
+    """
+    inventory = _load_inventory(args.inventory)
+    result = generate_handoff(config, inventory, _principal_map(config))
+    out_dir = args.out or "handoff"
+    for relative, content in sorted(result.files.items()):
+        path = os.path.join(out_dir, relative)
+        directory = os.path.dirname(path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(content)
+    print(
+        "wrote {0} file(s) to {1}; {2} object(s) no accelerator covers, "
+        "{3} location(s) with no path rule".format(
+            len(result.files), out_dir, len(result.unrouted), len(result.unmapped)
+        ),
+        file=sys.stderr,
+    )
+    for name, reason in result.unrouted:
+        print("unrouted: {0} -- {1}".format(name, reason), file=sys.stderr)
+    for name, uri in result.unmapped:
+        print("no path rule: {0} -- {1}".format(name, uri), file=sys.stderr)
+    return EXIT_FINDINGS if result.needs_review() else EXIT_OK
+
+
 def cmd_acls(config: MigrationConfig, args: argparse.Namespace) -> int:
     """Replay workspace object ACLs -- the permission system UC grants do not cover."""
     inventory = _load_workspace(args.workspace)
@@ -1013,6 +1045,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--streaming", help="`dbxmig streaming --json` output, to include in REVIEW.md")
     p.set_defaults(func=cmd_bundle)
+
+    p = sub.add_parser(
+        "handoff",
+        help="emit ready-made accelerator configs (workspace-migration, databricks-replicator)",
+    )
+    p.add_argument("-i", "--inventory", default="inventory.json", help="source metastore JSON")
+    p.add_argument("-o", "--out", default="handoff", help="directory to write the configs into")
+    p.set_defaults(func=cmd_handoff)
 
     p = sub.add_parser(
         "acls", help="replay workspace object ACLs (jobs, clusters, pools, warehouses)"

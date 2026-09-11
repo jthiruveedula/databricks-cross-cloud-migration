@@ -1,7 +1,7 @@
 ---
 title: 'Databricks migration tooling'
 layout: ../../layouts/Layout.astro
-description: 'The accelerator stack for cross-cloud moves: UCX, Lakebridge, Databricks Replicator, the migrate tool, and Asset Bundles — what each automates and where it stops.'
+description: 'The accelerator stack for cross-cloud moves: UCX, Lakebridge, and the databricks-solutions accelerators — Replicator, workspace-migration, flowx, ai-platform-kit, the Power BI and Alteryx converters — what each automates and where it stops.'
 ---
 
 import Callout from '../../components/Callout.tsx';
@@ -17,13 +17,25 @@ A cross-cloud migration is a platform-modernization program with a data workstre
 
 ## The accelerator map
 
+Do not write what Databricks already maintains. Almost every mechanical layer of a cross-cloud move has a field-maintained accelerator behind it; the work that remains is scoping them, sequencing them, and owning the objects none of them cover.
+
 | Tool | Owner | Automates | Stops at |
 | --- | --- | --- | --- |
 | **UCX** | Databricks Labs (OSS) | Assessment, group + table upgrade to Unity Catalog | Cross-cloud data move; notebook rewrite partial |
 | **Lakebridge** | Databricks (free, GA) | DW/ETL conversion + reconciliation | Legacy orchestration mapping |
-| **Databricks Replicator** | Databricks Solutions | Multi-cloud UC metadata + data replication | Application rewrite |
+| **[databricks-replicator](https://github.com/databricks-solutions/databricks-replicator)** | Databricks Solutions | Cloud-agnostic UC metadata + data replication across metastores | UC functions and models (in development); ownership; row filters and column masks; Hive |
+| **[workspace-migration](https://github.com/databricks-solutions/workspace-migration)** | Databricks Solutions | UC objects a replicator skips — functions, models, filters/masks/ABAC, connections, Delta Sharing — plus legacy Hive, as a deployable bundle | Its stated scope is control-plane/region moves, not cross-cloud; materialized views and streaming tables hard-skipped |
+| **[ai-platform-kit](https://github.com/databricks-solutions/ai-platform-kit)** | Databricks Solutions | Standing up the *target*: workspace, Unity Catalog, identity, private networking on Azure, AWS and GCP | Not a certified landing zone — it writes Terraform you review |
+| **[flowx](https://github.com/databricks-solutions/flowx)** | Databricks Solutions | Azure Data Factory and Airflow pipelines into Lakeflow Jobs, packaged as bundles | Source-system connectivity and credentials |
+| **[Power BI migration accelerator](https://github.com/databricks-solutions/powerbi-on-databricks-migration-accelerator)** | Databricks Solutions | Bulk repointing of `.pbip` semantic models at Databricks SQL + UC | Converting reports to Metric Views or AI/BI dashboards |
+| **[alteryx-to-databricks-converter](https://github.com/databricks-solutions/alteryx-to-databricks-converter)** | Databricks Solutions | `.yxmd` workflows into PySpark, DLT, Spark SQL, Lakeflow Designer | Unsupported tools are reported, not guessed |
+| **[databricks-waf](https://github.com/databricks-solutions/databricks-waf)** | Databricks Solutions | Post-migration Well-Architected assessment traced to evidence | Alpha; it reviews the target, it never migrates |
 | **databrickslabs/migrate** | Databricks Labs (OSS) | Workspace-to-workspace asset export/import | Compute re-map across clouds |
 | **Asset Bundles / Terraform** | Databricks | IaC replicas of jobs, pipelines, notebooks | Runtime differences across clouds |
+
+<Callout variant="warning" title="Read each tool's own coverage table before you plan around it">
+The "stops at" column above is each project's own statement, not an estimate. Two of them matter more than the rest: **no** accelerator migrates a materialized view or a streaming table — both skip them, and the object is rebuilt by refreshing its pipeline against the target at cutover — and **workspace-migration does not claim cross-cloud** in its README (its stated cases are control-plane migrations, account consolidations, and cross-region moves). Validate its data path on a pilot catalog before relying on it across clouds, and use the replicator for the cross-cloud table move either way.
+</Callout>
 
 ## UCX — assessment and Unity Catalog upgrade
 
@@ -64,9 +76,72 @@ Three components:
 Lakebridge's deterministic converter is the "core" in the hybrid pattern. Where it cannot express a transform, the AI-powered converter and the [AI-assisted migration](/accelerators/ai-assisted-migration) playbook take the edge cases — always gated by the Validator.
 </Callout>
 
-## Databricks Replicator — multi-cloud replication
+## ai-platform-kit — standing up the target first
 
-`databricks-solutions/databricks-replicator` performs incremental metadata + data replication across metastores and clouds via D2D Delta Sharing, Deep Clone, and Auto Loader. It handles streaming tables, grants, and tags — the mechanism for keeping a target warm during dual-run without a full re-lift each cycle.
+Nothing else on this page has anywhere to land until the target platform exists. [`databricks-solutions/ai-platform-kit`](https://github.com/databricks-solutions/ai-platform-kit) is the accelerator for that half: workspace provisioning with VNet/VPC injection and secure cluster connectivity, an opinionated Unity Catalog setup (self-managed metastore, per-env catalogs, external locations, medallion schemas), account-level SCIM groups and tiered RBAC, SQL warehouses, cluster policies, secret scopes, IP access lists, and private connectivity — Private Link on AWS, Private Endpoints on Azure, Private Service Connect on GCP, plus NCC for serverless egress.
+
+It ships as agent skills rather than templates: the agent writes Terraform and SDK calls against your stated requirements, then runs a three-path verification (classic cluster, serverless SQL warehouse, serverless notebook job) designed to catch the configuration failures that otherwise surface a week later. It brings no credentials of its own — you authenticate `az`/`aws`/`gcloud` and the Databricks CLI yourself.
+
+<Callout variant="warning" title="Generated Terraform is a draft, not a landing zone">
+The kit is explicit that it ships skills and glue, not a certified reference architecture. Review every generated Terraform plan against your own network and security standards — the [network security](/security/network-security) and [identity federation](/security/identity-federation) pages are the checklist to review it against — and keep the state file under the same controls as any other production IaC.
+</Callout>
+
+## databricks-replicator — the cross-cloud data path
+
+[`databricks-solutions/databricks-replicator`](https://github.com/databricks-solutions/databricks-replicator) is the one accelerator here that states cloud-agnostic, cross-metastore replication as its purpose, which makes it the default mover for the table workstream. It performs incremental metadata + data replication via D2D Delta Sharing, Deep Clone and Auto Loader, handles the streaming-table backing-table complexity (it clones the backing table, not the streaming table), and reconciles row counts and schema after every run.
+
+Its own coverage table is the thing to plan against. Supported: storage credentials, external locations, tag policies, catalogs, schemas, volumes, tables, views, comments, SQL-defined materialized views and streaming tables, tags, and per-securable grants. **Not** replicated: object ownership, row filters and column masks, Hive metastore, and workspace assets — with UC functions and registered models still listed as in development.
+
+Configuration is YAML with Pydantic validation, so scope (catalogs, schemas, tables), storage-URL rewrites (`cloud_url_mapping`) and principal translation (`principal_mapping`) are all declarative — which is exactly why they can be generated rather than typed (see [one config, every accelerator](#one-config-every-accelerator) below).
+
+## workspace-migration — the UC objects a replicator leaves behind
+
+[`databricks-solutions/workspace-migration`](https://github.com/databricks-solutions/workspace-migration) is a Databricks Asset Bundle that migrates Unity Catalog and legacy Hive Metastore objects between workspaces. It covers the long tail the replicator does not: SQL and Python functions, registered models (metadata, version artifacts and aliases), tags, row filters, column masks and ABAC policies, Lakehouse monitors, connections and foreign catalogs, and Delta Sharing shares/recipients/providers. A separate `migrate_hive` job moves legacy Hive databases, tables, views, functions and grants like-for-like into the target's own `hive_metastore` — a copy, not a Unity Catalog upgrade, so UCX still owns that step.
+
+Deploy-time it needs a service principal with workspace admin on both sides, metastore-level `CREATE_*` privileges, and `USE_PROVIDER` on the target. Scope comes from `catalog_filter`/`schema_filter`; progress and pre-check results land in tracking tables plus a bundled dashboard.
+
+Two limits decide how you sequence it. Materialized views and streaming tables are hard-skipped (`skipped_by_stateful_service_migration`) — schema and grants migrate, the object is rebuilt by a pipeline refresh at cutover. DLT pipelines, model serving endpoints and Apps go through the Terraform exporter instead. And, as the callout above says, its README frames it as a control-plane/account/region tool — treat cross-cloud use as something you prove on a pilot catalog.
+
+## flowx — external orchestrators into Lakeflow Jobs
+
+[`databricks-solutions/flowx`](https://github.com/databricks-solutions/flowx) converts Azure Data Factory and Apache Airflow pipelines into Databricks Lakeflow Jobs packaged as bundles, in three phases: discover (ARM/JSON parse for ADF, static AST parse for Airflow), convert (deterministic mappings for known activity/operator types, LLM-assisted for the rare ones), and package (bundle YAML, notebooks, setup scripts). Both sources emit the same intermediate representation, so only discovery and translation are source-specific.
+
+This is the accelerator for the [external orchestrators](/pipelines/external-orchestrators) decision: where that page says a cross-cloud move is the moment to ask whether the external orchestrator should survive at all, flowx is what makes "fold it into Lakeflow" a scoped conversion rather than a rewrite. Deterministic coverage is published per activity type — check your inventory against it before committing a date, and treat every agentically-translated activity as needing review.
+
+## Power BI and Alteryx — the last mile off the source stack
+
+Two accelerators handle the analytics-side work that a metastore migration leaves untouched:
+
+- [`powerbi-on-databricks-migration-accelerator`](https://github.com/databricks-solutions/powerbi-on-databricks-migration-accelerator) bulk-repoints `.pbip` semantic models at Databricks SQL + Unity Catalog by rewriting Power Query M from a single validated JSON configuration, with `-WhatIf` previews, optional dataset backups and a test suite gating each change. It repoints connections; it does **not** convert reports into Metric Views or AI/BI dashboards. See [BI tool reconnection](/analytics/bi-tool-reconnection).
+- [`alteryx-to-databricks-converter`](https://github.com/databricks-solutions/alteryx-to-databricks-converter) turns `.yxmd` workflows into PySpark, DLT, Spark SQL and Lakeflow Designer output in one run, with no Alteryx licence required. Unsupported tools are reported rather than silently dropped — the report is the manual-work list.
+
+## databricks-waf — proving the target after the move
+
+[`databricks-solutions/databricks-waf`](https://github.com/databricks-solutions/databricks-waf) assesses a workspace or account against the seven pillars of the Databricks Well-Architected Framework and keeps the chain from requirement to evidence to affected resource to action to later verification intact. Run it against the target during [hypercare](/execution/hypercare), not during cutover: it is the structured version of "is the new platform actually built well", and its published reports are the artifact for [business validation](/validation/business-validation) sign-off. It is alpha — treat its output as an input to review, not a certificate.
+
+## One config, every accelerator
+
+Each accelerator has its own config file, and each one wants the same three facts: which catalogs are in scope, which storage prefix becomes which, and which source principal becomes which target principal. Typing those three times is how a migration ends up mis-scoped in exactly one tool — and a mis-scoped filter is a silent partial migration, not an error.
+
+The runbook's companion toolkit emits them instead. `dbxmig handoff` reads the migration config and the source inventory the rest of the toolkit already uses and writes a ready-to-run `config.yaml` for workspace-migration, an `environments.yaml` plus one replication-group config per catalog for databricks-replicator, and a `HANDOFF.md` routing note that names which accelerator owns which object class — and lists the objects, in your inventory, that **none** of them move.
+
+<CodeBlock
+  language="bash"
+  code={`dbxmig -c migration.yaml handoff -i inventory.json -o ./handoff
+
+# handoff/
+#   workspace-migration/config.yaml          catalog_filter, dry_run: true, on_target_collision: fail
+#   databricks-replicator/environments.yaml  source + target workspace hosts
+#   databricks-replicator/<cat>_to_<cat>.yaml  cloud_url_mapping + principal_mapping from path_rules
+#   HANDOFF.md                                who moves what, and what nothing moves
+
+# Exits non-zero when something needs a decision -- an object no accelerator
+# covers, or a storage location with no path rule -- so it gates CI.`}
+/>
+
+<Callout variant="tip" title="The emitted configs start in dry-run on purpose">
+The workspace-migration config is written with `dry_run: true` and `on_target_collision: fail`, and every replicator group has reconciliation enabled. The first run of an accelerator against a target metastore should produce a report, not a write — the same reason [`dbxmig apply`](/templates/automation-toolkit) is dry-run unless you pass `--execute`.
+</Callout>
 
 ## migrate — workspace asset export/import
 
@@ -101,12 +176,19 @@ resources:
 
 <CodeBlock
   language="text"
-  code={`discovery      -> UCX assessment (score readiness, flag incompatibilities)
-foundation    -> Asset Bundles / Terraform (provision target workspace + UC)
-data move     -> Lakebridge converter + Replicator (Deep Clone / Delta Share)
-pipelines     -> migrate (import jobs) + manual compute re-map
-validate      -> Lakebridge Validator + reconciliation gates
-cutover       -> Replicator keeps target warm; UCX shadow tables for rollback`}
+  code={`discovery   -> UCX assessment + dbxmig inventory/gaps (readiness, incompatibilities)
+foundation  -> ai-platform-kit (target workspace, UC, identity, networking)
+            -> dbxmig handoff (one scope, emitted into every accelerator's config)
+data move   -> databricks-replicator (Deep Clone / D2D Delta Share, incremental)
+            -> workspace-migration (functions, models, filters/masks, connections)
+            -> Lakebridge converter where the source is a foreign warehouse
+pipelines   -> flowx (ADF/Airflow -> Lakeflow Jobs), dbxmig bundle (jobs, paused)
+            -> Terraform exporter (DLT, model serving, Apps)
+analytics   -> Power BI accelerator (repoint), alteryx2databricks (convert)
+rebuild     -> materialized views + streaming tables: refresh the pipeline. No
+               accelerator moves these.
+validate    -> Lakebridge Validator, dbxmig reconcile, databricks-waf assessment
+cutover     -> Replicator keeps the target warm; UCX shadow tables for rollback`}
 />
 
 ## Tooling readiness checklist
@@ -120,6 +202,11 @@ cutover       -> Replicator keeps target warm; UCX shadow tables for rollback`}
     { text: 'Replication cadence defined (Deep Clone / CDF / Auto Loader) for dual-run', checked: false },
     { text: 'Target workspace expressed as Asset Bundles / Terraform for repeatability', checked: false },
     { text: 'Cross-cloud mounts planned via Delta Sharing, not external locations', checked: false },
+    { text: 'Accelerator configs generated from one scope (dbxmig handoff), not hand-typed per tool', checked: false },
+    { text: 'Every materialized view and streaming table has a named owner and a pipeline-refresh plan — no accelerator moves them', checked: false },
+    { text: 'workspace-migration validated on a pilot catalog before cross-cloud use', checked: false },
+    { text: 'External orchestrator decision made: retire, keep, or convert with flowx', checked: false },
+    { text: 'Power BI / Alteryx estates inventoried and routed to their converters', checked: false },
   ]}
 />
 
@@ -128,6 +215,12 @@ cutover       -> Replicator keeps target warm; UCX shadow tables for rollback`}
 - UCX — [github.com/databrickslabs/ucx](https://github.com/databrickslabs/ucx) · [UCX docs](https://docs.databricks.com/aws/en/data-governance/unity-catalog/ucx)
 - Lakebridge — [Introducing Lakebridge](https://www.databricks.com/blog/introducing-lakebridge-free-open-data-migration-databricks-sql)
 - Databricks Replicator — [github.com/databricks-solutions/databricks-replicator](https://github.com/databricks-solutions/databricks-replicator)
+- workspace-migration — [github.com/databricks-solutions/workspace-migration](https://github.com/databricks-solutions/workspace-migration)
+- ai-platform-kit — [github.com/databricks-solutions/ai-platform-kit](https://github.com/databricks-solutions/ai-platform-kit)
+- flowx — [github.com/databricks-solutions/flowx](https://github.com/databricks-solutions/flowx)
+- Power BI on Databricks migration accelerator — [github.com/databricks-solutions/powerbi-on-databricks-migration-accelerator](https://github.com/databricks-solutions/powerbi-on-databricks-migration-accelerator)
+- alteryx-to-databricks-converter — [github.com/databricks-solutions/alteryx-to-databricks-converter](https://github.com/databricks-solutions/alteryx-to-databricks-converter)
+- Databricks Well-Architected assessment — [github.com/databricks-solutions/databricks-waf](https://github.com/databricks-solutions/databricks-waf)
 - migrate — [github.com/databrickslabs/migrate](https://github.com/databrickslabs/migrate)
 - Asset Bundles — [Databricks docs](https://docs.databricks.com/aws/en/dev-tools/bundles/)
 - Migration strategy lessons — [Databricks blog](https://www.databricks.com/blog/databricks-migration-strategy-lessons-learned)
