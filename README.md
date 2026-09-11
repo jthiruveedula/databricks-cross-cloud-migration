@@ -37,7 +37,7 @@ New to the runbook, or leading a migration? **[Start here — by role](https://j
 | **Validation** | Technical, data reconciliation, security, and business sign-off |
 | **Templates** | Checklists, Terraform patterns, sample scripts, RACI, risk register |
 | **Troubleshooting** | Common errors, anti-patterns, FAQ |
-| **Accelerators** | AI-assisted migration, and the ready-made Databricks tooling — UCX, Lakebridge, and the `databricks-solutions` accelerators (Replicator, workspace-migration, flowx, ai-platform-kit, the Power BI and Alteryx converters, the Well-Architected assessment) — what each automates, where it stops, and which objects none of them move |
+| **Accelerators** | AI-assisted migration, and the ready-made Databricks tooling — UCX, Lakebridge, the `databricks-solutions` accelerators (Replicator, workspace-migration, flowx, ai-platform-kit, the Power BI and Alteryx converters, the Well-Architected assessment), and `mlflow-export-import` for MLflow/model registry — what each automates, where it stops, and which objects none of them move |
 | **Collaboration** | Cross-cloud data collaboration — Delta Sharing, Lakehouse Federation, Clean Rooms, dual-run CDC |
 | **Tools** | Browser-only, no-data-leaves-the-page calculators: cost calculator, instance type mapper, timeline estimator, RACI builder, dependency graph |
 
