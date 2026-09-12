@@ -47,6 +47,16 @@ Every page follows the same shape: executive framing, why it matters, applicabil
 
 The homepage includes an interactive planner: pick a source and target cloud and it returns whether you're looking at a same-cloud landing-zone move or a full cross-cloud platform reset, the specific identity/storage/network rework that pair requires, a recommended runbook reading path through the phases above, and the relevant toolset (Databricks CLI, UCX, Terraform provider, Delta Deep Clone, Delta Sharing, cloud CLIs).
 
+## migration-assess: a coding-agent skill
+
+`skills/migration-assess` scans a codebase for Databricks migration blockers (DBFS paths, `hive_metastore.` refs, cloud-specific identity, stage-based MLflow URIs, manual job-CLI loops) and reports which accelerator from [Databricks migration tooling](https://jthiruveedula.github.io/databricks-cross-cloud-migration/accelerators/databricks-tooling) fixes each one. Stdlib-only Python, no install:
+
+```bash
+python3 skills/migration-assess/scripts/assess.py <path> -o assessment.md
+```
+
+Installable as a Claude Code plugin (this repo's `.claude-plugin/`) or via `databricks aitools install --path`.
+
 ## Tech stack and content tooling
 
 - **[Astro 7](https://astro.build/)** with **[MDX](https://docs.astro.build/en/guides/integrations-guide/mdx/)** — every runbook page is a `.mdx` file: prose plus interactive React islands (`client:visible`), not a static-site-generator template.
