@@ -72,7 +72,7 @@ Lakebridge is Databricks' free, open migration engine (GA). It automates **up to
 Three components:
 - **Analyzer** — profiles and assesses source schemas (Teradata, Synapse, and more).
 - **Converter** — rule-based + AI-powered conversion of SQL/ETL to Databricks SQL / Spark SQL.
-- **Validator** — schema-, row-, and column-level reconciliation against the source.
+- **Reconcile** (the Validator) — `schema`, `row` (hash-based, no join key needed), `data` (join-column, per-column mismatch detail), and aggregate (`MIN`/`MAX`/`COUNT`/`SUM`/`AVG`/…) reconciliation, with built-in sampling of mismatch rows. Databricks is a listed source in its own right, so this runs Databricks-to-Databricks — see [data reconciliation](/validation/data-reconciliation#a-maintained-tool-that-already-does-more-than-a-hand-rolled-query) for the exact report types and config shape.
 
 <Callout variant="tip" title="Pair Lakebridge with AI-assisted translation">
 Lakebridge's deterministic converter is the "core" in the hybrid pattern. Where it cannot express a transform, the AI-powered converter and the [AI-assisted migration](/accelerators/ai-assisted-migration) playbook take the edge cases — always gated by the Validator.
