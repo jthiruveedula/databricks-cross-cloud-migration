@@ -39,6 +39,42 @@ terraform-provider-databricks exporter \\
 
 This is distinct from [UCX-assisted migration](/governance/ucx-strategy): the exporter captures workspace-level object configuration as IaC; UCX assesses and executes the Hive-metastore-to-Unity-Catalog upgrade. Large estates typically use both — UCX for the governance upgrade, the exporter for capturing workspace object configuration as a Terraform starting point.
 
+<Callout client:visible variant="warning" title="Four exporter behaviors that change a bulk-job migration plan">
+  Verified against the exporter's own guide, not assumed:
+
+  - **`-services` filters and organizes the output file, it does not split it into per-team modules.** There is no flag that produces a genuinely separate Terraform module per domain/team — if you want that, you generate the regex/name-list per wave yourself and run the exporter once per wave (see the DAB alternative below for a cleaner way to do this for jobs specifically).
+  - **Jobs deployed via Databricks Asset Bundles are not exported at all.** The exporter's own guide states it plainly. If a source job was already DAB-managed, re-deploy its bundle against the target instead of expecting the exporter to pick it up.
+  - **`-incremental` does not work for jobs or clusters** — only notebooks and SQL objects have reliable modification timestamps. A re-export after source changes re-exports every job and cluster in full, not just the changed ones.
+  - **`-targetCloud`/`-nodeTypeMappingFile` translate cross-cloud node types automatically**, with Databricks' own guide citing roughly 99.5% coverage — but attributes with no target-cloud equivalent (an AWS `instance_profile_arn`, for instance) are silently omitted from the output rather than erroring, so diff the exported plan against the source, don't just apply it.
+</Callout>
+
+<Callout client:visible variant="tip" title="For jobs/bundles specifically, Asset Bundle custom templates beat a giant exporter run">
+  `databricks bundle init` supports a fully non-interactive, scriptable mode: `databricks bundle init --config-file answers-<team>.json` reads a JSON answers file matching a `databricks_template_schema.json` and expands a bundle project from it — no manual prompts. For a large estate, this is a cleaner factory than one exporter invocation covering thousands of jobs: emit one small JSON per team/domain/environment from your own job inventory (already tagged by owner in [asset inventory](/discovery/asset-inventory)) and invoke `bundle init` once per file. See [Asset Bundle custom templates](https://docs.databricks.com/aws/en/dev-tools/bundles/template-tutorial).
+</Callout>
+
+## Factory-pattern modules — what's real, what's stale
+
+<Callout client:visible variant="warning" title="Verify staleness yourself before depending on any of these">
+  GitHub's `updated_at` timestamp bumps on stars, issue comments, and other metadata — it is not proof of a code push. Every date below is the actual last-commit (`pushed_at`) date, confirmed by reading the repo, not inferred from a star count or a green "updated" badge.
+</Callout>
+
+| Module | Scope | Status (as of Sep 2026) | Input shape |
+|---|---|---|---|
+| [`databricks/terraform-databricks-examples`](https://github.com/databricks/terraform-databricks-examples) | Official, ~30 independent per-cloud example/module folders (`aws-databricks-uc`, `adb-lakehouse-uc`, `gcp-workspace-basic`, …) | Active — commits within the last month | No unified schema; each folder has its own `variables.tf`. The `aws-databricks-uc` metastore-assignment pattern (`databricks_workspace_ids = list(string)`) is the one cleanly-driveable exception — a flat array of workspace IDs |
+| [`Azure/avm-res-databricks-workspace`](https://registry.terraform.io/modules/Azure/avm-res-databricks-workspace/azurerm/latest) | Microsoft's own Azure Verified Module for a Databricks workspace (network injection, access connectors) | Active, MIT — commit days old, 116k+ registry downloads | Typed objects: `custom_parameters { virtual_network_id, public_subnet_name, private_subnet_name, … }`, `access_connector = map(object({...}))` |
+| [`data-platform-hq/terraform-databricks-unity-catalog`](https://github.com/data-platform-hq/terraform-databricks-unity-catalog) | Catalog + schema + grants factory, one list entry per catalog | Apache-2.0, but ~19 months with no commits — pin the exact registry version and plan-test before depending on it | `catalog_config = list(object({catalog_name, catalog_owner, catalog_storage_root, schema_configs = list({...}), catalog_grants = list({principal, privileges}), …}))` — the cleanest catalog-factory shape found, genuinely a 1:1 mapping from a catalog/schema/grant inventory table |
+| [`data-platform-hq/terraform-databricks-external-location`](https://github.com/data-platform-hq/terraform-databricks-external-location) | Storage credential + external locations, list-driven | Apache-2.0, same ~19-month staleness as above | `external_locations = list(object({name, url, credentials_name, permissions, …}))` |
+| [`databricks/terraform-databricks-sra`](https://github.com/databricks/terraform-databricks-sra) | Per-cloud (`aws/`, `azure/`, `gcp/`) secure reference deployment | Very active (218★, commits within days) but the repo's own README states it is **"provided for exploration purposes only… not formally supported… under any SLAs"** | Independent per-cloud `tfvars`, no shared schema across clouds |
+| [`PerfectThymeTech/terraform-azurerm-data-landing-zone`](https://registry.terraform.io/modules/PerfectThymeTech/data-landing-zone/azurerm/latest) | Single flat var-file drives an entire Azure data landing zone including Databricks (via the `databricks` + `azapi` providers) | MIT, but ~14 months stale, 20 open issues | One root `variables.tf` — the closest thing here to "one file drives everything," but Azure-only |
+
+<Callout client:visible variant="warning" title="Two traps: a project that looks alive, and a license that forbids the fix everyone assumes it allows">
+  **`aztfmod/terraform-azurerm-caf`** (588 stars, MIT, a `databricks_workspace` module with exactly the `for_each`-over-a-map factory shape a search for "azure caf databricks factory" turns up first) reads as actively maintained from its GitHub activity feed — but its `main` branch has had no commits merged since March 2025; the newer-looking timestamps GitHub shows are issue/PR/star events, not code. Confirm the actual last commit before adopting it, not the page's "updated" date.
+
+  **`databricks/terraform-databricks-lakehouse-blueprints`** composes real, well-shaped AWS/Azure modules (`aws_base` → `aws_customer_managed_vpc` → `aws_uc`, chained via outputs) — but its license explicitly states the source **"constitutes Databricks Confidential Information"** and that **you may not make derivative works or changes to the source code** without a separate agreement with Databricks. The common instinct — "fork it and adapt it" — is not permitted by this repo's own license; use it only as published, unmodified.
+</Callout>
+
+None of the modules above ships a schema that dbxmig auto-generates today — [`dbxmig handoff`](/templates/automation-toolkit) covers the migration *accelerators* (databricks-replicator, workspace-migration), not target-foundation Terraform. The `aws-databricks-uc` workspace-ID list and the `data-platform-hq` catalog-factory shape are the two candidates worth automating if this becomes a repeated need — both are a flat, list-of-objects transform away from data this toolkit's `Inventory` already holds.
+
 ## AWS target foundation
 
 <CodeBlock client:visible language="hcl" filename="aws-target.tf" code={`terraform {
@@ -178,4 +214,18 @@ The `databricks` Terraform provider's resource names and required arguments diff
   { id: 'plan-review', label: 'terraform plan reviewed in CI before every apply' },
   { id: 'state', label: 'Remote state configured for the target foundation module' },
   { id: 'validate', label: 'Target metastore, storage credential, and connectivity validated post-apply' },
+  { id: 'factory-staleness', label: 'Any third-party factory-pattern module checked for actual last-commit date, not the repo page\'s "updated" badge' },
+  { id: 'factory-license', label: 'Module license confirmed to permit forking/modifying before adapting it, not just using it as published' },
 ]} />
+
+## Sources
+
+- Databricks Terraform exporter guide — [experimental-exporter.md](https://github.com/databricks/terraform-provider-databricks/blob/main/docs/guides/experimental-exporter.md) (`-services` scope, DAB-managed jobs excluded, `-incremental` limits, `-targetCloud`/`-nodeTypeMappingFile` coverage)
+- Asset Bundle custom templates — [template-tutorial](https://docs.databricks.com/aws/en/dev-tools/bundles/template-tutorial) (`bundle init --config-file`)
+- [databricks/terraform-databricks-examples](https://github.com/databricks/terraform-databricks-examples)
+- [Azure/avm-res-databricks-workspace](https://registry.terraform.io/modules/Azure/avm-res-databricks-workspace/azurerm/latest)
+- [data-platform-hq/terraform-databricks-unity-catalog](https://github.com/data-platform-hq/terraform-databricks-unity-catalog) · [terraform-databricks-external-location](https://github.com/data-platform-hq/terraform-databricks-external-location)
+- [databricks/terraform-databricks-sra](https://github.com/databricks/terraform-databricks-sra)
+- [PerfectThymeTech/terraform-azurerm-data-landing-zone](https://registry.terraform.io/modules/PerfectThymeTech/data-landing-zone/azurerm/latest)
+- [aztfmod/terraform-azurerm-caf](https://github.com/aztfmod/terraform-azurerm-caf) — cited as a staleness cautionary example, not a recommendation
+- [databricks/terraform-databricks-lakehouse-blueprints](https://github.com/databricks/terraform-databricks-lakehouse-blueprints) — cited for its license restriction, not as a recommended fork target

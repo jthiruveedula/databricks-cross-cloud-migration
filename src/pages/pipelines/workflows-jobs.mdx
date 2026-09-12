@@ -57,6 +57,30 @@ databricks jobs create --json @job-target.json`} />
   And the new `job_id` is what breaks things downstream — every [external orchestrator](/pipelines/external-orchestrators) reference, every `run-now` call, and anything pinned to the old number. Keep a source-to-target job ID map from this step; it is the same artifact the model and query migrations need for their own IDs. [`dbxmig bundle`](/templates/automation-toolkit) does this transformation for you, including turning the workspace-scoped IDs into variables.
 </Callout>
 
+## Migrating hundreds to thousands of jobs quickly
+
+<Callout client:visible variant="tip" title="Bulk-export via Terraform, not one job at a time">
+  At more than a handful of jobs, the export/import loop above is the wrong shape. The [Databricks Terraform Exporter](https://github.com/databricks/terraform-provider-databricks/blob/main/docs/guides/experimental-exporter.md) (an experimental feature of the `databricks/databricks` Terraform provider) bulk-exports jobs, clusters, notebooks and policies as importable Terraform in one run — including `-targetCloud`/`-nodeTypeMappingFile` for automatic cross-cloud node-type translation (Databricks' own guide states roughly 99.5% coverage; attributes with no target-cloud equivalent, like an AWS `instance_profile_arn`, are silently omitted rather than erroring — diff the plan, don't just apply it).
+
+  Four behaviors change how you plan a bulk run, confirmed from the exporter's own guide:
+  - **Jobs deployed via Databricks Asset Bundles are not exported at all** — re-deploy their bundle against the target instead.
+  - **`-incremental` does not apply to jobs or clusters**, only notebooks and SQL objects — a re-export after source changes re-exports every job in full.
+  - **`-services` filters and organizes output, it does not split it into per-team Terraform modules** — there's no flag for that.
+  - **Exporter parallelism is tunable but low by default**: `EXPORTER_PARALLELISM` defaults to 15, `EXPORTER_WS_LIST_PARALLELISM` to 5, and most per-resource-type handlers default to 2 if unset — raise these explicitly for a large export rather than assuming the tool self-tunes.
+</Callout>
+
+<Callout client:visible variant="tip" title="For jobs/bundles specifically, a scripted bundle-init factory beats a giant exporter run">
+  `databricks bundle init --config-file answers-<team>.json` runs fully non-interactively against a JSON answers file matching a `databricks_template_schema.json` — no manual prompts. For a job estate in the thousands, emit one small JSON per team/domain from your own job-ownership inventory and invoke `bundle init` once per file, rather than one exporter run covering the whole workspace. See [Asset Bundle custom templates](https://docs.databricks.com/aws/en/dev-tools/bundles/template-tutorial) and [Terraform patterns](/templates/terraform-patterns#factory-pattern-modules--whats-real-whats-stale).
+</Callout>
+
+<Callout client:visible variant="warning" title="What actually gates throughput at scale">
+  The Jobs API itself is rarely the bottleneck — `/jobs/create` is rate-limited at 20 requests/second, `/jobs/runs/submit` at 35/s, and a workspace can hold 12,000 saved jobs and create up to 10,000/hour, all fixed ceilings. The real limits worth planning around: 2,000 simultaneously running tasks and 750 simultaneously running parent tasks per workspace (`Run job`/`For each` tasks excluded from both counts) — the concurrency ceiling that matters at cutover is per-workspace, not per-job. And if bundle deploys feel slow, check whether the deploying CLI is on the newer **direct bundle engine** (CLI 0.279.0+, default from CLI 1.3.0+, or set `DATABRICKS_BUNDLE_ENGINE=direct`) — Databricks states it deploys up to 40% faster than the classic Terraform-based engine.
+</Callout>
+
+<Callout client:visible variant="warning" title="A bundle-deployed job is locked from manual edits — by design">
+  A job deployed through an Asset Bundle gets `edit_mode: UI_LOCKED` and cannot be switched to editable from the UI — this is deliberate Databricks behavior, not a bug to route around. Plan any post-migration hotfix path through the bundle source and a re-deploy, not a UI edit that will be silently blocked.
+</Callout>
+
 ## Task reference rewrites
 
 ### Notebook paths
@@ -119,4 +143,14 @@ If a target job fails, re-enable the source job and investigate. Do not decommis
   { id: 'permissions', label: 'Replay job permissions' },
   { id: 'test', label: 'Run smoke tests for each job' },
   { id: 'history', label: 'Source job run history archived if needed post-cutover' },
+  { id: 'bulk-path', label: 'Bulk migration (100+ jobs) uses the Terraform Exporter or scripted bundle-init, not a per-job export loop' },
+  { id: 'dab-check', label: 'Confirmed which source jobs are already DAB-managed before assuming the exporter will pick them up' },
 ]} />
+
+## Sources
+
+- Databricks Terraform Exporter guide — [experimental-exporter.md](https://github.com/databricks/terraform-provider-databricks/blob/main/docs/guides/experimental-exporter.md)
+- Asset Bundle custom templates — [template-tutorial](https://docs.databricks.com/aws/en/dev-tools/bundles/template-tutorial)
+- Databricks — [Resource limits](https://docs.databricks.com/aws/en/resources/limits) (Jobs API rate limits, task/parent-task concurrency ceilings)
+- Databricks — [Direct bundle engine](https://docs.databricks.com/aws/en/dev-tools/bundles/direct)
+- Databricks community — [UI_LOCKED edit mode for bundle-deployed jobs](https://community.databricks.com/t5/machine-learning/not-able-to-edit-mode-ui-locked-to-editable-in-bundle-deployment/td-p/80185)

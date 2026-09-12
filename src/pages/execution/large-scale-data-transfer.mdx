@@ -81,6 +81,7 @@ Transfer-path failures are recoverable without touching migrated state — retry
 
 ## Automation opportunity
 
+- For the Databricks-to-Databricks half of the transfer, [`databricks-replicator`](https://github.com/databricks-solutions/databricks-replicator) is the maintained accelerator: incremental Deep Clone and Auto Loader over D2D Delta Sharing, with configurable concurrency and post-run reconciliation, so repeat syncs during dual-run cost a delta rather than a full re-lift. It does not replace the bulk storage-layer copy for data that is not already a Delta table in Unity Catalog. See [Databricks migration tooling](/accelerators/databricks-tooling).
 - Wire the throughput pilot into CI so a regression (a slower measured number on re-run) fails the check before it becomes a missed cutover date.
 - Feed the measured throughput number back into the [timeline estimator](/tools/timeline-estimator) so schedule estimates use real numbers, not a default assumption.
 

@@ -77,6 +77,34 @@ dbxmig -c migration.yaml wave-plan --crossrefs crossrefs.json --ownership-file o
 `asset_label` matches `crossrefs`'s `"{asset_class}:{name}"` format. YAML works
 too, keyed by label.
 
+## Handing the move to the accelerators that already do it
+
+This toolkit plans the migration; it deliberately does not try to be the thing
+that moves petabytes. Databricks already ships field-maintained accelerators for
+that, and each wants the same three facts -- which catalogs are in scope, which
+storage prefix becomes which, which source principal becomes which target
+principal. Typing those into three config files is how a migration ends up
+mis-scoped in exactly one tool, and a mis-scoped filter is a silent partial
+migration rather than an error.
+
+```bash
+dbxmig -c migration.yaml handoff -i inventory.json -o ./handoff
+```
+
+```
+handoff/
+  workspace-migration/config.yaml            catalog_filter, dry_run: true, on_target_collision: fail
+  databricks-replicator/environments.yaml    source + target workspace hosts
+  databricks-replicator/<src>_to_<tgt>.yaml  cloud_url_mapping + principal_mapping from path_rules
+  HANDOFF.md                                 which accelerator owns which object class
+```
+
+`HANDOFF.md` also lists what *nothing* moves -- materialized views and streaming
+tables (both accelerators hard-skip them; the pipeline is refreshed against the
+target at cutover), non-SQL/Python functions, and any external location with no
+`path_rules` entry. The command exits non-zero when that list is non-empty, so
+it gates CI the same way `gaps` does.
+
 ## The sequence
 
 | Command | What it does | Needs a workspace |
@@ -94,6 +122,7 @@ too, keyed by label.
 | `grants` | Emit translated `GRANT` and `SET OWNER` statements | no |
 | `acls` | Replay **workspace object ACLs** — jobs, clusters, pools, warehouses, pipelines, policies — as a name-resolved script | no |
 | `bundle` | Generate Declarative Automation Bundle YAML from the workspace inventory. `--streaming` lists streaming assets and their migration strategy in `REVIEW.md` | no |
+| `handoff` | Emit the ready-made accelerators' own config files — [`databricks-replicator`](https://github.com/databricks-solutions/databricks-replicator), [`workspace-migration`](https://github.com/databricks-solutions/workspace-migration) — filled from this migration's scope, path rules and principal map, plus a `HANDOFF.md` routing note naming what none of them move | no |
 | `apply` | Execute the plan, resumably (dry-run unless `--execute`) | yes (target) |
 | `verify` | Prove the target holds the **grants and object ACLs** the migration intended — diffs expected against actual | no |
 | `reconcile` | Prove the target matches the source. `row_count_tolerance` in the config absorbs expected in-flight drift instead of hard-blocking on it | no |
@@ -104,6 +133,7 @@ export DBX_SOURCE_TOKEN=...   # never in the config file
 dbxmig -c migration.yaml validate
 dbxmig -c migration.yaml inventory -o inventory.json
 dbxmig -c migration.yaml gaps      -i inventory.json -o gaps.md      # fix these first
+dbxmig -c migration.yaml handoff   -i inventory.json -o ./handoff    # accelerator configs
 dbxmig -c migration.yaml ddl       -i inventory.json -o target.sql   # review this diff
 dbxmig -c migration.yaml grants    -i inventory.json -o grants.sql
 dbxmig -c migration.yaml apply     -i inventory.json                 # dry run
@@ -177,7 +207,7 @@ Deliberately out of scope, and reported as manual work rather than pretended:
 ## Tests
 
 ```bash
-pytest          # 306 tests, no credentials, no network
+pytest          # 316 tests, no credentials, no network
 ruff check .
 ```
 
