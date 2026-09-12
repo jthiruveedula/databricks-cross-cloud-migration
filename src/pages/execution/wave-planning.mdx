@@ -71,6 +71,18 @@ Applies to any migration with more than a handful of dependency-chain clusters. 
 
 ## Wave scoring model
 
+<Callout client:visible variant="tip" title="dbxmig wave-plan computes this — don't score clusters by hand">
+  Clustering and scoring below is exactly what `dbxmig wave-plan` does, driven by `dbxmig crossrefs`'s shared-references output:
+
+  <CodeBlock client:visible language="bash" filename="wave_plan.sh" code={`# Cluster assets by shared reference (union-find), score, and assign waves --
+# see the automation toolkit.
+dbxmig -c migration.yaml crossrefs -w workspace.json --json > crossrefs.json
+dbxmig -c migration.yaml wave-plan --crossrefs crossrefs.json \\
+  --ownership-file owners.csv -o wave-plan.md`} />
+
+  It derives `dependency_count` from cluster size automatically — the one factor it can actually observe from workspace metadata. The other four (criticality, risk tolerance, data size, owner readiness) are organizational judgment calls it cannot infer, so they come from `--scores`/`--ownership-file` or default to 1 (earliest wave) rather than an invented number. The formula and worked example below are what the tool computes; read them to understand the number it gives you and to know what to put in `--scores` when you want to override a default.
+</Callout>
+
 Score each dependency-chain cluster (not each individual asset — see [dependency mapping](/discovery/dependency-mapping)) on a 1–5 scale per criterion, then combine with weights so wave assignment is a reproducible number, not a gut call:
 
 `score = (0.30 × criticality) + (0.25 × dependency_count) + (0.20 × risk_tolerance) + (0.15 × data_size) + (0.10 × owner_readiness)`
@@ -99,7 +111,7 @@ Set wave-boundary thresholds once, before scoring any real workload, so the cuto
 
 ## Wave plan template
 
-A reference structure for recording your own wave plan — no tool on this site parses this file; it's a starting shape to fill in and adapt (a wiki page, a Confluence table, or an actual YAML file your team's tooling reads are all fine substitutes). Replace the `<WS_ID>`/`<TWS_ID>` placeholders with real workspace IDs, and the `criteria` entries with your actual entry/exit gates.
+`dbxmig wave-plan`'s markdown output is the real, generated version of this shape — the YAML below is for hand-editing entry/exit criteria and rollback notes the tool doesn't compute, not a from-scratch template:
 
 <CodeBlock client:visible language="yaml" filename="wave-plan.yaml" code={`waves:
   - id: wave-0
@@ -133,7 +145,6 @@ Rollback is performed per wave. If a wave fails, revert the workloads in that wa
 
 ## Automation opportunity
 
-- `dbxmig wave-plan --crossrefs crossrefs.json` clusters assets by the shared-references signal above (union-find over `dbxmig crossrefs --json`'s output) and scores each cluster on this page's weighted formula — see the [automation toolkit](/templates/automation-toolkit). It derives `dependency_count` from cluster size automatically; the other four factors (criticality, risk tolerance, data size, owner readiness) are organizational judgment calls it cannot observe, so pass them via `--scores` or accept the default of 1 (earliest wave) rather than trust an invented number.
 - Generate wave manifests from dependency graphs.
 - Use orchestration tools to trigger validation and cutover steps per wave.
 

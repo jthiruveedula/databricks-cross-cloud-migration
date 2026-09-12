@@ -72,6 +72,15 @@ Partner accelerators report strong results:
 Accelerators are strong on parsing and column-level lineage, but business logic embedded in multi-step orchestration frequently needs a subject-matter expert to confirm semantic equivalence. Treat generated pipelines as a first draft, not a signed-off deliverable.
 </Callout>
 
+## Coding agents with Databricks-native skills
+
+`databricks aitools install` puts Databricks-specific skills straight into Claude Code, Cursor, Codex CLI, GitHub Copilot, or Gemini CLI — the agent gets Databricks' own conventions for bundles, jobs, and SQL instead of guessing:
+
+<CodeBlock language="bash" code={`databricks aitools install --agents claude-code,cursor
+# agent now assesses/rewrites bundle + job + SQL code with Databricks' own patterns`} />
+
+Point it at the [bulk DAB-extraction loop](/pipelines/workflows-jobs#extracting-existing-jobs-as-dabs-in-bulk) to draft the cross-cloud rewrites per generated bundle file — still gated by reconciliation, same as any other AI output on this page.
+
 ## Metadata discovery and cataloging
 
 Unity Catalog captures **column-level lineage in real time** across every workspace attached to a metastore — impact analysis, root-cause, and sensitive-data flow tracking come for free once you are UC-native. Partner LLM tooling (Persistent iAURA, Tiger Analytics IDX, EY Data Fusion) compresses the manual discovery-and-mapping phase by 40–50% and auto-detects PII/PCI.
@@ -128,3 +137,4 @@ The de-facto requirement for regulated migrations: **keep code and data inside t
 - AWS DMS Schema Conversion GenAI — [InfoWorld](https://www.infoworld.com/article/3616156/aws-database-migration-service-gets-gen-ai-powered-schema-conversion.html)
 - Databricks — [Data Quality Monitoring at scale with agentic AI](https://www.databricks.com/blog/data-quality-monitoring-scale-agentic-ai)
 - Databricks — [AI Functions (ai_query)](https://docs.databricks.com/aws/en/large-language-models/ai-query)
+- Databricks CLI — [aitools command reference](https://docs.databricks.com/aws/en/dev-tools/cli/reference/aitools-commands)

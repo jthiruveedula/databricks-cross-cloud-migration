@@ -1,7 +1,7 @@
 ---
 title: 'Workflows and jobs'
 layout: ../../layouts/Layout.astro
-description: 'Migrate Databricks Workflows jobs, task graphs, triggers, and notifications.'
+description: 'Migrate Databricks Workflows jobs, task graphs, triggers, and notifications — fast, via the Terraform Exporter or a scripted bundle-init factory, not one job at a time.'
 ---
 
 import Callout from '../../components/Callout.tsx';
@@ -12,7 +12,7 @@ import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Workflows and jobs
 
-Databricks Workflows is the native orchestrator for notebooks, Python, SQL, and DLT tasks. Migrating jobs requires recreating definitions in the target workspace and rewriting any cloud-specific references.
+Databricks Workflows is the native orchestrator for notebooks, Python, SQL, and DLT tasks. At any estate past a handful of jobs, migrating them one at a time through the CLI is the wrong shape — the [Databricks Terraform Exporter](https://github.com/databricks/terraform-provider-databricks/blob/main/docs/guides/experimental-exporter.md) or a scripted `bundle init` factory does the bulk-export/recreate mechanics; what's left for you to do by hand is rewriting cloud-specific references and deciding what genuinely can't be automated (file-arrival triggers, run history).
 
 <ArchifyDiagram
   client:visible
@@ -26,7 +26,7 @@ Databricks Workflows is the native orchestrator for notebooks, Python, SQL, and 
 
 | Component | Consideration |
 |-----------|---------------|
-| Task graph | Export JSON and recreate; validate dependencies |
+| Task graph | Bulk-exported and recreated by the Exporter/bundle path below; validate dependencies survived |
 | Cluster / job cluster | Map node types, runtime, access mode |
 | Notebook tasks | Ensure notebooks exist in target workspace or repos |
 | Python wheel tasks | Rebuild and publish wheels to target artifact store |
@@ -36,7 +36,72 @@ Databricks Workflows is the native orchestrator for notebooks, Python, SQL, and 
 | Notifications | Update email lists and webhook endpoints |
 | Permissions | Replay job ACLs with mapped principals |
 
-## Export and import
+## The fast path: bulk-export via Terraform, not one job at a time
+
+<Callout client:visible variant="tip" title="Terraform Exporter — the default for anything past a handful of jobs">
+  The [Databricks Terraform Exporter](https://github.com/databricks/terraform-provider-databricks/blob/main/docs/guides/experimental-exporter.md) (an experimental feature of the `databricks/databricks` Terraform provider) bulk-exports jobs, clusters, notebooks and policies as importable Terraform in one run — including `-targetCloud`/`-nodeTypeMappingFile` for automatic cross-cloud node-type translation (Databricks' own guide states roughly 99.5% coverage; attributes with no target-cloud equivalent, like an AWS `instance_profile_arn`, are silently omitted rather than erroring — diff the plan, don't just apply it).
+
+  <CodeBlock client:visible language="bash" code={`export DATABRICKS_HOST=<SOURCE_WORKSPACE_URL>
+export DATABRICKS_TOKEN=<TOKEN>
+
+terraform-provider-databricks exporter \\
+  -skip-interactive \\
+  -listing=jobs,compute,notebooks,policies \\
+  -targetCloud=aws \\
+  -nodeTypeMappingFile=node-types.json \\
+  -directory ./exported`} />
+
+  Four behaviors change how you plan a bulk run, confirmed from the exporter's own guide:
+  - **Jobs deployed via Databricks Asset Bundles are not exported at all** — re-deploy their bundle against the target instead.
+  - **`-incremental` does not apply to jobs or clusters**, only notebooks and SQL objects — a re-export after source changes re-exports every job in full.
+  - **`-services` filters and organizes output, it does not split it into per-team Terraform modules** — there's no flag for that.
+  - **Exporter parallelism is tunable but low by default**: `EXPORTER_PARALLELISM` defaults to 15, `EXPORTER_WS_LIST_PARALLELISM` to 5, and most per-resource-type handlers default to 2 if unset — raise these explicitly for a large export rather than assuming the tool self-tunes.
+</Callout>
+
+<Callout client:visible variant="tip" title="For jobs/bundles specifically, a scripted bundle-init factory beats a giant exporter run">
+  `databricks bundle init --config-file answers-<team>.json` runs fully non-interactively against a JSON answers file matching a `databricks_template_schema.json` — no manual prompts. For a job estate in the thousands, emit one small JSON per team/domain from your own job-ownership inventory and invoke `bundle init` once per file, rather than one exporter run covering the whole workspace. See [Asset Bundle custom templates](https://docs.databricks.com/aws/en/dev-tools/bundles/template-tutorial) and [Terraform patterns](/templates/terraform-patterns#factory-pattern-modules--whats-real-whats-stale).
+</Callout>
+
+<Callout client:visible variant="warning" title="Strip the server-owned fields before re-creating, or the create fails">
+  Whichever path recreates a job, the same rule applies: a job exported from source carries `job_id`, `created_time`, and `creator_user_name`. Those belong to the source workspace: the target assigns its own.
+
+  And the new `job_id` is what breaks things downstream — every [external orchestrator](/pipelines/external-orchestrators) reference, every `run-now` call, and anything pinned to the old number. Keep a source-to-target job ID map from this step; it is the same artifact the model and query migrations need for their own IDs. [`dbxmig bundle`](/templates/automation-toolkit) does this transformation for you, including turning the workspace-scoped IDs into variables.
+</Callout>
+
+<Callout client:visible variant="warning" title="What actually gates throughput at scale">
+  The Jobs API itself is rarely the bottleneck — `/jobs/create` is rate-limited at 20 requests/second, `/jobs/runs/submit` at 35/s, and a workspace can hold 12,000 saved jobs and create up to 10,000/hour, all fixed ceilings. The real limits worth planning around: 2,000 simultaneously running tasks and 750 simultaneously running parent tasks per workspace (`Run job`/`For each` tasks excluded from both counts) — the concurrency ceiling that matters at cutover is per-workspace, not per-job. And if bundle deploys feel slow, check whether the deploying CLI is on the newer **direct bundle engine** (CLI 0.279.0+, default from CLI 1.3.0+, or set `DATABRICKS_BUNDLE_ENGINE=direct`) — Databricks states it deploys up to 40% faster than the classic Terraform-based engine.
+</Callout>
+
+<Callout client:visible variant="warning" title="A bundle-deployed job is locked from manual edits — by design">
+  A job deployed through an Asset Bundle gets `edit_mode: UI_LOCKED` and cannot be switched to editable from the UI — this is deliberate Databricks behavior, not a bug to route around. Plan any post-migration hotfix path through the bundle source and a re-deploy, not a UI edit that will be silently blocked.
+</Callout>
+
+## Extracting existing jobs as DABs, in bulk
+
+<Callout client:visible variant="tip" title="databricks bundle generate job — one job's UI-created config into bundle YAML">
+  For jobs that were built by hand in the UI and never lived as code, `databricks bundle generate job --existing-job-id <id>` reverse-engineers that job's live settings into a bundle-ready `resources/*.yml` plus a matching notebook/file layout — the step before you can `bundle deploy` it into target at all. It takes **one job ID per invocation**, not a bulk list, so at scale this is a loop over your job inventory, not a single command:
+
+  <CodeBlock client:visible language="bash" filename="dabify-all-jobs.sh" code={`# job-ids.txt: one existing_job_id per line, from your asset inventory
+while read -r job_id; do
+  databricks bundle generate job --existing-job-id "$job_id" \\
+    --profile source --key "job_$job_id"
+done < job-ids.txt
+
+# Review every generated resources/*.yml BEFORE deploying -- generate does not
+# rewrite cross-cloud references (cluster node types, catalog names, warehouse
+# ids) for you. Then, against the target profile:
+databricks bundle deploy --profile target -t prod`} />
+
+  `dbxmig bundle` (see [automation toolkit](/templates/automation-toolkit)) does the equivalent transformation from this toolkit's own workspace inventory in one pass, with cross-cloud rewrites and every schedule paused on arrival — prefer it when you already have that inventory; reach for the loop above when you don't and only need the bundle-ification, not the rewrite.
+</Callout>
+
+<Callout client:visible variant="tip" title="AI coding agents now ship first-class Databricks skills — `databricks aitools install`">
+  Databricks' own CLI (`databricks aitools install`, documented under `dev-tools/cli/reference/aitools-commands`) installs Databricks-specific skills into a coding agent — Claude Code, Cursor, Codex CLI, GitHub Copilot, Gemini CLI, and others — so the agent can assess and rewrite job/bundle/SQL code with Databricks' own conventions built in, rather than a generic LLM guessing at Databricks-specific patterns. This is the successor to the `databricks-solutions/ai-dev-kit` project (1,900+ stars, Databricks-certified) — its skills are now installed straight through the CLI. For a migration specifically, this is where you'd point an agent at the loop above and have it draft the cross-cloud rewrites (node types, catalog names, warehouse IDs) per generated bundle file — still gated by the same review and reconciliation this page and [AI-assisted migration](/accelerators/ai-assisted-migration) already require, not a reason to skip them.
+</Callout>
+
+## Fallback: a handful of jobs, or nothing else fits
+
+For a genuinely small job count, or a one-off job the Exporter/bundle path doesn't cover cleanly, the manual CLI loop is still a legitimate option — just don't reach for it as the default at scale:
 
 <CodeBlock client:visible language="bash" code={`# Export all jobs from source workspace.
 # List endpoints paginate -- always check the count against the workspace UI
@@ -51,37 +116,9 @@ jq 'if type=="array" then . else .jobs end | .[] | {job_id, settings}' \\
 # The flag is --json with an @path, not --json-file.
 databricks jobs create --json @job-target.json`} />
 
-<Callout client:visible variant="warning" title="Strip the server-owned fields before re-creating, or the create fails">
-  A job exported from source carries `job_id`, `created_time`, and `creator_user_name`. Those belong to the source workspace: the target assigns its own. Post the `settings` object, not the whole exported record.
-
-  And the new `job_id` is what breaks things downstream — every [external orchestrator](/pipelines/external-orchestrators) reference, every `run-now` call, and anything pinned to the old number. Keep a source-to-target job ID map from this step; it is the same artifact the model and query migrations need for their own IDs. [`dbxmig bundle`](/templates/automation-toolkit) does this transformation for you, including turning the workspace-scoped IDs into variables.
-</Callout>
-
-## Migrating hundreds to thousands of jobs quickly
-
-<Callout client:visible variant="tip" title="Bulk-export via Terraform, not one job at a time">
-  At more than a handful of jobs, the export/import loop above is the wrong shape. The [Databricks Terraform Exporter](https://github.com/databricks/terraform-provider-databricks/blob/main/docs/guides/experimental-exporter.md) (an experimental feature of the `databricks/databricks` Terraform provider) bulk-exports jobs, clusters, notebooks and policies as importable Terraform in one run — including `-targetCloud`/`-nodeTypeMappingFile` for automatic cross-cloud node-type translation (Databricks' own guide states roughly 99.5% coverage; attributes with no target-cloud equivalent, like an AWS `instance_profile_arn`, are silently omitted rather than erroring — diff the plan, don't just apply it).
-
-  Four behaviors change how you plan a bulk run, confirmed from the exporter's own guide:
-  - **Jobs deployed via Databricks Asset Bundles are not exported at all** — re-deploy their bundle against the target instead.
-  - **`-incremental` does not apply to jobs or clusters**, only notebooks and SQL objects — a re-export after source changes re-exports every job in full.
-  - **`-services` filters and organizes output, it does not split it into per-team Terraform modules** — there's no flag for that.
-  - **Exporter parallelism is tunable but low by default**: `EXPORTER_PARALLELISM` defaults to 15, `EXPORTER_WS_LIST_PARALLELISM` to 5, and most per-resource-type handlers default to 2 if unset — raise these explicitly for a large export rather than assuming the tool self-tunes.
-</Callout>
-
-<Callout client:visible variant="tip" title="For jobs/bundles specifically, a scripted bundle-init factory beats a giant exporter run">
-  `databricks bundle init --config-file answers-<team>.json` runs fully non-interactively against a JSON answers file matching a `databricks_template_schema.json` — no manual prompts. For a job estate in the thousands, emit one small JSON per team/domain from your own job-ownership inventory and invoke `bundle init` once per file, rather than one exporter run covering the whole workspace. See [Asset Bundle custom templates](https://docs.databricks.com/aws/en/dev-tools/bundles/template-tutorial) and [Terraform patterns](/templates/terraform-patterns#factory-pattern-modules--whats-real-whats-stale).
-</Callout>
-
-<Callout client:visible variant="warning" title="What actually gates throughput at scale">
-  The Jobs API itself is rarely the bottleneck — `/jobs/create` is rate-limited at 20 requests/second, `/jobs/runs/submit` at 35/s, and a workspace can hold 12,000 saved jobs and create up to 10,000/hour, all fixed ceilings. The real limits worth planning around: 2,000 simultaneously running tasks and 750 simultaneously running parent tasks per workspace (`Run job`/`For each` tasks excluded from both counts) — the concurrency ceiling that matters at cutover is per-workspace, not per-job. And if bundle deploys feel slow, check whether the deploying CLI is on the newer **direct bundle engine** (CLI 0.279.0+, default from CLI 1.3.0+, or set `DATABRICKS_BUNDLE_ENGINE=direct`) — Databricks states it deploys up to 40% faster than the classic Terraform-based engine.
-</Callout>
-
-<Callout client:visible variant="warning" title="A bundle-deployed job is locked from manual edits — by design">
-  A job deployed through an Asset Bundle gets `edit_mode: UI_LOCKED` and cannot be switched to editable from the UI — this is deliberate Databricks behavior, not a bug to route around. Plan any post-migration hotfix path through the bundle source and a re-deploy, not a UI edit that will be silently blocked.
-</Callout>
-
 ## Task reference rewrites
+
+Whichever path recreates the job definitions, the same references need rewriting before they run correctly in target:
 
 ### Notebook paths
 
@@ -107,7 +144,7 @@ Update SQL and notebook code that hardcodes source catalog names. Use a naming s
 </Callout>
 
 <Callout client:visible variant="warning" title="Recreating a job does not bring its run history with it">
-  Exporting `jobs.json` and re-creating jobs in target captures the **definition** only. The new job gets a new job ID and starts with zero run history — the source job's past runs, durations, and failure rates stay in the source workspace and age out on Databricks' own retention window (60 days via the Jobs API/UI). If run history is needed for audit, SLA reporting, or an incident investigation later, pull it via `2.1/jobs/runs/list` (or `system.lakeflow.job_run_timeline`) and archive it before the source workspace is retired — see [known limitations](/troubleshooting/known-limitations) for the full list of history that doesn't carry over and how to log it.
+  Neither the Exporter nor a manual export/recreate captures anything but the job **definition**. The new job gets a new job ID and starts with zero run history — the source job's past runs, durations, and failure rates stay in the source workspace and age out on Databricks' own retention window (60 days via the Jobs API/UI). If run history is needed for audit, SLA reporting, or an incident investigation later, pull it via `2.1/jobs/runs/list` (or `system.lakeflow.job_run_timeline`) and archive it before the source workspace is retired — see [known limitations](/troubleshooting/known-limitations) for the full list of history that doesn't carry over and how to log it.
 </Callout>
 
 ## Scheduling freeze
@@ -136,17 +173,6 @@ If a target job fails, re-enable the source job and investigate. Do not decommis
 - Use CI/CD to deploy jobs to target environments.
 - Script path and catalog rewrites across job JSON.
 
-<Checklist client:visible title="Workflows and jobs" items={[
-  { id: 'export', label: 'Export all job definitions' },
-  { id: 'rewrite', label: 'Rewrite cluster, notebook, warehouse, and catalog references' },
-  { id: 'create', label: 'Create jobs in target workspace' },
-  { id: 'permissions', label: 'Replay job permissions' },
-  { id: 'test', label: 'Run smoke tests for each job' },
-  { id: 'history', label: 'Source job run history archived if needed post-cutover' },
-  { id: 'bulk-path', label: 'Bulk migration (100+ jobs) uses the Terraform Exporter or scripted bundle-init, not a per-job export loop' },
-  { id: 'dab-check', label: 'Confirmed which source jobs are already DAB-managed before assuming the exporter will pick them up' },
-]} />
-
 ## Sources
 
 - Databricks Terraform Exporter guide — [experimental-exporter.md](https://github.com/databricks/terraform-provider-databricks/blob/main/docs/guides/experimental-exporter.md)
@@ -154,3 +180,13 @@ If a target job fails, re-enable the source job and investigate. Do not decommis
 - Databricks — [Resource limits](https://docs.databricks.com/aws/en/resources/limits) (Jobs API rate limits, task/parent-task concurrency ceilings)
 - Databricks — [Direct bundle engine](https://docs.databricks.com/aws/en/dev-tools/bundles/direct)
 - Databricks community — [UI_LOCKED edit mode for bundle-deployed jobs](https://community.databricks.com/t5/machine-learning/not-able-to-edit-mode-ui-locked-to-editable-in-bundle-deployment/td-p/80185)
+
+<Checklist client:visible title="Workflows and jobs" items={[
+  { id: 'bulk-path', label: 'Bulk migration (100+ jobs) uses the Terraform Exporter or scripted bundle-init, not a per-job export loop' },
+  { id: 'dab-check', label: 'Confirmed which source jobs are already DAB-managed before assuming the exporter will pick them up' },
+  { id: 'rewrite', label: 'Rewrite cluster, notebook, warehouse, and catalog references' },
+  { id: 'create', label: 'Create jobs in target workspace' },
+  { id: 'permissions', label: 'Replay job permissions' },
+  { id: 'test', label: 'Run smoke tests for each job' },
+  { id: 'history', label: 'Source job run history archived if needed post-cutover' },
+]} />

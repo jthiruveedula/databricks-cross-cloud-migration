@@ -1,7 +1,7 @@
 ---
 title: 'Pilot'
 layout: ../../layouts/Layout.astro
-description: 'Run Wave 0 as a small, low-risk proof that the target foundation and runbook actually work.'
+description: 'Run Wave 0 through the real accelerator path at small scale — dbxmig handoff, databricks-replicator/workspace-migration, Lakebridge Reconcile — so bulk migration inherits a proven runbook, not a hand-rolled one.'
 ---
 
 import Callout from '../../components/Callout.tsx';
@@ -14,6 +14,10 @@ The pilot is not a demo — it is the first real execution of your migration run
 
 <Callout client:visible variant="prerequisite" title="What must exist before the pilot starts">
   Target foundation (metastore, IAM/identity federation, networking, storage) must already be provisioned and validated per your [cloud mapping](/cloud-mappings/cross-cloud-equivalency-matrix) before you pick a pilot workload. The pilot proves the runbook, not the foundation.
+</Callout>
+
+<Callout client:visible variant="warning" title="Pilot the accelerators, not a script you'll throw away">
+  If the pilot runs a hand-written clone-and-reconcile script instead of `dbxmig handoff` + databricks-replicator/workspace-migration + Lakebridge Reconcile, it proves nothing about the tooling bulk migration actually depends on — you'll discover the accelerators' real behavior for the first time at wave 1, at 10x the blast radius. Run the same accelerators here, at pilot scale, so every timing number and every gap this page asks you to capture is a real number from the real tool.
 </Callout>
 
 ## Choosing the pilot workload
@@ -31,16 +35,45 @@ Pick a workload that is:
 
 ## Pilot execution sequence
 
-| Step | Action | Validates |
-|------|--------|-----------|
-| 1 | Register pilot catalog/schema in target Unity Catalog | Metastore and governance foundation |
-| 2 | Replicate pilot tables via Delta Deep Clone | Storage path mapping and data replication |
-| 3 | Re-create pilot cluster policy and job | Compute and identity mapping |
-| 4 | Run job against target, compare output to source | End-to-end correctness |
-| 5 | Grant pilot user group access via Unity Catalog | IAM/grants mapping |
-| 6 | Time every step | Real estimates for wave planning |
+<CodeBlock client:visible language="bash" filename="run_pilot.sh" code={`# 1. Inventory just the pilot catalog/schema.
+dbxmig -c migration.yaml inventory -o pilot-inventory.json
 
-<CodeBlock client:visible language="python" filename="pilot_reconcile.py" code={`# Minimal pilot reconciliation: row count + checksum parity
+# 2. Generate the accelerator configs from that inventory -- same command
+#    bulk migration runs per wave, at pilot scale here.
+dbxmig -c migration.yaml handoff -i pilot-inventory.json -o ./pilot-handoff
+
+# 3. Run the accelerators: databricks-replicator for the pilot catalog's
+#    tables/volumes/metadata, workspace-migration for anything it leaves
+#    behind (functions, models, row filters).
+data-replicator pilot-handoff/databricks-replicator/*.yaml \\
+  --target-catalogs pilot_target
+databricks bundle deploy --var migration_spn_id=<app-id> -t pilot
+
+# 4. Re-create the pilot job/pipeline -- Terraform Exporter or bundle-init,
+#    see workflows and jobs.
+databricks bundle generate job --existing-job-id <pilot_job_id>
+databricks bundle deploy -t pilot
+
+# 5. Reconcile: Lakebridge Reconcile for row/schema/aggregate checks with
+#    sampling, dbxmig reconcile --live as the CI-gating checksum. See
+#    data reconciliation.
+
+# 6. Grant pilot user group access via Unity Catalog, then time every step.`} />
+
+| Step | Validates |
+|------|-----------|
+| Inventory + `dbxmig handoff` | Scope, storage-prefix rewrites, principal map are correct before anything runs |
+| databricks-replicator / workspace-migration | Storage path mapping, data replication, and the long-tail UC objects the replicator doesn't cover |
+| Job re-creation (Exporter / bundle-init) | Compute and identity mapping, cross-cloud node-type translation |
+| Lakebridge Reconcile / `dbxmig reconcile` | End-to-end correctness — row, schema, and aggregate parity |
+| UC grants | IAM/grants mapping |
+| Timing captured at every step | Real estimates for wave planning and the [timeline estimator](/tools/timeline-estimator) |
+
+<Callout client:visible variant="tip" title="Fallback: reconcile by hand only to prove the accelerator's own reconciliation is correct">
+  Lakebridge Reconcile and `dbxmig reconcile --live` are the tools to run — but at pilot scale, also run the check by hand once, specifically to validate the tooling itself before trusting it at wave scale:
+
+  <CodeBlock client:visible language="python" filename="pilot_reconcile_check.py" code={`# Sanity-check Lakebridge Reconcile's own result against a manual query,
+# once, at pilot scale -- not the ongoing reconciliation mechanism.
 source_count = spark.table("source_catalog.pilot.orders").count()
 target_count = spark.table("target_catalog.pilot.orders").count()
 assert source_count == target_count, f"Row count mismatch: {source_count} vs {target_count}"
@@ -50,13 +83,14 @@ target_hash = spark.sql("SELECT md5(concat_ws('|', *)) AS h FROM target_catalog.
 diff = source_hash.exceptAll(target_hash).count()
 assert diff == 0, f"{diff} rows differ between source and target"
 `} />
+</Callout>
 
 ## What the pilot should tell you
 
-- **Real per-table migration time** — use it to size bulk migration wave windows, not a vendor estimate.
-- **Gaps in the runbook** — every manual step you had to improvise belongs back in the [checklists](/templates/checklists) template.
+- **Real per-table and per-catalog migration time** — from the accelerators actually running, not a vendor estimate. Feed it into the [timeline estimator](/tools/timeline-estimator)'s `parallelWorkers`/`throughputGbps` inputs to calibrate the rest of the estate.
+- **Gaps in the runbook** — every manual step you had to improvise belongs back in the [checklists](/templates/checklists) template, and if it's a gap in `dbxmig handoff`'s output or an accelerator's coverage, that's a fact about the tooling, not just this pilot.
 - **Actual IAM friction** — which grants were missing, which group mappings were wrong.
-- **Tooling gaps** — did UCX, the Terraform provider, or your scripts need a patch mid-pilot? Fix it now, not in wave 1.
+- **Tooling gaps** — did the accelerators, the Terraform provider, or `dbxmig` itself need a workaround mid-pilot? Fix it now, not in wave 1.
 
 ## Validation
 
@@ -70,11 +104,12 @@ Pilot rollback is trivial by design: the source workload keeps running untouched
 
 ## Automation opportunity
 
-- Turn the pilot's reconciliation script into the reusable validation harness for every subsequent wave.
-- Feed pilot timing data into the [wave plan template](/execution/wave-planning) to size later waves realistically.
+- The pilot's `dbxmig handoff` + accelerator sequence above **is** the reusable path for every subsequent wave — bulk migration (see [bulk migration](/execution/bulk-migration)) runs the identical commands against a wider scope, not a rewritten script.
+- Feed pilot timing data into the [wave plan template](/execution/wave-planning) and the [timeline estimator](/tools/timeline-estimator) to size later waves realistically.
 
 <Checklist client:visible title="Pilot exit criteria" items={[
   { id: 'foundation', label: 'Target foundation validated independently of the pilot' },
+  { id: 'accelerator-path', label: 'Pilot ran through dbxmig handoff + the real accelerators, not a one-off script' },
   { id: 'data', label: 'Pilot data reconciled with zero unexplained diffs' },
   { id: 'access', label: 'Pilot user group can query target with correct grants' },
   { id: 'timing', label: 'Per-table/job timing captured for wave sizing' },
