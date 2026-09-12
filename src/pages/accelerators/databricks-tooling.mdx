@@ -31,7 +31,8 @@ Do not write what Databricks already maintains. Almost every mechanical layer of
 | **[alteryx-to-databricks-converter](https://github.com/databricks-solutions/alteryx-to-databricks-converter)** | Databricks Solutions | `.yxmd` workflows into PySpark, DLT, Spark SQL, Lakeflow Designer | Unsupported tools are reported, not guessed |
 | **[databricks-waf](https://github.com/databricks-solutions/databricks-waf)** | Databricks Solutions | Post-migration Well-Architected assessment traced to evidence | Alpha; it reviews the target, it never migrates |
 | **[mlflow-export-import](https://github.com/mlflow/mlflow-export-import)** | MLflow (OSS, Apache-2.0) | Bulk MLflow experiment/run/model export-import, incl. cross-metastore UC model copy | Custom artifact locations; Databricks notebook-revision linking |
-| **databrickslabs/migrate** | Databricks Labs (OSS) | Workspace-to-workspace asset export/import | Compute re-map across clouds |
+| **[Terraform Exporter](https://github.com/databricks/terraform-provider-databricks/blob/main/docs/guides/experimental-exporter.md)** | Databricks (experimental) | Bulk export of jobs/clusters/notebooks/policies as importable Terraform, incl. cross-cloud node-type translation | DAB-managed jobs (not exported at all); `-incremental` doesn't apply to jobs/clusters |
+| **databrickslabs/migrate** *(unmaintained)* | Databricks Labs (OSS) | Workspace-to-workspace asset export/import | Last commit 2023-11-27; its own README now points at the Terraform Exporter instead |
 | **Asset Bundles / Terraform** | Databricks | IaC replicas of jobs, pipelines, notebooks | Runtime differences across clouds |
 
 <Callout variant="warning" title="Read each tool's own coverage table before you plan around it">
@@ -95,6 +96,10 @@ Its own coverage table is the thing to plan against. Supported: storage credenti
 
 Configuration is YAML with Pydantic validation, so scope (catalogs, schemas, tables), storage-URL rewrites (`cloud_url_mapping`) and principal translation (`principal_mapping`) are all declarative — which is exactly why they can be generated rather than typed (see [one config, every accelerator](#one-config-every-accelerator) below).
 
+<Callout client:visible variant="warning" title="Catalogs replicate one at a time — concurrency is a within-catalog knob only">
+  Confirmed directly from the source, not the README: `concurrency.max_workers` (default 8, range 1-64) parallelizes tables and volumes **within** a catalog, but catalogs themselves are processed strictly sequentially — `provider_factory.py`'s own comment says so. At 25 catalogs, raising `max_workers` speeds up each catalog's clone, but does not let two catalogs replicate at once; the wall-clock floor is still (catalogs) × (time for one catalog's slowest table batch), not the whole estate divided by worker count. `timeout_seconds` (default 1800, minimum 60) is a per-object future timeout, and retry is 3 attempts by default with a 5-second delay doubling each try. Every incremental re-run reissues `CREATE OR REPLACE TABLE ... DEEP CLONE` for every in-scope table — there is no skip-list that shortcuts a table already known to be in sync, so a re-run's cost scales with total table count, not with what actually changed since the last run. Neither this tool nor workspace-migration below publishes a tested-scale or throughput figure anywhere — plan the per-catalog runtime from your own pilot, not a vendor number, because there isn't one.
+</Callout>
+
 ## workspace-migration — the UC objects a replicator leaves behind
 
 [`databricks-solutions/workspace-migration`](https://github.com/databricks-solutions/workspace-migration) is a Databricks Asset Bundle that migrates Unity Catalog and legacy Hive Metastore objects between workspaces. It covers the long tail the replicator does not: SQL and Python functions, registered models (metadata, version artifacts and aliases), tags, row filters, column masks and ABAC policies, Lakehouse monitors, connections and foreign catalogs, and Delta Sharing shares/recipients/providers. A separate `migrate_hive` job moves legacy Hive databases, tables, views, functions and grants like-for-like into the target's own `hive_metastore` — a copy, not a Unity Catalog upgrade, so UCX still owns that step.
@@ -102,6 +107,10 @@ Configuration is YAML with Pydantic validation, so scope (catalogs, schemas, tab
 Deploy-time it needs a service principal with workspace admin on both sides, metastore-level `CREATE_*` privileges, and `USE_PROVIDER` on the target. Scope comes from `catalog_filter`/`schema_filter`; progress and pre-check results land in tracking tables plus a bundled dashboard.
 
 Two limits decide how you sequence it. Materialized views and streaming tables are hard-skipped (`skipped_by_stateful_service_migration`) — schema and grants migrate, the object is rebuilt by a pipeline refresh at cutover. DLT pipelines, model serving endpoints and Apps go through the Terraform exporter instead. And, as the callout above says, its README frames it as a control-plane/account/region tool — treat cross-cloud use as something you prove on a pilot catalog.
+
+<Callout client:visible variant="warning" title="Batching does not mean parallel — check before assuming throughput">
+  `batch_size` defaults to 50 objects per `for_each` bundle-task iteration, with a harder `MAX_BATCH_BYTES` ceiling of 2,500 bytes (Databricks' own task-value limit is ~3,000 bytes) that can fail a batch as oversize before it ever runs. More importantly: none of the shipped production workflows declare a `concurrency:` value on their `for_each_task` blocks, and Databricks Jobs defaults an undeclared `for_each_task` to **1** — so batches run **sequentially** unless you add concurrency yourself. Functions, views, tags, row filters, column masks and models aren't batched at all; each is one plain notebook task processing the full list as a single JSON payload.
+</Callout>
 
 ## flowx — external orchestrators into Lakeflow Jobs
 
@@ -150,9 +159,15 @@ None of the accelerators above touch MLflow — experiments, runs, and registere
 
 It already avoids the two failure modes a hand-rolled migration script tends to hit silently: it pages `search_runs` instead of trusting a single 1000-row page, and it replays full metric history instead of only the latest value per key. See [MLflow](/ml/mlflow) and [model registry](/ml/model-registry) for the exact commands and what still needs a hand-rolled fix afterward (custom artifact locations, Databricks notebook-revision links).
 
-## migrate — workspace asset export/import
+## Terraform Exporter — the real fast path for bulk jobs, and `migrate`'s actual status
 
-`databrickslabs/migrate` does workspace-to-workspace cross-cloud export/import with checkpointing and validation. Good for moving notebooks, jobs, and configuration. Caveat: classic compute differs across clouds, so clusters and jobs usually need a manual re-map even after import.
+For migrating hundreds to thousands of jobs quickly, the [Databricks Terraform Exporter](https://github.com/databricks/terraform-provider-databricks/blob/main/docs/guides/experimental-exporter.md) (an experimental feature of the `databricks/databricks` Terraform provider, not a separate tool) is the maintained path — see [Terraform patterns](/templates/terraform-patterns#generating-terraform-from-source-state) for what it does and does not export at scale (DAB-managed jobs are skipped entirely, `-incremental` doesn't apply to jobs/clusters, cross-cloud node-type translation claims ~99.5% coverage with silent omission of the rest).
+
+<Callout client:visible variant="warning" title="databrickslabs/migrate is not a live option — its own README says so">
+  This page previously listed it neutrally alongside the exporter. Corrected: its last commit was **2023-11-27**, it carries 53 open issues, and its own README now recommends the Terraform Exporter as "more extensive and maintained." It's kept below only so its status is on the record.
+</Callout>
+
+`databrickslabs/migrate` does workspace-to-workspace cross-cloud export/import with checkpointing and validation. Its README as of this writing points elsewhere; treat it as unmaintained rather than as a tool to plan around.
 
 ## Asset Bundles and Terraform — repeatable provisioning
 
@@ -229,6 +244,7 @@ cutover     -> Replicator keeps the target warm; UCX shadow tables for rollback`
 - alteryx-to-databricks-converter — [github.com/databricks-solutions/alteryx-to-databricks-converter](https://github.com/databricks-solutions/alteryx-to-databricks-converter)
 - Databricks Well-Architected assessment — [github.com/databricks-solutions/databricks-waf](https://github.com/databricks-solutions/databricks-waf)
 - mlflow-export-import — [github.com/mlflow/mlflow-export-import](https://github.com/mlflow/mlflow-export-import)
-- migrate — [github.com/databrickslabs/migrate](https://github.com/databrickslabs/migrate)
+- Terraform Exporter guide — [experimental-exporter.md](https://github.com/databricks/terraform-provider-databricks/blob/main/docs/guides/experimental-exporter.md)
+- migrate (unmaintained, confirmed via its own README and GitHub activity) — [github.com/databrickslabs/migrate](https://github.com/databrickslabs/migrate)
 - Asset Bundles — [Databricks docs](https://docs.databricks.com/aws/en/dev-tools/bundles/)
 - Migration strategy lessons — [Databricks blog](https://www.databricks.com/blog/databricks-migration-strategy-lessons-learned)

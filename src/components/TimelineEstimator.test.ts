@@ -96,9 +96,9 @@ describe('scale model', () => {
     expect(effectiveWorkers(4)).toBeGreaterThan(3.5);
     // Far above it, they are not: 128 requested buys under 32 effective.
     expect(effectiveWorkers(128)).toBeLessThan(WORKER_SATURATION_CEILING);
-    expect(effectiveWorkers(128)).toBeGreaterThan(effectiveWorkers(32));
-    // Doubling past the ceiling buys less than 20% more throughput.
-    expect(effectiveWorkers(128) / effectiveWorkers(64)).toBeLessThan(1.2);
+    expect(effectiveWorkers(128)).toBeGreaterThan(effectiveWorkers(64));
+    // Doubling well past the ceiling buys less than 20% more throughput.
+    expect(effectiveWorkers(256) / effectiveWorkers(128)).toBeLessThan(1.2);
   });
 
   it('more workers shorten an object-bound migration, with diminishing returns', () => {

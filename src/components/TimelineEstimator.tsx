@@ -113,11 +113,16 @@ export const SECONDS_PER_TABLE_MANUAL = 180;
 
 /** Unity Catalog and cloud storage APIs rate-limit per account, so worker count
  *  buys throughput linearly only until the limit binds, then flattens hard.
- *  Modelled as saturating exponential rather than a linear speedup: 8 workers
- *  buy ~7x, 32 buy ~20x, 128 buy ~31x. "Scale worker count to the source
+ *  Modelled as a saturating exponential rather than a linear speedup, with the
+ *  ceiling set to databricks-replicator's own validated range for
+ *  `concurrency.max_workers` (1-64, default 8 -- confirmed directly against
+ *  config/models.py, not the README). "Scale worker count to the source
  *  cloud's actual per-account API rate limit, not to an arbitrary bigger-is-
- *  faster instinct" -- /execution/large-scale-data-transfer. */
-export const WORKER_SATURATION_CEILING = 32;
+ *  faster instinct" -- /execution/large-scale-data-transfer. Note this is a
+ *  within-catalog ceiling only: the same tool processes catalogs strictly
+ *  sequentially, so raising this past 64 buys nothing and adding catalogs
+ *  does not add parallelism the way adding workers does. */
+export const WORKER_SATURATION_CEILING = 64;
 
 /** Bulk migration runs in scheduled windows against a live source, not 24/7. */
 export const MIGRATION_HOURS_PER_WEEK = 60;
