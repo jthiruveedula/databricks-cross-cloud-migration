@@ -47,12 +47,13 @@ dbxmig -c migration.yaml handoff -i pilot-inventory.json -o ./pilot-handoff
 #    behind (functions, models, row filters).
 data-replicator pilot-handoff/databricks-replicator/*.yaml \\
   --target-catalogs pilot_target
-databricks bundle deploy --var migration_spn_id=<app-id> -t pilot
+cp pilot-handoff/workspace-migration/config.yaml <workspace-migration-checkout>/config.yaml
+(cd <workspace-migration-checkout> && databricks bundle deploy --var migration_spn_id=<app-id> -t pilot)
 
 # 4. Re-create the pilot job/pipeline -- Terraform Exporter or bundle-init,
-#    see workflows and jobs.
-databricks bundle generate job --existing-job-id <pilot_job_id>
-databricks bundle deploy -t pilot
+#    see workflows and jobs. Both run inside a bundle project directory
+#    (databricks.yml already present, or from \`databricks bundle init\`).
+(cd <bundle-project-dir> && databricks bundle generate job --existing-job-id <pilot_job_id> && databricks bundle deploy -t pilot)
 
 # 5. Reconcile: Lakebridge Reconcile for row/schema/aggregate checks with
 #    sampling, dbxmig reconcile --live as the CI-gating checksum. See

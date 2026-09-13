@@ -34,8 +34,10 @@ data-replicator wave-2-handoff/databricks-replicator/*.yaml \\
   --target-catalogs "$(cat wave-2-target-catalogs.txt)"
 
 # workspace-migration picks up what the replicator doesn't: functions,
-# models, row filters/column masks, connections. Runs as its own DAB job.
-databricks bundle deploy --var migration_spn_id=<app-id> -t wave-2
+# models, row filters/column masks, connections. Runs as its own DAB job --
+# from that tool's own checkout, not this one.
+cp wave-2-handoff/workspace-migration/config.yaml <workspace-migration-checkout>/config.yaml
+(cd <workspace-migration-checkout> && databricks bundle deploy --var migration_spn_id=<app-id> -t wave-2)
 
 # Jobs for this wave: the Terraform Exporter or a scripted bundle-init loop
 # (see workflows and jobs), scoped to this wave's job-ownership tags.`} />
