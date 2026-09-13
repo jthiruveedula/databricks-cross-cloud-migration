@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Scenario: single workspace, config to cutover",
+    "output": "diagrams/scenario-small-lift-and-shift.html",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "config-to-data", "label": "Configure and move data", "focus": ["config", "handoff", "data"], "note": "One migration.yaml drives every accelerator config below it." },
+      { "id": "jobs-and-validate", "label": "Jobs and validation", "focus": ["exporter", "reconcile"], "note": "Bulk-export jobs while the data move runs; gate cutover on reconciliation." },
+      { "id": "cutover-path", "label": "Cutover", "focus": ["reconcile", "cutover"], "note": "Reconciliation is the one gate cutover cannot skip." }
+    ]
+  },
+  "lanes": [
+    { "id": "plan", "label": "Plan" },
+    { "id": "move", "label": "Data, Metadata & Jobs" },
+    { "id": "gate", "label": "Validation & Cutover" }
+  ],
+  "phases": [
+    { "id": "configure", "label": "Configure", "fromCol": 0, "toCol": 1 },
+    { "id": "movephase", "label": "Move", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "finish", "label": "Cut over", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": ["config", "handoff", "data", "exporter", "reconcile", "cutover"],
+  "nodes": [
+    { "id": "config", "lane": "plan", "col": 0, "type": "frontend", "label": "Config" },
+    { "id": "handoff", "lane": "plan", "col": 1, "type": "backend", "label": "handoff", "sublabel": "all configs", "tag": "dbxmig" },
+    { "id": "data", "lane": "move", "col": 2, "type": "cloud", "label": "Replicator", "sublabel": "+ WS Migration" },
+    { "id": "exporter", "lane": "move", "col": 3, "type": "backend", "label": "TF Exporter", "sublabel": "jobs" },
+    { "id": "reconcile", "lane": "gate", "col": 4, "type": "security", "label": "Reconcile", "sublabel": "row+schema", "tag": "blocking" },
+    { "id": "cutover", "lane": "gate", "col": 5, "type": "external", "label": "Cutover", "sublabel": "+ hypercare" }
+  ],
+  "edges": [
+    { "from": "config", "to": "handoff" },
+    { "from": "handoff", "to": "data", "variant": "emphasis", "fromSide": "bottom", "toSide": "top" },
+    { "from": "data", "to": "exporter" },
+    { "from": "exporter", "to": "reconcile" },
+    { "from": "reconcile", "to": "cutover", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "One scope, everywhere", "items": ["migration.yaml is the only place scope/path-rules/principals are typed", "dbxmig handoff projects it into every accelerator's own config format", "A scope change means editing one file, not three"] },
+    { "dot": "cyan", "title": "In practice, these run in parallel", "items": ["databricks-replicator (tables) and workspace-migration (functions, models, filters) don't depend on each other -- both start as soon as handoff finishes", "The Terraform Exporter (jobs) runs independently of both", "Drawn in sequence here for readability; reconciliation is the real join point"] },
+    { "dot": "rose", "title": "Reconciliation is the one gate", "items": ["No accelerator here bypasses it", "A dirty reconcile blocks cutover, not just a warning", "See validation/data-reconciliation for the exact checks"] }
+  ]
+}

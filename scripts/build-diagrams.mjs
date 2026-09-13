@@ -71,6 +71,9 @@ const SPECS = [
   { type: 'workflow', name: 'cutover-runbook.workflow' },
   { type: 'sequence', name: 'event-bridge.sequence' },
   { type: 'lifecycle', name: 'table-state.lifecycle' },
+  { type: 'workflow', name: 'scenario-small-lift-and-shift.workflow' },
+  { type: 'workflow', name: 'scenario-multi-workspace-scale.workflow' },
+  { type: 'workflow', name: 'scenario-ml-heavy-estate.workflow' },
 ];
 
 const validateOnly = process.argv.includes('--validate');

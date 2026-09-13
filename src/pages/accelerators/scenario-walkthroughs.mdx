@@ -1,0 +1,84 @@
+---
+title: 'Scenario walkthroughs'
+layout: ../../layouts/Layout.astro
+description: 'Three lift-and-shift profiles, config to cutover: a single workspace, a multi-workspace estate at scale, and an ML-heavy estate with Apps and MLflow.'
+---
+
+import CodeBlock from '../../components/CodeBlock.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
+import Callout from '../../components/Callout.tsx';
+
+# Scenario walkthroughs
+
+Same handoff, three shapes. Pick the one closest to your estate and copy its command sequence.
+
+<Callout client:visible variant="tip" title="One config drives every accelerator below">
+  Each scenario starts from the same `migration.yaml` -> `dbxmig handoff` step described in [Databricks migration tooling](/accelerators/databricks-tooling) — only the scope and the accelerators it hands off to change.
+</Callout>
+
+## 1. Single workspace, straightforward lift and shift
+
+<ArchifyDiagram client:visible name="scenario-small-lift-and-shift.workflow" type="workflow" title="Config to cutover, one workspace" caption="Replicator and workspace-migration both start as soon as handoff finishes; reconciliation is the real join point before cutover." />
+
+<CodeBlock client:visible language="bash" filename="scenario-1.sh" code={`dbxmig -c migration.yaml inventory -o inventory.json
+dbxmig -c migration.yaml handoff -i inventory.json -o ./handoff
+
+# data + metadata (parallel, independent runs)
+databricks-replicator run --environments ./handoff/databricks-replicator/environments.yaml
+cp ./handoff/workspace-migration/config.yaml ./workspace-migration/config.yaml
+(cd ./workspace-migration && databricks bundle deploy)
+
+# jobs
+terraform-provider-databricks-exporter -o ./handoff/jobs
+
+# gate + cutover
+databricks-labs-lakebridge reconcile run --config ./handoff/reconcile.yaml
+dbxmig -c migration.yaml cutover-drain --side source --timeout 900`} />
+
+## 2. Multi-workspace estate at scale (4 workspaces, 25 catalogs)
+
+<ArchifyDiagram client:visible name="scenario-multi-workspace-scale.workflow" type="workflow" title="One handoff, four independent replicator runs" caption="Concurrency is workspace-level, not catalog-level — 4 workspaces in parallel is 4 independent runs, not 4x one run's throughput." />
+
+<CodeBlock client:visible language="bash" filename="scenario-2.sh" code={`# one inventory + handoff per workspace
+for ws in ws1 ws2 ws3 ws4; do
+  dbxmig -c migration.yaml inventory -o "$ws-inventory.json" --workspace "$ws"
+  dbxmig -c migration.yaml handoff -i "$ws-inventory.json" -o "./handoff-$ws"
+done
+
+# 4 independent replicator runs -- not one shared run
+for ws in ws1 ws2 ws3 ws4; do
+  databricks-replicator run --environments "./handoff-$ws/databricks-replicator/environments.yaml" &
+done
+wait
+
+# reconcile + cut over each workspace on its own result
+for ws in ws1 ws2 ws3 ws4; do
+  databricks-labs-lakebridge reconcile run --config "./handoff-$ws/reconcile.yaml"
+done`} />
+
+## 3. ML-heavy estate (Databricks Apps + MLflow experiments)
+
+<ArchifyDiagram client:visible name="scenario-ml-heavy-estate.workflow" type="workflow" title="Export runs before UC cutover, Apps redeploy after" caption="mlflow-export-import copies runs and metric history; a Databricks App is redeployed from its source repo, never copied." />
+
+<CodeBlock client:visible language="bash" filename="scenario-3.sh" code={`# export experiments while source is still live
+export-experiments --experiments experiments.txt --output-dir ./mlflow-export
+export-models --models models.txt --output-dir ./mlflow-export
+
+# import into target, models land in UC registry
+import-models --input-dir ./mlflow-export --experiment-name /target/experiments
+
+# redeploy each app from its own CI/CD pipeline, against target
+databricks bundle deploy -t target --var="workspace=$TARGET_HOST"
+
+# gate on prediction + metric parity, then cut serving endpoints over
+databricks-labs-lakebridge reconcile run --config ./handoff/reconcile.yaml`} />
+
+## Where these diverge
+
+| | Bottleneck | What's parallel | What gates cutover |
+|---|---|---|---|
+| Single workspace | Table/job count | Replicator + workspace-migration vs. exporter | Reconcile (row/schema) |
+| Multi-workspace | Workspace count, not catalog count | Each workspace's whole run | Reconcile, per workspace |
+| ML-heavy | Artifact export volume | Export vs. app redeploy prep | Metric + prediction parity |
+
+See [AI-assisted migration](/accelerators/ai-assisted-migration) for scaling any of these three with a coding-agent fleet, and the [timeline estimator](/tools/timeline-estimator) for sizing the wave count each implies.

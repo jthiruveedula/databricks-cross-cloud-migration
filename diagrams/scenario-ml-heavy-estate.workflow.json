@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Scenario: MLflow experiments, models, and Apps",
+    "output": "diagrams/scenario-ml-heavy-estate.html",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "export", "label": "Export before cutover", "focus": ["config", "export"], "note": "mlflow-export-import copies runs, metric history, and artifacts -- it does not move UC data." },
+      { "id": "registry", "label": "Model registry re-point", "focus": ["export", "registry"], "note": "Registered models move to UC-based registry; serving endpoints re-point to the new model URIs." },
+      { "id": "apps", "label": "Apps redeploy, they don't migrate", "focus": ["registry", "apps"], "note": "A Databricks App is redeployed against target, not copied -- its source repo is the unit that moves." }
+    ]
+  },
+  "lanes": [
+    { "id": "plan", "label": "Plan" },
+    { "id": "move", "label": "ML Assets" },
+    { "id": "gate", "label": "Validation & Cutover" }
+  ],
+  "phases": [
+    { "id": "configure", "label": "Configure", "fromCol": 0, "toCol": 1 },
+    { "id": "movephase", "label": "Move", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "finish", "label": "Cut over", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": ["config", "export", "registry", "apps", "reconcile", "cutover"],
+  "nodes": [
+    { "id": "config", "lane": "plan", "col": 0, "type": "frontend", "label": "Config" },
+    { "id": "export", "lane": "plan", "col": 1, "type": "backend", "label": "MLflow export", "sublabel": "runs+metrics", "tag": "export-import" },
+    { "id": "registry", "lane": "move", "col": 2, "type": "cloud", "label": "UC Registry", "sublabel": "models" },
+    { "id": "apps", "lane": "move", "col": 3, "type": "backend", "label": "Apps", "sublabel": "redeploy" },
+    { "id": "reconcile", "lane": "gate", "col": 4, "type": "security", "label": "Reconcile", "sublabel": "metrics+preds", "tag": "blocking" },
+    { "id": "cutover", "lane": "gate", "col": 5, "type": "external", "label": "Cutover", "sublabel": "endpoints" }
+  ],
+  "edges": [
+    { "from": "config", "to": "export" },
+    { "from": "export", "to": "registry", "variant": "emphasis", "fromSide": "bottom", "toSide": "top" },
+    { "from": "registry", "to": "apps" },
+    { "from": "apps", "to": "reconcile", "fromSide": "bottom", "toSide": "top" },
+    { "from": "reconcile", "to": "cutover", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Export is not a data-plane copy", "items": ["mlflow-export-import walks experiments via SearchRunsIterator and pulls full get_metric_history() per run -- no truncated metrics", "Artifacts move alongside runs; large artifact stores still dominate export time", "Run this before the UC catalog cutover, against source while it's still live"] },
+    { "dot": "cyan", "title": "Registered models re-target UC", "items": ["Workspace Model Registry entries become UC-registered models under the target catalog/schema", "Serving endpoints are redefined against the new model URI, not just repointed by name", "A model version missing from export is a registry gap found at serving time, not export time -- reconcile catches it first"] },
+    { "dot": "rose", "title": "Apps redeploy, they don't migrate", "items": ["A Databricks App's compute and secrets are workspace-local -- only its source (repo/bundle) is portable", "Redeploy against target from the same CI/CD pipeline used for the source app, not a manual copy", "Verify app-to-model and app-to-table references resolve against target before cutover"] }
+  ]
+}

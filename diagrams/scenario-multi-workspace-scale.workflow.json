@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Scenario: 4 workspaces, 25 catalogs, one wave plan",
+    "output": "diagrams/scenario-multi-workspace-scale.html",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "fanout", "label": "One config, four workspaces", "focus": ["handoff", "fanout"], "note": "handoff emits one replicator group per workspace -- not one shared run." },
+      { "id": "fleet", "label": "Replicator fleet", "focus": ["fanout", "fleet"], "note": "Each workspace's replicator run is independently concurrency-capped; workspaces do not share a worker pool." },
+      { "id": "gate", "label": "Gate before any workspace cuts over", "focus": ["reconcile", "cutover"], "note": "Reconciliation runs per workspace -- a clean 3-of-4 does not clear the 4th to cut over." }
+    ]
+  },
+  "lanes": [
+    { "id": "plan", "label": "Plan" },
+    { "id": "move", "label": "Move (per workspace)" },
+    { "id": "gate", "label": "Validation & Cutover" }
+  ],
+  "phases": [
+    { "id": "configure", "label": "Configure", "fromCol": 0, "toCol": 1 },
+    { "id": "movephase", "label": "Move", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "finish", "label": "Cut over", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": ["config", "handoff", "fanout", "fleet", "reconcile", "cutover"],
+  "nodes": [
+    { "id": "config", "lane": "plan", "col": 0, "type": "frontend", "label": "Config" },
+    { "id": "handoff", "lane": "plan", "col": 1, "type": "backend", "label": "handoff", "sublabel": "4x groups", "tag": "dbxmig" },
+    { "id": "fanout", "lane": "move", "col": 2, "type": "cloud", "label": "4 workspaces", "sublabel": "25 catalogs" },
+    { "id": "fleet", "lane": "move", "col": 3, "type": "cloud", "label": "Replicators", "sublabel": "8 workers/ws" },
+    { "id": "reconcile", "lane": "gate", "col": 4, "type": "security", "label": "Reconcile", "sublabel": "per workspace", "tag": "blocking" },
+    { "id": "cutover", "lane": "gate", "col": 5, "type": "external", "label": "Cutover", "sublabel": "per workspace" }
+  ],
+  "edges": [
+    { "from": "config", "to": "handoff" },
+    { "from": "handoff", "to": "fanout", "variant": "emphasis", "fromSide": "bottom", "toSide": "top" },
+    { "from": "fanout", "to": "fleet" },
+    { "from": "fleet", "to": "reconcile", "fromSide": "bottom", "toSide": "top" },
+    { "from": "reconcile", "to": "cutover", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "One config, four handoffs", "items": ["handoff emits a separate replicator group + environments.yaml per workspace", "Catalog scope per workspace comes from migration.yaml, not a manual split", "A workspace added later is one more generated group, not a new plan"] },
+    { "dot": "cyan", "title": "Workspaces don't share a worker pool", "items": ["Each workspace's replicator run has its own concurrency.max_workers (default 8)", "Catalogs within one workspace still replicate sequentially -- concurrency is workspace-level, not catalog-level", "4 workspaces in parallel is 4 independent runs, not 4x the per-run throughput"] },
+    { "dot": "rose", "title": "Reconciliation gates per workspace", "items": ["A clean reconcile on 3 of 4 workspaces does not clear the 4th", "Cutover is scheduled per workspace against its own reconcile result", "See validation/data-reconciliation for what each check covers"] }
+  ]
+}
