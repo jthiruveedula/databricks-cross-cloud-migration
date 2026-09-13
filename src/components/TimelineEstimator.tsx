@@ -273,6 +273,15 @@ function round1(val: number): number {
  * Exported so the UI can show the gap -- requesting 64 workers when 32 is the
  * ceiling is the single most common over-estimate in a bulk migration plan.
  */
+/** Raw (unscaled) weeks of notebook+job conversion work at a given per-unit
+ *  rate, before whatever factor (team sqrt-scaling, fleet saturation, a
+ *  reviewer headcount) divides it down to wall-clock. Shared by the plain
+ *  team-scaled formula and both agent-fleet lanes so the same shape isn't
+ *  hand-written three times with three different rate pairs. */
+function laneWeeks(notebookCount: number, jobCount: number, notebookRate: number, jobRate: number): number {
+  return notebookCount / notebookRate + jobCount / jobRate;
+}
+
 function saturating(requested: number, ceiling: number): number {
   const w = Math.max(1, requested);
   return ceiling * (1 - Math.exp(-w / ceiling));
@@ -360,18 +369,21 @@ export function computeTimeline(
   if (scaleModelled && agentConcurrency > 0) {
     const effectiveFleet = effectiveAgents(agentConcurrency);
     effectiveFleetSize = effectiveFleet;
-    const draftWeeks =
-      (notebookCount / DRAFT_NOTEBOOKS_PER_AGENT_WEEK + jobCount / DRAFT_JOBS_PER_AGENT_WEEK) /
-      effectiveFleet;
-    const reviewWeeks =
-      (notebookCount / REVIEW_NOTEBOOKS_PER_PERSON_WEEK + jobCount / REVIEW_JOBS_PER_PERSON_WEEK) /
-      Math.max(1, teamSize);
+    const draftWeeks = laneWeeks(notebookCount, jobCount, DRAFT_NOTEBOOKS_PER_AGENT_WEEK, DRAFT_JOBS_PER_AGENT_WEEK) / effectiveFleet;
+    // Linear in teamSize, not sqrt like drafting/foundation/validation below --
+    // deliberately different, not an oversight. Those terms scale by
+    // sqrt(baseline/teamSize) because AUTHORING work needs coordination
+    // (dividing work, avoiding duplicate effort, shared context) that doesn't
+    // shrink proportionally with headcount. Reviewing an already-drafted
+    // conversion is closer to embarrassingly parallel -- each reviewer clears
+    // their own batch independently -- so linear is the more honest model
+    // here, not a simplification to fix.
+    const reviewWeeks = laneWeeks(notebookCount, jobCount, REVIEW_NOTEBOOKS_PER_PERSON_WEEK, REVIEW_JOBS_PER_PERSON_WEEK) / Math.max(1, teamSize);
     codeBoundWeeks = Math.max(draftWeeks, reviewWeeks);
     codeLane = draftWeeks >= reviewWeeks ? 'drafting' : 'reviewing';
   } else if (scaleModelled) {
     codeBoundWeeks =
-      ((notebookCount / (aiAccelerated ? 150 : 75)) + (jobCount / (aiAccelerated ? 400 : 160))) *
-      teamFactor;
+      laneWeeks(notebookCount, jobCount, aiAccelerated ? 150 : 75, aiAccelerated ? 400 : 160) * teamFactor;
   }
 
   const tablesPerWave = Math.max(100, scale.tablesPerWave ?? DEFAULT_TABLES_PER_WAVE);

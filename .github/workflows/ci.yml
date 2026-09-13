@@ -106,7 +106,12 @@ jobs:
   # nothing.
   check:
     if: github.event_name == 'pull_request'
-    needs: [test, changes]
+    # automation/skills are conditional on paths-filter and SKIP (not fail)
+    # when unrelated -- a skipped `needs` job doesn't block a dependent job in
+    # GitHub Actions by default, so listing them here costs nothing on a PR
+    # that touches neither, and closes the gap where a real failure in either
+    # wouldn't block this required check from reporting green.
+    needs: [test, changes, automation, skills]
     runs-on: ubuntu-latest
     permissions:
       contents: read

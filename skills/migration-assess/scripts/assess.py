@@ -18,6 +18,7 @@ dbxmig's own convention), 0 otherwise.
 from __future__ import annotations
 
 import argparse
+import bisect
 import json
 import os
 import re
@@ -31,7 +32,9 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 # never disagree about what counts as "source" in the same estate.
 # ---------------------------------------------------------------------------
 
-SOURCE_EXTENSIONS = (".py", ".sql", ".scala", ".r", ".ipynb", ".json", ".yml", ".yaml", ".sh")
+SOURCE_EXTENSIONS = (
+    ".py", ".sql", ".scala", ".r", ".ipynb", ".json", ".yml", ".yaml", ".sh", ".conf", ".tf",
+)
 SKIP_DIRS = frozenset(
     {".git", "node_modules", ".venv", "venv", "__pycache__", ".terraform", "dist", "build"}
 )
@@ -177,18 +180,35 @@ class Report:
         return out
 
 
+def _line_starts(text: str) -> List[int]:
+    """Byte offset each line starts at, for an O(log n) offset->line lookup
+    instead of re-scanning from position 0 for every match (crossrefs.py
+    solves the same problem the same way -- this mirrors it)."""
+    starts = [0]
+    for i, ch in enumerate(text):
+        if ch == "\n":
+            starts.append(i + 1)
+    return starts
+
+
+def _line_of(starts: List[int], offset: int) -> int:
+    return bisect.bisect_right(starts, offset)
+
+
 def assess(root: str) -> Report:
     report = Report()
     for path, text in walk_source(root):
         report.files_scanned += 1
         lines = text.splitlines()
+        starts = _line_starts(text)
+        rel_path = os.path.relpath(path, root)
         for pattern, category, kind, tool, why in CHECKS:
             for match in pattern.finditer(text):
-                line_no = text.count("\n", 0, match.start()) + 1
+                line_no = _line_of(starts, match.start())
                 snippet = lines[line_no - 1].strip()[:160] if line_no <= len(lines) else ""
                 report.findings.append(
                     Finding(
-                        path=os.path.relpath(path, root),
+                        path=rel_path,
                         line=line_no,
                         category=category,
                         migration_kind=kind,
