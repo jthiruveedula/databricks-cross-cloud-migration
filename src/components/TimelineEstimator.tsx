@@ -12,6 +12,7 @@ import {
   Table2,
   Gauge,
   AlertTriangle,
+  Bot,
 } from 'lucide-react';
 
 type CloudPair =
@@ -51,6 +52,11 @@ export interface ScaleBreakdown {
   transferHours: number;
   manualJobs: number;
   bottleneck: Bottleneck;
+  /** Set only when agentConcurrency > 0 -- which lane of the draft/review
+   *  pipeline is actually binding, so "add more agents" isn't suggested when
+   *  reviewers are the real constraint (and vice versa). */
+  codeLane?: 'drafting' | 'reviewing';
+  effectiveAgents?: number;
 }
 
 /**
@@ -68,6 +74,15 @@ export interface ScaleInputs {
   throughputGbps?: number;
   /** Tables per wave. Wave count is what turns a fast clone into a long program. */
   tablesPerWave?: number;
+  /** Parallel AI coding-agent sessions (e.g. Claude Code / Cursor with
+   *  `databricks aitools` skills) drafting notebook/job conversions in bulk.
+   *  0 or omitted disables agent-fleet mode entirely -- code-bound reverts to
+   *  the plain team-scaled formula. This does NOT remove the human review
+   *  step: this repo's own AI-assisted migration guidance is explicit that
+   *  a query can run successfully and still return the wrong answer, so
+   *  drafting fast does not make reviewing optional -- it changes what the
+   *  bottleneck IS, from drafting to reviewing. */
+  agentConcurrency?: number;
 }
 
 interface Calculated {
@@ -149,6 +164,38 @@ export const JOBS_REVIEWED_PER_ENGINEER_WEEK = 12;
 
 export const DEFAULT_TABLES_PER_WAVE = 2500;
 
+// ---------------------------------------------------------------------------
+// AI-agent-fleet mode. A fleet of coding-agent sessions (Claude Code, Cursor,
+// etc. with `databricks aitools` skills -- see /accelerators/ai-assisted-
+// migration) drafts conversions in parallel; a human still reviews every one,
+// because this repo's own guidance is explicit that a converted query can run
+// successfully and still return the wrong answer -- drafting fast does not
+// make reviewing optional. Enabling this mode changes what the bottleneck IS
+// (from authoring to reviewing), it does not remove the human gate.
+// ---------------------------------------------------------------------------
+
+/** Notebooks/jobs one agent SESSION drafts per week, running the hybrid
+ *  deterministic-core-plus-LLM-edge-cases pattern this runbook already
+ *  recommends -- not a raw unattended LLM rewrite. Planning default: no
+ *  accelerator or agent vendor publishes a throughput SLA for this. */
+export const DRAFT_NOTEBOOKS_PER_AGENT_WEEK = 40;
+export const DRAFT_JOBS_PER_AGENT_WEEK = 100;
+
+/** Notebooks/jobs one PERSON reviews (not authors) per week -- reviewing an
+ *  agent-drafted conversion for semantic correctness, not writing it from
+ *  scratch. Higher than a from-scratch conversion rate, but not free: this
+ *  is the step this repo's AI-assisted migration page calls the one that
+ *  cannot be skipped. Planning default. */
+export const REVIEW_NOTEBOOKS_PER_PERSON_WEEK = 25;
+export const REVIEW_JOBS_PER_PERSON_WEEK = 60;
+
+/** Agent fleets saturate too -- LLM API throughput/budget and the fact that a
+ *  fixed-size review team can only unblock so many agents' output before the
+ *  queue backs up. Same saturating-exponential shape as worker concurrency,
+ *  with its own ceiling rather than reusing the replicator's (a coding-agent
+ *  fleet and a data-plane worker pool hit different real limits). */
+export const AGENT_SATURATION_CEILING = 24;
+
 interface SliderConfig {
   key: string;
   label: string;
@@ -175,6 +222,7 @@ const SLIDERS: SliderConfig[] = [
   { key: 'parallelWorkers', label: 'Parallel workers', icon: Gauge, min: 1, max: 128, step: 1, unit: '', hint: 'Accelerator concurrency (replicator max_workers). Saturates against API rate limits' },
   { key: 'throughputGbps', label: 'Measured throughput', icon: Gauge, min: 1, max: 100, step: 1, unit: ' Gbps', hint: 'Pilot-measured effective rate, not the advertised link' },
   { key: 'tablesPerWave', label: 'Tables per wave', icon: Layers, min: 250, max: 20000, step: 250, unit: '', hint: 'Fewer tables per wave means more waves, and every wave carries fixed ceremony' },
+  { key: 'agentConcurrency', label: 'AI agent fleet', icon: Bot, min: 0, max: 60, step: 1, unit: '', hint: '0 = off (plain team-scaled code conversion). >0 splits code-bound into drafting (agents) + reviewing (your team) -- reviewing is never skipped' },
 ];
 
 interface Preset {
@@ -191,6 +239,9 @@ interface Preset {
   throughputGbps: number;
   tablesPerWave: number;
   aiAccelerated: boolean;
+  /** 0/omitted = plain team-scaled code conversion (every preset below this
+   *  point predates agent-fleet mode and is unaffected by it). */
+  agentConcurrency?: number;
 }
 
 // Grounded in: Databricks' own Lakebridge claims (2x faster / timelines cut in half /
@@ -206,6 +257,7 @@ const PRESETS: Preset[] = [
   { label: 'Large (25 catalogs, 50k tables, 4k jobs)', workspaceCount: 12, catalogCount: 25, tableCount: 50000, userCount: 1200, notebookCount: 6000, jobCount: 4000, dataVolumeTB: 900, teamSize: 12, parallelWorkers: 16, throughputGbps: 10, tablesPerWave: 2500, aiAccelerated: true },
   { label: 'Large, no accelerators', workspaceCount: 12, catalogCount: 25, tableCount: 50000, userCount: 1200, notebookCount: 6000, jobCount: 4000, dataVolumeTB: 900, teamSize: 12, parallelWorkers: 4, throughputGbps: 10, tablesPerWave: 2500, aiAccelerated: false },
   { label: 'Very large (30 catalogs, 80k tables)', workspaceCount: 30, catalogCount: 40, tableCount: 80000, userCount: 3000, notebookCount: 12000, jobCount: 7500, dataVolumeTB: 3000, teamSize: 20, parallelWorkers: 32, throughputGbps: 20, tablesPerWave: 4000, aiAccelerated: true },
+  { label: 'Large + AI agent fleet (4-month target)', workspaceCount: 12, catalogCount: 25, tableCount: 50000, userCount: 1200, notebookCount: 6000, jobCount: 4000, dataVolumeTB: 900, teamSize: 20, parallelWorkers: 64, throughputGbps: 15, tablesPerWave: 3000, aiAccelerated: true, agentConcurrency: 24 },
 ];
 
 function ceil(val: number): number {
@@ -221,9 +273,28 @@ function round1(val: number): number {
  * Exported so the UI can show the gap -- requesting 64 workers when 32 is the
  * ceiling is the single most common over-estimate in a bulk migration plan.
  */
-export function effectiveWorkers(requested: number): number {
+/** Raw (unscaled) weeks of notebook+job conversion work at a given per-unit
+ *  rate, before whatever factor (team sqrt-scaling, fleet saturation, a
+ *  reviewer headcount) divides it down to wall-clock. Shared by the plain
+ *  team-scaled formula and both agent-fleet lanes so the same shape isn't
+ *  hand-written three times with three different rate pairs. */
+function laneWeeks(notebookCount: number, jobCount: number, notebookRate: number, jobRate: number): number {
+  return notebookCount / notebookRate + jobCount / jobRate;
+}
+
+function saturating(requested: number, ceiling: number): number {
   const w = Math.max(1, requested);
-  return WORKER_SATURATION_CEILING * (1 - Math.exp(-w / WORKER_SATURATION_CEILING));
+  return ceiling * (1 - Math.exp(-w / ceiling));
+}
+
+export function effectiveWorkers(requested: number): number {
+  return saturating(requested, WORKER_SATURATION_CEILING);
+}
+
+/** Same saturating shape as {@link effectiveWorkers}, against the agent
+ *  fleet's own ceiling -- see AGENT_SATURATION_CEILING. */
+export function effectiveAgents(requested: number): number {
+  return saturating(requested, AGENT_SATURATION_CEILING);
 }
 
 /**
@@ -285,11 +356,35 @@ export function computeTimeline(
   const hours = transferHours(dataVolumeTB, scale.throughputGbps ?? (crossCloud ? 8 : 20));
   const byteBoundWeeks = scaleModelled ? hours / MIGRATION_HOURS_PER_WEEK : 0;
 
-  // Code conversion is the only one of the three that responds to team size.
-  const codeBoundWeeks = scaleModelled
-    ? ((notebookCount / (aiAccelerated ? 150 : 75)) + (jobCount / (aiAccelerated ? 400 : 160))) *
-      teamFactor
-    : 0;
+  // Code conversion responds to team size in the plain formula -- or, with an
+  // agent fleet, splits into two lanes that can overlap (agents draft batch
+  // N+1 while reviewers clear batch N), so wall-clock is the WORSE lane once
+  // the pipeline is full, not their sum. Reviewing is never zero: the fleet
+  // compresses drafting, not the semantic-correctness gate this repo's own
+  // AI-assisted migration guidance says can't be skipped.
+  const agentConcurrency = Math.max(0, scale.agentConcurrency ?? 0);
+  let codeBoundWeeks = 0;
+  let codeLane: 'drafting' | 'reviewing' | undefined;
+  let effectiveFleetSize: number | undefined;
+  if (scaleModelled && agentConcurrency > 0) {
+    const effectiveFleet = effectiveAgents(agentConcurrency);
+    effectiveFleetSize = effectiveFleet;
+    const draftWeeks = laneWeeks(notebookCount, jobCount, DRAFT_NOTEBOOKS_PER_AGENT_WEEK, DRAFT_JOBS_PER_AGENT_WEEK) / effectiveFleet;
+    // Linear in teamSize, not sqrt like drafting/foundation/validation below --
+    // deliberately different, not an oversight. Those terms scale by
+    // sqrt(baseline/teamSize) because AUTHORING work needs coordination
+    // (dividing work, avoiding duplicate effort, shared context) that doesn't
+    // shrink proportionally with headcount. Reviewing an already-drafted
+    // conversion is closer to embarrassingly parallel -- each reviewer clears
+    // their own batch independently -- so linear is the more honest model
+    // here, not a simplification to fix.
+    const reviewWeeks = laneWeeks(notebookCount, jobCount, REVIEW_NOTEBOOKS_PER_PERSON_WEEK, REVIEW_JOBS_PER_PERSON_WEEK) / Math.max(1, teamSize);
+    codeBoundWeeks = Math.max(draftWeeks, reviewWeeks);
+    codeLane = draftWeeks >= reviewWeeks ? 'drafting' : 'reviewing';
+  } else if (scaleModelled) {
+    codeBoundWeeks =
+      laneWeeks(notebookCount, jobCount, aiAccelerated ? 150 : 75, aiAccelerated ? 400 : 160) * teamFactor;
+  }
 
   const tablesPerWave = Math.max(100, scale.tablesPerWave ?? DEFAULT_TABLES_PER_WAVE);
   const waves = scaleModelled ? Math.max(1, Math.ceil(tableCount / tablesPerWave)) : 0;
@@ -383,6 +478,8 @@ export function computeTimeline(
       transferHours: Math.round(hours),
       manualJobs,
       bottleneck,
+      codeLane,
+      effectiveAgents: effectiveFleetSize !== undefined ? round1(effectiveFleetSize) : undefined,
     };
   }
 
@@ -425,6 +522,7 @@ export default function TimelineEstimator() {
   const [parallelWorkers, setParallelWorkers] = useState(16);
   const [throughputGbps, setThroughputGbps] = useState(10);
   const [tablesPerWave, setTablesPerWave] = useState(2500);
+  const [agentConcurrency, setAgentConcurrency] = useState(0);
   const [cloudPair, setCloudPair] = useState<CloudPair>('azure-aws');
   const [aiAccelerated, setAiAccelerated] = useState(true);
   const [calculated, setCalculated] = useState<Calculated | null>(null);
@@ -432,10 +530,10 @@ export default function TimelineEstimator() {
   const handleCalculate = useCallback(() => {
     const result = computeTimeline(
       workspaceCount, userCount, notebookCount, jobCount, teamSize, cloudPair, aiAccelerated, dataVolumeTB,
-      { tableCount, catalogCount, parallelWorkers, throughputGbps, tablesPerWave },
+      { tableCount, catalogCount, parallelWorkers, throughputGbps, tablesPerWave, agentConcurrency },
     );
     setCalculated(result);
-  }, [workspaceCount, userCount, notebookCount, jobCount, teamSize, cloudPair, aiAccelerated, dataVolumeTB, tableCount, catalogCount, parallelWorkers, throughputGbps, tablesPerWave]);
+  }, [workspaceCount, userCount, notebookCount, jobCount, teamSize, cloudPair, aiAccelerated, dataVolumeTB, tableCount, catalogCount, parallelWorkers, throughputGbps, tablesPerWave, agentConcurrency]);
 
   const applyPreset = useCallback((p: Preset) => {
     setWorkspaceCount(p.workspaceCount);
@@ -449,6 +547,7 @@ export default function TimelineEstimator() {
     setParallelWorkers(p.parallelWorkers);
     setThroughputGbps(p.throughputGbps);
     setTablesPerWave(p.tablesPerWave);
+    setAgentConcurrency(p.agentConcurrency ?? 0);
     setAiAccelerated(p.aiAccelerated);
   }, []);
 
@@ -464,6 +563,7 @@ export default function TimelineEstimator() {
     { value: parallelWorkers, setter: setParallelWorkers, config: SLIDERS[8] },
     { value: throughputGbps, setter: setThroughputGbps, config: SLIDERS[9] },
     { value: tablesPerWave, setter: setTablesPerWave, config: SLIDERS[10] },
+    { value: agentConcurrency, setter: setAgentConcurrency, config: SLIDERS[11] },
   ];
 
   return (
@@ -654,6 +754,15 @@ export default function TimelineEstimator() {
                     <p className="mb-3 text-xs leading-relaxed text-[var(--ink-muted)]">
                       {BOTTLENECK_COPY[calculated.scale.bottleneck].detail}
                     </p>
+                    {calculated.scale.codeLane && calculated.scale.bottleneck === 'code' && (
+                      <p className="mb-3 text-xs leading-relaxed text-[var(--ink-muted)]">
+                        With the agent fleet on, the binding lane is{' '}
+                        <strong className="text-[var(--ink)]">{calculated.scale.codeLane}</strong>
+                        {calculated.scale.codeLane === 'drafting'
+                          ? ' — more agent sessions help (up to the fleet ceiling); more reviewers do not.'
+                          : ' — more reviewers help; more agent sessions do not, they are already ahead of the review queue.'}
+                      </p>
+                    )}
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
                       {[
                         ['Waves', `${calculated.scale.waves} x ${calculated.scale.tablesPerWave.toLocaleString()} tables`],
@@ -664,6 +773,14 @@ export default function TimelineEstimator() {
                         ['Throughput', `${calculated.scale.tablesPerHour.toLocaleString()} tables/h`],
                         ['Effective workers', `${calculated.scale.effectiveWorkers} of ${parallelWorkers}`],
                         ['Jobs needing hands', `${calculated.scale.manualJobs.toLocaleString()} of ${jobCount.toLocaleString()}`],
+                        ...(calculated.scale.codeLane
+                          ? ([
+                              [
+                                'Code lane binding',
+                                `${calculated.scale.codeLane} (${calculated.scale.effectiveAgents} of ${agentConcurrency} agents effective)`,
+                              ],
+                            ] as [string, string][])
+                          : []),
                       ].map(([label, value]) => (
                         <div key={label} className="flex flex-col">
                           <span className="text-[var(--ink-subtle)]">{label}</span>
@@ -749,6 +866,153 @@ export default function TimelineEstimator() {
         for the traditional (non-accelerated) comparison. Treat every number here as a
         planning estimate to pressure-test against your own discovery findings, not a quote.
       </p>
+
+      <details className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 text-xs">
+        <summary className="cursor-pointer font-semibold text-[var(--ink)]">
+          Assumptions &amp; known gaps — read before trusting this number
+        </summary>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[480px] border-collapse text-left">
+            <caption className="mb-2 text-left font-semibold text-[var(--ink-muted)]">
+              What every number above is built on
+            </caption>
+            <thead>
+              <tr className="border-b border-[var(--border)] text-[var(--ink-subtle)]">
+                <th className="py-1 pr-3">Assumption</th>
+                <th className="py-1 pr-3">Value</th>
+                <th className="py-1">Source</th>
+              </tr>
+            </thead>
+            <tbody className="text-[var(--ink-muted)]">
+              <tr className="border-b border-[var(--border)]/50">
+                <td className="py-1 pr-3">Worker ceiling</td>
+                <td className="py-1 pr-3">64, default 8</td>
+                <td className="py-1">databricks-replicator's own validated <code>max_workers</code> range</td>
+              </tr>
+              <tr className="border-b border-[var(--border)]/50">
+                <td className="py-1 pr-3">Catalog processing</td>
+                <td className="py-1 pr-3">Sequential, one at a time</td>
+                <td className="py-1">Confirmed from the replicator's own source, not its README</td>
+              </tr>
+              <tr className="border-b border-[var(--border)]/50">
+                <td className="py-1 pr-3">Seconds per table (accel. / manual)</td>
+                <td className="py-1 pr-3">45s / 180s</td>
+                <td className="py-1"><strong>Planning default</strong> — no accelerator publishes a throughput SLA</td>
+              </tr>
+              <tr className="border-b border-[var(--border)]/50">
+                <td className="py-1 pr-3">Wave ceremony (accel. / manual)</td>
+                <td className="py-1 pr-3">0.6 / 1.0 wk per wave</td>
+                <td className="py-1"><strong>Planning default</strong></td>
+              </tr>
+              <tr className="border-b border-[var(--border)]/50">
+                <td className="py-1 pr-3">Manual job fraction (accel. / manual)</td>
+                <td className="py-1 pr-3">12% / 35%</td>
+                <td className="py-1"><strong>Planning default</strong></td>
+              </tr>
+              <tr className="border-b border-[var(--border)]/50">
+                <td className="py-1 pr-3">Transfer time</td>
+                <td className="py-1 pr-3">TB × 8 × 1024 × 1.35 ÷ Gbps ÷ 3600</td>
+                <td className="py-1">Same formula as <a href="/execution/large-scale-data-transfer" className="underline hover:text-[var(--accent)]">large-scale data transfer</a></td>
+              </tr>
+              <tr className="border-b border-[var(--border)]/50">
+                <td className="py-1 pr-3">Agent drafting rate (notebooks / jobs per week)</td>
+                <td className="py-1 pr-3">40 / 100 per agent session</td>
+                <td className="py-1"><strong>Planning default</strong> — no agent vendor publishes this either</td>
+              </tr>
+              <tr className="border-b border-[var(--border)]/50">
+                <td className="py-1 pr-3">Human review rate (notebooks / jobs per week)</td>
+                <td className="py-1 pr-3">25 / 60 per person</td>
+                <td className="py-1"><strong>Planning default</strong> — reviewing a draft, not authoring from scratch</td>
+              </tr>
+              <tr>
+                <td className="py-1 pr-3">Agent fleet ceiling</td>
+                <td className="py-1 pr-3">24 effective sessions</td>
+                <td className="py-1">LLM API throughput/budget — same saturating shape as the worker ceiling, different real limit</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p className="mt-4 text-[var(--ink-subtle)]">
+          <strong className="text-[var(--ink-muted)]">AI agent fleet mode</strong> (the "AI agent
+          fleet" slider) splits code conversion into two lanes that can overlap — agents draft
+          batch N+1 while your team reviews batch N — so the window is whichever lane is slower,
+          not their sum. It does <strong>not</strong> remove the review step: a converted query can
+          run successfully and still return the wrong answer (see{' '}
+          <a href="/accelerators/ai-assisted-migration" className="underline hover:text-[var(--accent)]">
+            AI-assisted migration
+          </a>
+          ), so "95% automated" here means agents draft the mechanical bulk and a human still
+          reviews every one — not that 5% of the work gets a human and the rest ships unattended.
+        </p>
+
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full min-w-[560px] border-collapse text-left">
+            <caption className="mb-2 text-left font-semibold text-[var(--ink-muted)]">
+              What this tool does <em>not</em> model — surfaced, not hidden
+            </caption>
+            <thead>
+              <tr className="border-b border-[var(--border)] text-[var(--ink-subtle)]">
+                <th className="py-1 pr-3">Gap</th>
+                <th className="py-1 pr-3">Why it matters</th>
+                <th className="py-1">What to do instead</th>
+              </tr>
+            </thead>
+            <tbody className="text-[var(--ink-muted)]">
+              <tr className="border-b border-[var(--border)]/50">
+                <td className="py-1 pr-3">Multiple workspaces run as independent parallel pipelines</td>
+                <td className="py-1 pr-3">
+                  Each workspace is its own metastore/account — its own replicator run, own worker
+                  pool. The <code>workspaceCount</code> input only adds a small per-workspace
+                  overhead; it does <strong>not</strong> divide the object/code-bound terms across
+                  concurrent pipelines.
+                </td>
+                <td className="py-1">
+                  Run this tool once per workspace with that workspace's <em>share</em> of
+                  tables/notebooks/jobs/TB and a sub-team size, then take the <strong>max</strong>{' '}
+                  of the totals (the slowest workspace, not the sum) — see{' '}
+                  <a href="/accelerators/databricks-tooling" className="underline hover:text-[var(--accent)]">
+                    Databricks migration tooling
+                  </a>.
+                </td>
+              </tr>
+              <tr className="border-b border-[var(--border)]/50">
+                <td className="py-1 pr-3">Databricks Apps</td>
+                <td className="py-1 pr-3">
+                  No accelerator in this runbook covers Apps migration — not the replicator, not
+                  workspace-migration, not the Terraform Exporter.
+                </td>
+                <td className="py-1">Budget as fully manual, its own wave — don't fold into notebook/job counts.</td>
+              </tr>
+              <tr className="border-b border-[var(--border)]/50">
+                <td className="py-1 pr-3">ML experiment/run volume</td>
+                <td className="py-1 pr-3">
+                  <a href="/ml/mlflow" className="underline hover:text-[var(--accent)]">mlflow-export-import</a>{' '}
+                  covers <em>how</em> to move MLflow state, but experiment/run count isn't a
+                  distinct input here — it's implicitly folded into notebook/job counts, which
+                  understates a run-heavy estate.
+                </td>
+                <td className="py-1">Size it separately: count experiments/runs, pilot-measure export/import throughput.</td>
+              </tr>
+              <tr>
+                <td className="py-1 pr-3">Reconciliation run time</td>
+                <td className="py-1 pr-3">
+                  Lakebridge Reconcile / <code>dbxmig reconcile</code> wall-clock isn't a separate
+                  term — folded into the generic validation-phase formula.
+                </td>
+                <td className="py-1">Pilot-measure actual reconcile runtime per wave; compare against the validation estimate.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p className="mt-4 text-[var(--ink-subtle)]">
+          Due diligence, not a disclaimer: every gap above is a real modeling choice, not an
+          oversight caught after the fact — pilot-measure each one against your own estate before
+          committing a date. See <a href="/execution/pilot" className="underline hover:text-[var(--accent)]">pilot</a>.
+        </p>
+      </details>
     </motion.div>
   );
 }

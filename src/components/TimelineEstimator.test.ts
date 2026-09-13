@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   computeTimeline,
   effectiveWorkers,
+  effectiveAgents,
   transferHours,
   WORKER_SATURATION_CEILING,
+  AGENT_SATURATION_CEILING,
   TRANSFER_OVERHEAD_FACTOR,
 } from './TimelineEstimator';
 
@@ -153,5 +155,63 @@ describe('scale model', () => {
     const few = large({ catalogCount: 3 });
     const many = large({ catalogCount: 60 });
     expect(many.phases[1].weeks).toBeGreaterThan(few.phases[1].weeks);
+  });
+});
+
+describe('AI agent fleet mode', () => {
+  it('is off by default -- identical to omitting agentConcurrency entirely', () => {
+    const withField = large({ agentConcurrency: 0 });
+    const without = large();
+    expect(withField.totalWeeks).toBe(without.totalWeeks);
+    expect(withField.scale!.codeLane).toBeUndefined();
+  });
+
+  it('reports which lane is binding once a fleet is supplied', () => {
+    const s = large({ agentConcurrency: 24 }).scale!;
+    expect(s.codeLane).toMatch(/^(drafting|reviewing)$/);
+    expect(s.effectiveAgents).toBeGreaterThan(0);
+  });
+
+  it('agent concurrency saturates the same way worker concurrency does', () => {
+    expect(effectiveAgents(4)).toBeGreaterThan(3);
+    expect(effectiveAgents(200)).toBeLessThan(AGENT_SATURATION_CEILING);
+    expect(effectiveAgents(200)).toBeGreaterThan(effectiveAgents(24));
+    // Doubling well past the ceiling buys little -- same shape as effectiveWorkers.
+    expect(effectiveAgents(96) / effectiveAgents(48)).toBeLessThan(1.2);
+  });
+
+  it('a small fleet is drafting-bound; a large one shifts the floor to reviewing', () => {
+    const tiny = large({ agentConcurrency: 1 }).scale!;
+    const huge = large({ agentConcurrency: 200 }).scale!;
+    expect(tiny.codeLane).toBe('drafting');
+    expect(huge.codeLane).toBe('reviewing');
+  });
+
+  it('past the point reviewing binds, MORE agents stop helping at all', () => {
+    // This is the actual finding: once review is the floor, fleet size is
+    // irrelevant -- codeBoundWeeks should barely move from here on.
+    const s24 = large({ agentConcurrency: 24 }).scale!;
+    const s200 = large({ agentConcurrency: 200 }).scale!;
+    expect(s24.codeLane).toBe('reviewing');
+    expect(s200.codeLane).toBe('reviewing');
+    expect(Math.abs(s200.codeBoundWeeks - s24.codeBoundWeeks)).toBeLessThan(0.5);
+  });
+
+  it('more reviewers (team size) shortens the reviewing-bound floor; fleet size does not', () => {
+    const smallTeam = computeTimeline(12, 1200, 6000, 4000, 6, 'azure-aws', true, 900, {
+      ...LARGE,
+      agentConcurrency: 24,
+    });
+    const bigTeam = computeTimeline(12, 1200, 6000, 4000, 40, 'azure-aws', true, 900, {
+      ...LARGE,
+      agentConcurrency: 24,
+    });
+    expect(bigTeam.scale!.codeBoundWeeks).toBeLessThan(smallTeam.scale!.codeBoundWeeks);
+  });
+
+  it('never returns a negative or zero draft/review floor for a nonzero fleet', () => {
+    const s = large({ agentConcurrency: 1, tableCount: 0 }).scale;
+    // tableCount: 0 disables scale mode entirely -- codeLane must not appear.
+    expect(s).toBeNull();
   });
 });

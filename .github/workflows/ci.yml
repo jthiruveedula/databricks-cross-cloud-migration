@@ -27,6 +27,7 @@ jobs:
     outputs:
       site: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.site }}
       automation: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.automation }}
+      skills: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.skills }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -43,6 +44,8 @@ jobs:
               - 'tsconfig.json'
             automation:
               - 'automation/**'
+            skills:
+              - 'skills/**'
 
   test:
     runs-on: ubuntu-latest
@@ -79,6 +82,22 @@ jobs:
       - run: ruff check .
       - run: pytest
 
+  # migration-assess is a standalone, dependency-free skill (stdlib only) --
+  # distributed on its own, so it deliberately isn't part of the automation/
+  # package. Its self-check is a plain script, not pytest, to match.
+  skills:
+    needs: [changes]
+    if: needs.changes.outputs.skills == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: python3 skills/migration-assess/scripts/test_assess.py
+
   # `check` is a required status check on main, so the JOB must always run on a
   # PR -- a job skipped by an `if:` reports "skipped" and leaves the requirement
   # unsatisfied, which blocks any PR that touches nothing under src/. The build
@@ -87,7 +106,12 @@ jobs:
   # nothing.
   check:
     if: github.event_name == 'pull_request'
-    needs: [test, changes]
+    # automation/skills are conditional on paths-filter and SKIP (not fail)
+    # when unrelated -- a skipped `needs` job doesn't block a dependent job in
+    # GitHub Actions by default, so listing them here costs nothing on a PR
+    # that touches neither, and closes the gap where a real failure in either
+    # wouldn't block this required check from reporting green.
+    needs: [test, changes, automation, skills]
     runs-on: ubuntu-latest
     permissions:
       contents: read

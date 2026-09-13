@@ -31,6 +31,7 @@ Do not write what Databricks already maintains. Almost every mechanical layer of
 | **[alteryx-to-databricks-converter](https://github.com/databricks-solutions/alteryx-to-databricks-converter)** | Databricks Solutions | `.yxmd` workflows into PySpark, DLT, Spark SQL, Lakeflow Designer | Unsupported tools are reported, not guessed |
 | **[databricks-waf](https://github.com/databricks-solutions/databricks-waf)** | Databricks Solutions | Post-migration Well-Architected assessment traced to evidence | Alpha; it reviews the target, it never migrates |
 | **[mlflow-export-import](https://github.com/mlflow/mlflow-export-import)** | MLflow (OSS, Apache-2.0) | Bulk MLflow experiment/run/model export-import, incl. cross-metastore UC model copy | Custom artifact locations; Databricks notebook-revision linking |
+| **[migration-assess](/accelerators/databricks-tooling#migration-assess--find-blockers-before-picking-a-tool)** | This repo | Scans a codebase, classifies migration blockers, points at the matching accelerator above | Static regex scan — no execution trace, no LLM judgment |
 | **[Terraform Exporter](https://github.com/databricks/terraform-provider-databricks/blob/main/docs/guides/experimental-exporter.md)** | Databricks (experimental) | Bulk export of jobs/clusters/notebooks/policies as importable Terraform, incl. cross-cloud node-type translation | DAB-managed jobs (not exported at all); `-incremental` doesn't apply to jobs/clusters |
 | **databrickslabs/migrate** *(unmaintained)* | Databricks Labs (OSS) | Workspace-to-workspace asset export/import | Last commit 2023-11-27; its own README now points at the Terraform Exporter instead |
 | **Asset Bundles / Terraform** | Databricks | IaC replicas of jobs, pipelines, notebooks | Runtime differences across clouds |
@@ -92,7 +93,41 @@ The kit is explicit that it ships skills and glue, not a certified reference arc
 
 [`databricks-solutions/databricks-replicator`](https://github.com/databricks-solutions/databricks-replicator) is the one accelerator here that states cloud-agnostic, cross-metastore replication as its purpose, which makes it the default mover for the table workstream. It performs incremental metadata + data replication via D2D Delta Sharing, Deep Clone and Auto Loader, handles the streaming-table backing-table complexity (it clones the backing table, not the streaming table), and reconciles row counts and schema after every run.
 
-Its own coverage table is the thing to plan against. Supported: storage credentials, external locations, tag policies, catalogs, schemas, volumes, tables, views, comments, SQL-defined materialized views and streaming tables, tags, and per-securable grants. **Not** replicated: object ownership, row filters and column masks, Hive metastore, and workspace assets — with UC functions and registered models still listed as in development.
+Every one of these is a UC metadata object that shows up in any lift-and-shift — this is the tool's own coverage table (verified live against its README), with what each row actually means:
+
+| Object | Status | What it needs |
+|---|---|---|
+| Storage credentials | Supported | `target_credential_type`: `aws` \| `azure_access_connector` \| `azure_managed_identity` \| `gcp_service_account` |
+| External locations | Supported | Matched via `cloud_url_mapping` (below) |
+| Tag policies | Supported | Governed tags — replicate all, or scope by tag key |
+| Catalogs, schemas, volumes, tables, views | Supported | — |
+| Table/view/column comments | Supported | Materialized views skipped — declare comments in the MV's own `CREATE` |
+| SQL-defined materialized views / streaming tables | Supported | DLT-defined MV/ST are **not** — DLT recreates those in target |
+| Tags | Supported | catalog/schema/table/view/columns/volume; foreign tables + DLT MV/ST skipped (no target object exists) |
+| Grants | Supported | Per-securable, per-principal. **Not replicated: object ownership, row/column filters** |
+| Functions, registered models | In development | Route to workspace-migration instead (below) |
+
+Four config blocks drive all of it — real values, not placeholders:
+
+<CodeBlock language="yaml" code={`# 1. Storage credentials -- source name -> target cloud principal
+storage_credential_config:
+  target_credential_type: "aws"
+  mapping:
+    "source_storage_credential_1": "arn:aws:iam::123456789012:role/target-role-1"
+
+# 2. Where the actual bytes live -- same mapping dbxmig's path_rules encodes
+cloud_url_mapping:
+  "abfss://raw@srcadls.dfs.core.windows.net/": "s3://target-bucket/raw/"
+
+# 3. Which UC object types this replication group touches -- omit for "all"
+uc_object_types: ["catalog", "schema", "table", "view", "table_grant", "column_comment"]
+
+# 4. Grant replication needs source-principal -> target-principal, or it
+# passes unmapped names through verbatim
+principal_mapping:
+  "alice@src.example.com": "alice@tgt.example.com"
+  "etl-prod-sp": "etl-stg-sp"
+`} />
 
 Configuration is YAML with Pydantic validation, so scope (catalogs, schemas, tables), storage-URL rewrites (`cloud_url_mapping`) and principal translation (`principal_mapping`) are all declarative — which is exactly why they can be generated rather than typed (see [one config, every accelerator](#one-config-every-accelerator) below).
 
@@ -158,6 +193,15 @@ The workspace-migration config is written with `dry_run: true` and `on_target_co
 None of the accelerators above touch MLflow — experiments, runs, and registered models are workspace-local state with no UC equivalent to replicate. [`mlflow/mlflow-export-import`](https://github.com/mlflow/mlflow-export-import) (maintained under the official MLflow GitHub org, Apache-2.0) is the bulk export/import tool for that gap: `export-all`/`import-all` moves every object type (runs, experiments, registered models, logged models, traces, prompts, evaluation datasets) through an intermediate directory, so source and target never need to reach each other directly. Its `copy-model-version` CLI additionally does what the raw MLflow client cannot — copy a model version across two different UC metastores in different accounts, via two Databricks CLI profiles.
 
 It already avoids the two failure modes a hand-rolled migration script tends to hit silently: it pages `search_runs` instead of trusting a single 1000-row page, and it replays full metric history instead of only the latest value per key. See [MLflow](/ml/mlflow) and [model registry](/ml/model-registry) for the exact commands and what still needs a hand-rolled fix afterward (custom artifact locations, Databricks notebook-revision links).
+
+## migration-assess — find blockers before picking a tool
+
+This repo ships its own agent skill (`skills/migration-assess`, installable via `databricks aitools install --path` or as a Claude Code plugin from this repo) that scans a codebase for exactly the patterns the tables above solve for — DBFS paths, `hive_metastore.` refs, cloud-identity strings, stage-based MLflow URIs, manual job-CLI loops — and reports which accelerator above fixes each one:
+
+<CodeBlock language="bash" code={`python3 skills/migration-assess/scripts/assess.py <path> -o assessment.md
+# groups findings by migration kind, each with the matching tool from this page`} />
+
+Deterministic regex scan, stdlib only — the agent reads the report, not the codebase.
 
 ## Terraform Exporter — the real fast path for bulk jobs, and `migrate`'s actual status
 

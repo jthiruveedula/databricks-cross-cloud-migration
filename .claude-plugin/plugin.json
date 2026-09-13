@@ -1,0 +1,13 @@
+{
+  "name": "migration-assess",
+  "version": "0.1.0",
+  "description": "Scan a codebase for Databricks cross-cloud migration blockers (hardcoded DBFS paths, hive_metastore refs, cloud identity, stage-based MLflow URIs, manual job loops) and report which ready-made accelerator fixes each one.",
+  "author": {
+    "name": "Jagadeesh Thiruveedula"
+  },
+  "license": "MIT",
+  "keywords": ["databricks", "migration", "unity-catalog", "cross-cloud", "assessment", "mlflow"],
+  "skills": [
+    "./skills/migration-assess"
+  ]
+}

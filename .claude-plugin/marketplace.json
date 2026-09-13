@@ -1,0 +1,16 @@
+{
+  "name": "databricks-cross-cloud-migration",
+  "owner": {
+    "name": "Jagadeesh Thiruveedula"
+  },
+  "plugins": [
+    {
+      "name": "migration-assess",
+      "source": "./",
+      "description": "Scan a codebase for Databricks cross-cloud migration blockers and report which ready-made accelerator fixes each one.",
+      "version": "0.1.0",
+      "license": "MIT",
+      "keywords": ["databricks", "migration", "unity-catalog", "cross-cloud", "assessment", "mlflow"]
+    }
+  ]
+}
