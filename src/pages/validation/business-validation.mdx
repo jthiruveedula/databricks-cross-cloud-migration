@@ -6,6 +6,7 @@ description: 'Get explicit business sign-off that the target platform actually m
 
 import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
 
 # Business validation
 
@@ -42,6 +43,25 @@ import Checklist from '../../components/Checklist.tsx';
 - Confirm sign-off was given by the actual consuming stakeholder for each critical workload, with evidence retained (email, signed document, or ticket) — see [audit and compliance](/security/audit-and-compliance) for retention expectations.
 - Cross-check that every workload flagged high-criticality in [risk assessment](/discovery/risk-assessment) has a corresponding business sign-off — a missing sign-off on a high-criticality workload should block cutover.
 - Verify SLA/performance expectations were validated against actual user perception (e.g. "loads fast enough"), not only a technical benchmark number.
+
+Step 4's gate as a runnable check, not a manual cross-reference against the risk register:
+
+<CodeBlock client:visible language="python" filename="check_signoff_gate.py" code={`# Block cutover on any high-criticality workload missing an explicit,
+# retained business sign-off -- silence is not approval.
+import json
+
+risk_register = json.load(open("risk-register.json"))    # from risk assessment
+signoffs = json.load(open("business-signoffs.json"))     # {workload_id: {"signed_by": ..., "date": ...}}
+
+high_crit = [w for w in risk_register["workloads"] if w["criticality"] == "high"]
+blocking = [w for w in high_crit if w["id"] not in signoffs]
+
+if blocking:
+    for w in blocking:
+        print(f"BLOCKING: '{w['name']}' ({w['id']}) has no business sign-off on file")
+    raise SystemExit(1)
+print(f"All {len(high_crit)} high-criticality workloads have retained sign-off.")
+`} />
 
 ## Rollback
 
