@@ -105,12 +105,24 @@ jobs:
   # still reports green in seconds instead of installing node_modules for
   # nothing.
   check:
-    if: github.event_name == 'pull_request'
-    # automation/skills are conditional on paths-filter and SKIP (not fail)
-    # when unrelated -- a skipped `needs` job doesn't block a dependent job in
-    # GitHub Actions by default, so listing them here costs nothing on a PR
-    # that touches neither, and closes the gap where a real failure in either
-    # wouldn't block this required check from reporting green.
+    # BUG FIXED HERE: a bare `needs: [automation, skills]` made THIS job skip
+    # (not just its dependencies) on any PR that doesn't touch automation/**
+    # or skills/** -- GitHub Actions' default success() gate for `needs` does
+    # NOT treat a job skipped by its own path-filter `if:` as satisfying it,
+    # contrary to what the comment this replaces assumed. Since `check` is a
+    # required status check, that meant EVERY docs-only PR reported `check`
+    # as skipped -- an unsatisfied required check, blocking merge entirely.
+    # Confirmed live on PR #179 before this fix.
+    #
+    # The correct pattern: keep the job running via an explicit `if:` that
+    # accepts a needed job's result as either success OR skipped, and
+    # `always()` so this job's own conditional evaluation isn't itself
+    # short-circuited by a skipped dependency.
+    if: |
+      always() && github.event_name == 'pull_request' &&
+      needs.test.result == 'success' && needs.changes.result == 'success' &&
+      (needs.automation.result == 'success' || needs.automation.result == 'skipped') &&
+      (needs.skills.result == 'success' || needs.skills.result == 'skipped')
     needs: [test, changes, automation, skills]
     runs-on: ubuntu-latest
     permissions:
