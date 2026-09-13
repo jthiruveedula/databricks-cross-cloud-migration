@@ -49,6 +49,25 @@ A metastore is created per account and region and cannot move or span regions. D
 4. Run the same [technical](/validation/technical-validation) and [data reconciliation](/validation/data-reconciliation) checks used during migration cutover before declaring the failover complete.
 5. Failback to the original primary once it's healthy, on a planned schedule — don't leave the promoted secondary as a permanent, undocumented new primary.
 
+Step 1's health check as a runnable gate, not a judgment call made cold during an incident:
+
+<CodeBlock client:visible language="python" filename="dr_health_check.py" code={`# Confirm primary is genuinely unavailable before declaring an incident --
+# a transient blip that self-resolves in the time it takes to run this
+# check should not trigger a failover.
+from databricks.sdk import WorkspaceClient
+
+w = WorkspaceClient(host=PRIMARY_HOST, token=PRIMARY_TOKEN)
+try:
+    w.clusters.list(timeout=15)
+    healthy = True
+except Exception:
+    healthy = False
+
+if not healthy:
+    print("Primary unreachable -- confirm against your documented threshold "
+          "(e.g. 3 consecutive failed checks, 5 minutes apart) before promoting.")
+`} />
+
 ## Validation
 
 - Run a failover drill against the secondary region on a schedule (quarterly is a reasonable default), not only after an incident forces one.

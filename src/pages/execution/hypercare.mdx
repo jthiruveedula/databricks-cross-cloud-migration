@@ -6,6 +6,7 @@ description: 'The heightened-monitoring period after cutover, before source deco
 
 import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
 import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Hypercare
@@ -34,6 +35,22 @@ Hypercare is the bounded period immediately after [cutover](/execution/cutover) 
 - **Cost** — cross-cloud migrations frequently reveal under-provisioned or over-provisioned target compute; watch spend daily, not monthly.
 - **Data freshness / SLA adherence** for every migrated pipeline, not just the ones flagged as critical.
 - **Support ticket volume and theme** — a spike in a specific category (e.g. permission errors) points at a systemic gap, not isolated user error.
+
+<CodeBlock client:visible language="sql" filename="hypercare_job_duration_check.sql" code={`-- Target jobs running materially slower than their pre-migration baseline --
+-- "succeeded" alone hides this. Requires the source duration captured before
+-- cutover (see workflows and jobs); system.lakeflow.job_run_timeline only
+-- has target-side history once jobs start running there.
+SELECT
+  job_name,
+  AVG(run_duration_seconds)                 AS target_avg_duration_sec,
+  source_baseline.avg_duration_sec          AS source_avg_duration_sec,
+  ROUND(AVG(run_duration_seconds) / source_baseline.avg_duration_sec, 2) AS slowdown_ratio
+FROM system.lakeflow.job_run_timeline AS t
+JOIN source_baseline USING (job_name)
+WHERE t.period_start_time >= CURRENT_DATE() - INTERVAL 1 DAY
+GROUP BY job_name, source_baseline.avg_duration_sec
+HAVING slowdown_ratio > 1.5   -- flag anything 50%+ slower than source
+ORDER BY slowdown_ratio DESC;`} />
 
 ## Incident severity matrix
 

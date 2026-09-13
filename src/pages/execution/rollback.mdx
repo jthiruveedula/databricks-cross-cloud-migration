@@ -6,6 +6,7 @@ description: 'Rollback criteria, steps, and guardrails for cross-cloud migration
 
 import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
 import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Rollback
@@ -42,6 +43,18 @@ Trigger rollback if any of the following occur during or after cutover:
 5. **Redirect users:** Switch endpoints, DNS, or connection strings back to source.
 6. **Communicate:** Notify users of the rollback and expected next steps.
 7. **Post-incident review:** Document root cause before attempting another cutover, and record actual time-to-restore against the RTO target.
+
+Steps 1 and 4 as a runnable check, not just prose:
+
+<CodeBlock client:visible language="bash" filename="rollback.sh" code={`# Step 1 -- same drain check cutover runs, pointed at the OTHER side:
+# confirm target is at zero active runs before touching source.
+dbxmig -c migration.yaml cutover-drain --side target --timeout 900
+# exit 0: target is drained, safe to re-enable source below
+# exit 1: target still has active runs -- do not proceed
+
+# Step 4 -- re-enable source jobs
+databricks jobs list --output json | jq -r '.jobs[].job_id' \\
+  | xargs -I{} databricks jobs update {} --json '{"settings":{"paused_status":"UNPAUSED"}}'`} />
 
 ## Rollback at wave granularity
 
