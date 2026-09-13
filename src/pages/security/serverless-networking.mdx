@@ -114,6 +114,30 @@ Networking changes are configuration and are reversible, with one caveat worth s
 - Add a serverless smoke test to the post-cutover validation job — one serverless query against target storage per region — rather than relying on classic-compute tests to cover it.
 - Treat firewall allow-lists as code. A stable-IP list that lives in a wiki is the one that goes stale.
 
+The serverless smoke test above, runnable per region rather than described in prose:
+
+<CodeBlock client:visible language="python" filename="serverless_smoke_test.py" code={`# Run one serverless SQL query against target storage per region -- classic
+# clusters proves nothing about NCC egress, private endpoints, or firewalls.
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.sql import StatementState
+
+w = WorkspaceClient(host=TARGET_HOST, token=TARGET_TOKEN)
+warehouse_id = SERVERLESS_WAREHOUSE_ID  # must be a serverless SQL warehouse
+
+result = w.statement_execution.execute_statement(
+    warehouse_id=warehouse_id,
+    statement=f"SELECT count(*) FROM {TARGET_CATALOG}.{TARGET_SCHEMA}.{SMOKE_TEST_TABLE}",
+    wait_timeout="30s",
+)
+
+if result.status.state != StatementState.SUCCEEDED:
+    raise SystemExit(
+        f"serverless egress check FAILED in {REGION}: {result.status.error}"
+        " -- check NCC attachment, private endpoint approval, and firewall allow-list"
+    )
+print(f"serverless egress OK in {REGION}")
+`} />
+
 <Checklist client:visible title="Serverless networking" items={[
   { id: 'scope', label: 'Decided during design whether serverless is in scope — not discovered at runtime' },
   { id: 'ncc', label: 'NCC created per target region by an account admin, attached to every workspace' },

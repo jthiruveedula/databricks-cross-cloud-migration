@@ -59,6 +59,15 @@ Databricks connections in Power BI now support **Client Credentials (M2M OAuth)*
 4. Cut over the connection at the same point the underlying SQL warehouse or table goes read-only on source.
 5. Retire the source-side PAT/credential only after every known BI connection has been confirmed repointed.
 
+Step 2's Power BI repoint via the accelerator, not a per-report manual edit -- config-driven (the target workspace/connection lives in the JSON, not a CLI flag), preview first:
+
+<CodeBlock client:visible language="powershell" filename="repoint-powerbi.ps1" code={`# powerbi-on-databricks-migration-accelerator rewrites Power Query M in every
+# .pbip semantic model per ./configurations/*.json. Preview writes nothing.
+./PowerBI-migration-accelerator.ps1 -WhatIf -Verbose
+
+# review the diff, then run for real against the target config
+./PowerBI-migration-accelerator.ps1 -ConfigFilePath './configurations/target.json'`} />
+
 ## Validation
 
 - Confirm every BI connection identified in discovery has been repointed — reconcile against the discovery inventory, not against "everything the BI team remembered."

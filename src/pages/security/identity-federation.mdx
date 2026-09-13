@@ -7,6 +7,7 @@ description: 'Configure SSO, SCIM, and group provisioning for cross-cloud migrat
 import Callout from '../../components/Callout.tsx';
 import Checklist from '../../components/Checklist.tsx';
 import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
+import CodeBlock from '../../components/CodeBlock.tsx';
 
 # Identity federation
 
@@ -57,6 +58,27 @@ Before migrating, convert workspace-local groups to account-level groups — thi
 - Test SSO login to the target account with a non-admin user.
 - Verify group membership and account-level permissions.
 - Confirm service principals can authenticate with OAuth tokens.
+
+Group-parity check as a runnable gate, not a spot check -- confirms every source account-level group exists in target with the same membership before cutover:
+
+<CodeBlock client:visible language="python" filename="check_group_parity.py" code={`# Compare account-level groups between source and target before trusting SSO.
+from databricks.sdk import AccountClient
+
+src = AccountClient(host=SOURCE_ACCOUNT_HOST, account_id=SOURCE_ACCOUNT_ID)
+tgt = AccountClient(host=TARGET_ACCOUNT_HOST, account_id=TARGET_ACCOUNT_ID)
+
+src_groups = {g.display_name: {m.value for m in (g.members or [])} for g in src.groups.list()}
+tgt_groups = {g.display_name: {m.value for m in (g.members or [])} for g in tgt.groups.list()}
+
+missing = src_groups.keys() - tgt_groups.keys()
+if missing:
+    print(f"Missing in target: {sorted(missing)}")
+
+for name in src_groups.keys() & tgt_groups.keys():
+    diff = src_groups[name] ^ tgt_groups[name]
+    if diff:
+        print(f"Membership mismatch in '{name}': {diff}")
+`} />
 
 ## Rollback
 
