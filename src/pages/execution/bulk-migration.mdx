@@ -1,7 +1,7 @@
 ---
 title: 'Bulk migration'
 layout: ../../layouts/Layout.astro
-description: 'Execute waves 1-N at scale using the runbook and timing the pilot validated.'
+description: 'Execute waves 1-N at scale by running the accelerators the pilot proved — databricks-replicator, workspace-migration, the Terraform Exporter — not a hand-rolled parallel loop.'
 ---
 
 import Callout from '../../components/Callout.tsx';
@@ -10,17 +10,54 @@ import Checklist from '../../components/Checklist.tsx';
 
 # Bulk migration
 
-Bulk migration is the pilot's runbook, repeated across every remaining wave from [wave planning](/execution/wave-planning) — at scale, on a schedule, with the same reconciliation rigor. The goal at this stage is throughput and consistency, not discovery; anything still being discovered here should have surfaced during the [pilot](/execution/pilot).
+Bulk migration is the pilot's runbook, repeated across every remaining wave from [wave planning](/execution/wave-planning) — at scale, on a schedule, with the same reconciliation rigor. The goal at this stage is throughput and consistency, not discovery; anything still being discovered here should have surfaced during the [pilot](/execution/pilot). If the pilot ran through the real accelerators (it should have — see [pilot](/execution/pilot)), bulk migration is running the same accelerators again, wave by wave, not writing new migration code.
 
 <Callout client:visible variant="prerequisite" title="Don't start bulk migration on an unvalidated runbook">
   If the pilot retro found gaps in tooling, IAM mapping, or reconciliation, close them before wave 1 — bulk migration multiplies whatever is broken in the runbook across every remaining workload.
 </Callout>
 
-## Parallelizing within a wave
+## The default: run the accelerators per wave, not a script per table
 
-Waves group workloads by dependency, not by migration mechanics — within a wave, migrate independent tables/jobs in parallel to compress the timeline:
+<Callout client:visible variant="tip" title="dbxmig handoff -> databricks-replicator / workspace-migration, one config per wave">
+  Each wave is a set of catalogs and jobs, not an ad-hoc table list — so each wave gets its own accelerator run, driven by `dbxmig handoff`'s output rather than a wave-specific script:
 
-<CodeBlock client:visible language="python" filename="bulk_migrate.py" code={`from concurrent.futures import ThreadPoolExecutor, as_completed
+  <CodeBlock client:visible language="bash" filename="run_wave.sh" code={`# Scope this wave's inventory (catalogs/schemas the wave plan assigned here),
+# then emit the accelerator configs for exactly that scope -- see the
+# automation toolkit and dbxmig handoff.
+dbxmig -c migration.yaml handoff -i wave-2-inventory.json -o ./wave-2-handoff
+
+# databricks-replicator does the table/volume/metadata move for this wave's
+# catalogs. Concurrency is a WITHIN-catalog knob (concurrency.max_workers,
+# 1-64, default 8) -- catalogs in a wave still process one at a time, so
+# throughput comes from raising max_workers, not from adding catalogs.
+data-replicator wave-2-handoff/databricks-replicator/*.yaml \\
+  --target-catalogs "$(cat wave-2-target-catalogs.txt)"
+
+# workspace-migration picks up what the replicator doesn't: functions,
+# models, row filters/column masks, connections. Runs as its own DAB job --
+# from that tool's own checkout, not this one.
+cp wave-2-handoff/workspace-migration/config.yaml <workspace-migration-checkout>/config.yaml
+(cd <workspace-migration-checkout> && databricks bundle deploy --var migration_spn_id=<app-id> -t wave-2)
+
+# Jobs for this wave: the Terraform Exporter or a scripted bundle-init loop
+# (see workflows and jobs), scoped to this wave's job-ownership tags.`} />
+
+  This is the same sequence the pilot ran, at wave scale — see [pipelines and workflows](/pipelines/workflows-jobs) for the job-side detail and [Databricks migration tooling](/accelerators/databricks-tooling) for what each accelerator does and does not cover.
+</Callout>
+
+<Callout client:visible variant="warning" title="Parallelism has a real ceiling, and it's per-catalog, not per-wave">
+  databricks-replicator's own validated range for `concurrency.max_workers` is 1-64 (default 8) — and catalogs process **strictly sequentially**, confirmed from the tool's own source, not its README. A wave with 6 catalogs does not get 6x throughput by adding catalogs; it gets throughput from raising `max_workers` within whichever catalog is currently running, up to that ceiling. Size wave scope (catalogs per wave, not just tables per wave) with this in mind — see the [scale-aware timeline estimator](/tools/timeline-estimator) for how catalog count and worker concurrency actually compose into a wall-clock estimate.
+</Callout>
+
+<Callout client:visible variant="tip" title="Incremental re-runs are the mechanism, not a special mode">
+  Re-running the same accelerator config against an already-migrated catalog is not a fresh full copy — `databricks-replicator` reissues `CREATE OR REPLACE TABLE ... DEEP CLONE` per table, and `DEEP CLONE` only moves files that changed since the last clone. For a table still being written to during a wave's migration window, this is what lets an early clone run days before cutover and a final incremental clone run immediately before it, catching every version committed in between — the accelerator's normal behavior does this for you; it's not something the wave manifest needs to special-case.
+</Callout>
+
+## Fallback: an object type no accelerator covers
+
+The accelerators above don't move everything — materialized views, streaming tables, and anything outside Unity Catalog need a different mechanism (see the [accelerator map](/accelerators/databricks-tooling) for exactly what's out of scope). For that residual, a hand-rolled parallel copy is still sometimes the right tool — just don't reach for it as the default:
+
+<CodeBlock client:visible language="python" filename="bulk_migrate_fallback.py" code={`from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def migrate_table(table_name: str) -> dict:
     deep_clone(source=f"source_catalog.{table_name}", target=f"target_catalog.{table_name}")
@@ -39,12 +76,8 @@ if failed:
     raise RuntimeError(f"Reconciliation failed for: {failed}")
 `} />
 
-<Callout client:visible variant="warning" title="Parallelism has a ceiling">
-  Cloud storage APIs and Unity Catalog metastore operations both rate-limit. Tune `max_workers` against your source and target cloud's actual throttling limits — a naive "migrate everything at once" run degrades into throttling errors, not faster migration.
-</Callout>
-
-<Callout client:visible variant="tip" title="Re-run DEEP CLONE incrementally for tables still being written to">
-  `DEEP CLONE` only copies files that changed since the last clone — re-running it against an already-cloned target is cheap and copies just the delta. For a table that keeps accumulating new versions during a wave's migration window, don't treat the loop above as a single one-shot copy: run an initial clone early in the wave, then a final incremental clone immediately before that table's cutover to catch every version committed in between. Neither run preserves source's pre-migration history either way — see [known limitations](/troubleshooting/known-limitations) if that history needs to survive.
+<Callout client:visible variant="warning" title="Same ceiling applies here, by hand">
+  Cloud storage APIs and Unity Catalog metastore operations both rate-limit. Tune `max_workers` against your source and target cloud's actual throttling limits — a naive "migrate everything at once" run degrades into throttling errors, not faster migration. This is the same constraint databricks-replicator's own `max_workers` config manages for you above; the fallback script has to manage it by hand.
 </Callout>
 
 ## Per-wave sequence
@@ -53,9 +86,9 @@ if failed:
 |------|--------|
 | 1 | Confirm previous wave's exit criteria are met |
 | 2 | Freeze wave scope (no new tables/jobs added mid-wave) |
-| 3 | Migrate data in parallel per the wave manifest |
-| 4 | Reconcile every table/job against the pilot's validation harness |
-| 5 | Re-create jobs/pipelines in dependency order |
+| 3 | Run `dbxmig handoff` for this wave's inventory, then the accelerators it emits configs for |
+| 4 | Reconcile every table/job — Lakebridge Reconcile plus `dbxmig reconcile --live`, per [data reconciliation](/validation/data-reconciliation) |
+| 5 | Re-create jobs/pipelines via the Terraform Exporter or bundle-init, per [workflows and jobs](/pipelines/workflows-jobs) |
 | 6 | Grant access via Unity Catalog; verify with the owning team |
 | 7 | Hold wave sign-off before starting the next wave |
 
@@ -71,7 +104,7 @@ Maintain a single source of truth for wave status — a stalled or partially-mig
 
 ## Validation
 
-- Apply the pilot's reconciliation harness to every table and job — no wave exits on a manual spot-check alone.
+- Apply the pilot's reconciliation harness to every table and job — no wave exits on a manual spot-check alone. See [data reconciliation](/validation/data-reconciliation) for the Lakebridge Reconcile / `dbxmig reconcile` split.
 - Track failure patterns across waves; a recurring failure type (e.g. a specific data type or partition scheme) means fixing the tooling, not re-running the same fix per table.
 - Confirm each wave's owning team explicitly signs off before starting the next wave.
 
@@ -81,12 +114,13 @@ Roll back at wave granularity, not migration-wide — see [rollback](/execution/
 
 ## Automation opportunity
 
-- Generate wave manifests directly from the [dependency mapping](/discovery/dependency-mapping) output rather than hand-curating table lists.
+- Generate wave manifests directly from the [dependency mapping](/discovery/dependency-mapping) output and `dbxmig wave-plan` (see [wave planning](/execution/wave-planning)) rather than hand-curating table lists.
 - Build a dashboard from the wave-tracking table above so stakeholders can self-serve status instead of asking in standup.
 
 <Checklist client:visible title="Bulk migration discipline" items={[
   { id: 'freeze', label: 'Wave scope frozen before migration starts' },
-  { id: 'parallel', label: 'Parallelism tuned to cloud API rate limits' },
+  { id: 'accelerator-first', label: 'Wave runs through dbxmig handoff + the accelerators, not a hand-rolled parallel script, unless an object type genuinely isn\'t covered' },
+  { id: 'parallel', label: 'Parallelism tuned to the accelerator\'s own concurrency ceiling (or cloud API rate limits, for the fallback path)' },
   { id: 'reconcile', label: 'Every table/job reconciled with the pilot harness' },
   { id: 'tracking', label: 'Single source of truth for wave status maintained' },
   { id: 'signoff', label: 'Wave owner sign-off required before next wave starts' },
