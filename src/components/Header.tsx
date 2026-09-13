@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ThemeToggle from './ThemeToggle';
-import SearchOverlay from './SearchOverlay';
+import SearchTrigger from './SearchTrigger';
 import BrandGlyph from './BrandGlyph';
 import { BRAND_ICONS, type BrandIconSvg } from './logos/brandIcons';
 import { withBase } from '../lib/paths';
@@ -61,7 +61,7 @@ export default function Header({ onMenuToggle, menuOpen = false }: Props) {
         </a>
       </div>
       <div className="flex items-center gap-2">
-        <SearchOverlay />
+        <SearchTrigger />
         <ThemeToggle />
         <a
           href="https://github.com/jthiruveedula/databricks-cross-cloud-migration"
