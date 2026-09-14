@@ -48,9 +48,9 @@ MLflow experiment tracking is workspace-local — experiments, runs, metrics, an
 ## Use a maintained tool before hand-rolling this
 
 <Callout client:visible variant="tip" title="mlflow-export-import already solves the two footguns above">
-  [`mlflow/mlflow-export-import`](https://github.com/mlflow/mlflow-export-import) — maintained under the official MLflow GitHub org, Apache-2.0 — is a bulk export/import tool built for exactly this move: `export-experiment`/`import-experiment` and the bulk `export-all`/`import-all` variants read every MLflow object type (runs, experiments, registered models, logged models, traces, prompts, evaluation datasets) to an intermediate directory, then replay it into the target tracking server. It does not need source and target to reach each other directly — export now, import later, on a different network entirely.
+  [`mlflow/mlflow-export-import`](https://github.com/mlflow/mlflow-export-import) (official MLflow org, Apache-2.0) is a bulk export/import tool for exactly this: `export-all`/`import-all` reads every object type to an intermediate directory, then replays it into the target — source and target never need to reach each other directly.
 
-  It already avoids both defaults called out above: it pages `search_runs` via `page_token` rather than trusting a single page, and it reads `get_metric_history()` per metric rather than `run.data.metrics`. Prefer it over the script below for a real migration; the script is here to show the mechanics it's built to get right, and remains useful for a one-off run or a custom transformation the CLI doesn't expose.
+  It already avoids both defaults above: it pages `search_runs` via `page_token`, and reads `get_metric_history()` per metric rather than `run.data.metrics`. Prefer it for a real migration; the script below shows the mechanics and remains useful for a one-off or custom transformation.
 </Callout>
 
 <CodeBlock client:visible language="bash" filename="bulk migrate an experiment" code={`pip install git+https://github.com/mlflow/mlflow-export-import
@@ -65,7 +65,7 @@ import-experiment --experiment-name churn_model --input-dir /tmp/export
 # import-all  --input-dir  /tmp/export`} />
 
 <Callout client:visible variant="warning" title="It moves objects; it does not fix embedded paths or guarantee version numbers">
-  Two limits carry over regardless of which path you use. Custom artifact locations are **not** preserved on import — the target gets MLflow's default location, so the [artifact store URI portability](#artifact-store-uri-portability) check below still applies to anything a model's code hardcodes beyond the artifact root. And model version numbers are only preserved when no version was ever deleted at source, every version is exported, and `--use-threads` is off — on a legacy estate, assume at least one of those three is violated and keep the version map either way.
+  Custom artifact locations are **not** preserved on import — the [artifact store URI portability](#artifact-store-uri-portability) check below still applies. Version numbers are only preserved when no version was ever deleted, every version is exported, and `--use-threads` is off — assume one of those is violated on a legacy estate and keep the version map either way.
 </Callout>
 
 ## Migration script pattern

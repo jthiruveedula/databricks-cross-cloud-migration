@@ -149,21 +149,19 @@ If reconciliation fails beyond tolerance, halt cutover and re-sync. Do not proce
 ## A maintained tool that already does more than a hand-rolled query
 
 <Callout client:visible variant="tip" title="Lakebridge Reconcile — row, schema, data, and aggregate checks, with sampling built in">
-  [`databrickslabs/lakebridge`](https://github.com/databrickslabs/lakebridge)'s Reconcile module (161★, actively maintained — pushed within the last day at time of writing) does more than this page's own row-count-and-checksum query, and Databricks is a listed source system in its own right, not just a legacy-warehouse-to-Databricks tool — this covers Databricks-to-Databricks cross-cloud reconciliation directly:
+  [`databrickslabs/lakebridge`](https://github.com/databrickslabs/lakebridge)'s Reconcile module (161★, active) covers Databricks-to-Databricks reconciliation directly — Databricks is a listed source in its own right:
 
-  - **`row`** — a hash of each row, no join key needed; the right check when there's no reliable primary key.
-  - **`data`** — row and column values compared via join columns, with per-column mismatch detail.
-  - **`schema`** — column names and types, to catch a DDL migration gap the row/data checks wouldn't.
-  - **Aggregate reconciliation** — `MIN`/`MAX`/`COUNT`/`SUM`/`AVG`/`MEAN`/`MODE`/`STDDEV`/`VARIANCE`/`MEDIAN`, optionally grouped by column, when a full row-level diff is more than the check needs.
-  - **Sampling built in** — `sampling_options` caps how many mismatch / missing-in-source / missing-in-target rows get pulled per bucket for `data`/`all` reports (a count or a fraction); aggregate reconciliation always samples up to 50 rows per bucket regardless.
+  - **`row`** — hash of each row, no join key needed.
+  - **`data`** — row/column values via join columns, per-column mismatch detail.
+  - **`schema`** — column names and types.
+  - **Aggregate** — `MIN`/`MAX`/`COUNT`/`SUM`/`AVG`/`MEAN`/`MODE`/`STDDEV`/`VARIANCE`/`MEDIAN`, optionally grouped.
+  - **Sampling built in** — `sampling_options` caps mismatch/missing rows per bucket; aggregate reconciliation always samples up to 50.
 
-  Setup is a `databricks labs lakebridge configure-reconcile` plus a per-table JSON config (`recon_config_<source>_<catalog>_<report_type>.json`); the reconcile job runs on serverless by default. See the [Reconcile guide](https://databrickslabs.github.io/lakebridge/docs/reconcile/) and [configuration reference](https://databrickslabs.github.io/lakebridge/docs/reconcile/configuration/).
+  Setup: `databricks labs lakebridge configure-reconcile` plus a per-table JSON config; runs on serverless by default. See the [Reconcile guide](https://databrickslabs.github.io/lakebridge/docs/reconcile/).
 </Callout>
 
 <Callout client:visible variant="warning" title="Two names that come up in this search, and why neither is the answer here">
-  **`data-diff`** (Datafold's open-source cross-database row-diff tool) turns up in almost every search for this — it was **archived in May 2024** and the open-source version is no longer maintained. Don't build a dependency on it for a new migration.
-
-  **Great Expectations** is a real, viable option for functional/data-quality sampling checks (schema, completeness, range, distribution) on Spark DataFrames — but it is a general-purpose framework, not a migration tool: every expectation is authored per table, it has no built-in notion of "compare this source table to that target table," and it takes real setup investment before it produces anything. Reach for it when the check you need is about the *shape* of the data (nulls, ranges, uniqueness) rather than source-vs-target equality — Lakebridge Reconcile is the more direct fit for the latter.
+  **`data-diff`** (Datafold) was **archived May 2024** — don't build on it. **Great Expectations** is real for functional/quality sampling checks, but a general framework with no source-vs-target concept — good for data *shape* (nulls, ranges), not equality; Reconcile is the more direct fit for that.
 </Callout>
 
 ## Automation opportunity

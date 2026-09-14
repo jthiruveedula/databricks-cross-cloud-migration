@@ -52,13 +52,13 @@ Registered models carry more than the model artifact itself — version history,
 `copy_model_version()` is the tool Databricks recommends for moving model versions into Unity Catalog, and it is genuinely good: it takes a source `models:/name/version` URI and a three-level destination, and creates the destination model if it does not exist. It needs MLflow client 3.4.0 or above.
 
 <Callout client:visible variant="warning" title="It does not bridge two accounts, which is the case a cross-cloud migration is actually in">
-  `MlflowClient.copy_model_version()` copies **within one registry** the client is connected to — the Workspace Model Registry to Unity Catalog inside the same account, or between workspaces sharing a metastore. A cross-cloud move has two accounts, two metastores, and no shared registry, so this specific API call cannot span them.
+  `MlflowClient.copy_model_version()` copies **within one registry** — same account, or workspaces sharing a metastore. A cross-cloud move has two accounts, two metastores, no shared registry — this call can't span them.
 
-  When [metastore migration](/governance/metastore-migration) says model versions are "artifacts, not metadata", this is what it means: the fallback is **download the artifacts from source, then re-log and register in target**, which is what the script below does.
+  This is what [metastore migration](/governance/metastore-migration) means by "artifacts, not metadata": the fallback is **download from source, re-log and register in target**, as the script below does.
 </Callout>
 
 <Callout client:visible variant="tip" title="A maintained tool already does the cross-account copy — check it before hand-rolling">
-  [`mlflow/mlflow-export-import`](https://github.com/mlflow/mlflow-export-import)'s `copy-model-version` CLI is a different, more capable tool than the raw client method above: it explicitly supports **copying a UC model version to another UC metastore**, using two [Databricks CLI profiles](https://docs.databricks.com/en/dev-tools/cli/profiles.html) — one per account — as `--src-registry-uri`/`--dst-registry-uri`. Same requirement as the script below (whatever machine runs it needs valid credentials to both sides), but one command instead of one per model:
+  [`mlflow/mlflow-export-import`](https://github.com/mlflow/mlflow-export-import)'s `copy-model-version` CLI does what the raw client can't: copy a UC model version to a **different UC metastore**, via two [Databricks CLI profiles](https://docs.databricks.com/en/dev-tools/cli/profiles.html):
 
   <CodeBlock
     client:visible
@@ -71,7 +71,7 @@ Registered models carry more than the model artifact itself — version history,
   --dst-registry-uri databricks-uc://target-profile`}
   />
 
-  Use **deep copy** (the default) — it copies the backing run into the target too, so the migrated version's lineage points at a real target-side run instead of a dead source run ID; this is the tool's version of the lineage caveat above. Two limits still apply regardless of which path you use: a custom artifact location is not preserved on import, and version numbers are only guaranteed to match when no source version was ever deleted, every version is copied, and threading is off — keep the version map either way.
+  Use **deep copy** (the default) — it copies the backing run too, so lineage points at a real target-side run. Same two limits as below: artifact locations aren't preserved, and version numbers only match under narrow conditions — keep the version map either way.
 </Callout>
 
 ### Cross-cloud: download, re-log, re-alias
