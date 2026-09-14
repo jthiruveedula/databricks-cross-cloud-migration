@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Terraform Factory Modules: Verify Before You Depend",
+    "output": "terraform-patterns.workflow.html",
+    "viewBox": [1400, 620],
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      { "id": "found", "label": "A search turns up a candidate", "focus": ["found", "verify"], "note": "GitHub's activity feed and star count are not proof of a maintained module." },
+      { "id": "traps", "label": "Two traps look fine at a glance", "focus": ["verify", "shape"], "note": "One looks active from issues/PRs alone; one forbids the fork everyone assumes is allowed." },
+      { "id": "outcome", "label": "Cite, automate, or skip", "focus": ["shape", "cite", "automate"], "note": "Only a maintained, permissively-licensed, cleanly-shaped module is worth automating against." }
+    ]
+  },
+  "lanes": [
+    { "id": "discovery", "label": "Discovery" },
+    { "id": "verification", "label": "Verification" },
+    { "id": "decision", "label": "Decision" }
+  ],
+  "phases": [
+    { "id": "find", "label": "Find", "fromCol": 0, "toCol": 1 },
+    { "id": "verify", "label": "Verify", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "decide", "label": "Decide", "fromCol": 4, "toCol": 5 }
+  ],
+  "mainPath": ["found", "verify", "shape", "cite", "automate"],
+  "nodes": [
+    { "id": "found", "lane": "discovery", "col": 0, "type": "external", "label": "Candidate", "sublabel": "search result" },
+    { "id": "verify", "lane": "verification", "col": 2, "type": "backend", "label": "Verify", "sublabel": "commit + license", "tag": "2 traps here" },
+    { "id": "shape", "lane": "verification", "col": 3, "type": "backend", "label": "Read Source", "sublabel": "confirm shape" },
+    { "id": "cite", "lane": "decision", "col": 4, "type": "database", "label": "Cite", "sublabel": "with caveats" },
+    { "id": "automate", "lane": "decision", "col": 5, "type": "database", "label": "Automate", "sublabel": "rare", "tag": "clean shape" }
+  ],
+  "edges": [
+    { "from": "found", "to": "verify", "variant": "emphasis" },
+    { "from": "verify", "to": "shape", "variant": "emphasis" },
+    { "from": "shape", "to": "cite", "variant": "emphasis" },
+    { "from": "cite", "to": "automate", "variant": "default" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Two real traps", "items": ["A repo can show recent stars/issues/PRs with zero commits merged to main in over a year", "A repo can compose genuinely well-shaped modules under a license that forbids modifying them", "Both pass a casual GitHub-page glance -- neither passes reading pushed_at and LICENSE directly"] },
+    { "dot": "amber", "title": "Verification order matters", "items": ["Commit date first -- staleness alone rules out most candidates", "License second -- a stale-but-permissive module can still be pinned and used as-is", "Input shape last -- only worth reading source once the first two gates pass"] },
+    { "dot": "emerald", "title": "Automation is the rare outcome", "items": ["Most candidates end at 'cite with caveats', not 'automate'", "Only a maintained module with a clean list-driven shape justifies new dbxmig code", "Forcing automation onto a stale or narrow shape means maintaining someone else's schema drift"] }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Lakebridge Reconcile: One Engine, Four Report Types",
+    "output": "data-reconciliation.dataflow.html",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "no-key", "label": "No reliable primary key?", "focus": ["source", "target", "engine"], "note": "row hashes every column with no join key needed -- one of four report types this engine runs." },
+      { "id": "full-fidelity", "label": "Need per-column mismatch detail?", "focus": ["engine", "sample"], "note": "data joins on key columns and samples the mismatch/missing buckets." },
+      { "id": "shape-only", "label": "Just checking the shape?", "focus": ["engine"], "note": "schema and aggregate skip row-level comparison entirely." }
+    ]
+  },
+  "stages": [
+    { "label": "Source" },
+    { "label": "Reconcile" },
+    { "label": "Output" }
+  ],
+  "nodes": [
+    { "id": "source", "type": "database", "label": "Source Table", "sublabel": "any listed source", "stage": 0, "row": 0 },
+    { "id": "target", "type": "database", "label": "Target Table", "sublabel": "Databricks / UC", "stage": 0, "row": 2 },
+    { "id": "engine", "type": "backend", "label": "Reconcile", "sublabel": "schema, row, data, aggregate", "stage": 1, "row": 1, "tag": "4 report types" },
+    { "id": "sample", "type": "database", "label": "Sample Report", "sublabel": "mismatch buckets, capped", "stage": 2, "row": 1 }
+  ],
+  "flows": [
+    { "id": "source-in", "from": "source", "to": "engine", "label": "read", "classification": "source rows", "variant": "default" },
+    { "id": "target-in", "from": "target", "to": "engine", "label": "read", "classification": "target rows", "variant": "default" },
+    { "id": "engine-sample", "from": "engine", "to": "sample", "label": "sampled diffs", "classification": "sampling_options", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Four checks, one config", "items": ["schema catches a DDL gap the others wouldn't", "row hashes every column with no primary key required", "data adds join-column comparison and per-column mismatch detail", "aggregate compares MIN/MAX/COUNT/SUM/AVG/MEAN/MODE/STDDEV/VARIANCE/MEDIAN, optionally grouped"] },
+    { "dot": "amber", "title": "Sampling is built in, not bolted on", "items": ["data and all report types cap mismatch / missing-in-source / missing-in-target rows via sampling_options", "aggregate always samples up to 50 rows per bucket regardless of sampling_options", "Databricks is a listed source in its own right -- this runs Databricks-to-Databricks, not only legacy-to-Databricks"] },
+    { "dot": "emerald", "title": "Setup is one command plus a config file", "items": ["databricks labs lakebridge configure-reconcile provisions workspace resources once", "one JSON config per source/catalog/report-type, auto-named by convention", "the job runs on serverless compute by default -- no cluster to manage"] }
+  ]
+}
