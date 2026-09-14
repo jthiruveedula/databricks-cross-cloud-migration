@@ -74,6 +74,8 @@ const SPECS = [
   { type: 'workflow', name: 'scenario-small-lift-and-shift.workflow' },
   { type: 'workflow', name: 'scenario-multi-workspace-scale.workflow' },
   { type: 'workflow', name: 'scenario-ml-heavy-estate.workflow' },
+  { type: 'workflow', name: 'terraform-patterns.workflow' },
+  { type: 'dataflow', name: 'data-reconciliation.dataflow' },
 ];
 
 const validateOnly = process.argv.includes('--validate');

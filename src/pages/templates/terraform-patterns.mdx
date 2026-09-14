@@ -7,6 +7,7 @@ description: 'Reusable Terraform modules for target Databricks foundations.'
 import Callout from '../../components/Callout.tsx';
 import CodeBlock from '../../components/CodeBlock.tsx';
 import Checklist from '../../components/Checklist.tsx';
+import ArchifyDiagram from '../../components/ArchifyDiagram.tsx';
 
 # Terraform patterns
 
@@ -51,6 +52,14 @@ This is distinct from [UCX-assisted migration](/governance/ucx-strategy): the ex
 </Callout>
 
 ## Factory-pattern modules — what's real, what's stale
+
+<ArchifyDiagram
+  client:visible
+  name="terraform-patterns.workflow"
+  type="workflow"
+  title="Verify before you depend: commit date, then license, then source"
+  caption="Two traps pass a casual glance: a repo that looks active from its issue/PR/star feed but hasn't merged to main in over a year, and a well-shaped module whose license forbids the fork everyone assumes is allowed. Automation is the rare outcome — most candidates end at 'cite with caveats'."
+/>
 
 <Callout client:visible variant="warning" title="Verify staleness yourself before depending on any of these">
   GitHub's `updated_at` bumps on stars/comments — not proof of a code push. Dates below are actual last-commit (`pushed_at`), confirmed by reading the repo.

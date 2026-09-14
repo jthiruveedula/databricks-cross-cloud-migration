@@ -148,6 +148,14 @@ If reconciliation fails beyond tolerance, halt cutover and re-sync. Do not proce
 
 ## A maintained tool that already does more than a hand-rolled query
 
+<ArchifyDiagram
+  client:visible
+  name="data-reconciliation.dataflow"
+  type="dataflow"
+  title="One engine, four report types, sampling built in"
+  caption="Databricks is a listed source in its own right — this runs Databricks-to-Databricks, not only legacy-to-Databricks. schema, row, data, and aggregate share one config; sampling is built into the engine, not bolted on afterward."
+/>
+
 <Callout client:visible variant="tip" title="Lakebridge Reconcile — row, schema, data, and aggregate checks, with sampling built in">
   [`databrickslabs/lakebridge`](https://github.com/databrickslabs/lakebridge)'s Reconcile module (161★, active) covers Databricks-to-Databricks reconciliation directly — Databricks is a listed source in its own right:
 
