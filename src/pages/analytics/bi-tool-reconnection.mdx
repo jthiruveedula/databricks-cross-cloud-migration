@@ -80,7 +80,7 @@ Keep the source-side connection credential valid (not yet retired) through the [
 
 ## Automation opportunity
 
-- For a Power BI estate of any size, [`databricks-solutions/powerbi-on-databricks-migration-accelerator`](https://github.com/databricks-solutions/powerbi-on-databricks-migration-accelerator) bulk-repoints `.pbip` semantic models at Databricks SQL + Unity Catalog by rewriting Power Query M from one validated JSON configuration, with `-WhatIf` previews and optional dataset backups. It changes the data source only — reports are not converted to Metric Views or AI/BI dashboards, and the gateway M2M step above stays manual. See [Databricks migration tooling](/accelerators/databricks-tooling).
+- For a Power BI estate of any size, [`powerbi-on-databricks-migration-accelerator`](https://github.com/databricks-solutions/powerbi-on-databricks-migration-accelerator) bulk-repoints `.pbip` models at Databricks SQL + UC via one JSON config, with `-WhatIf` previews. Changes the data source only — the gateway M2M step above stays manual. See [Databricks migration tooling](/accelerators/databricks-tooling).
 - Script service-principal + OAuth credential provisioning in target UC as part of the same automation that grants table access per wave — see [grants and roles](/governance/grants-and-roles).
 - Where the BI tool exposes an API (Tableau REST API, Looker API), automate connection metadata updates in bulk rather than per-report manual edits; reserve manual reconfiguration for tools that genuinely require it (e.g. Power BI gateway M2M today).
 

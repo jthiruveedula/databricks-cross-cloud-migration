@@ -118,44 +118,33 @@ const PHASE_META: Record<string, { label: string; color: string }> = {
 // named and exported so a reader can see exactly what the model assumed.
 // ---------------------------------------------------------------------------
 
-/** Wall-clock per table for one worker, end to end: DEEP CLONE (metadata + file
- *  copy), grant replay, then the reconciliation query. A table is never one API
- *  call. The accelerated figure assumes a maintained accelerator batching and
- *  retrying these (databricks-replicator, workspace-migration); the manual
- *  figure assumes a hand-rolled loop with per-table review. */
+/** Wall-clock per table per worker: DEEP CLONE, grant replay, reconciliation.
+ *  Accelerated assumes a maintained accelerator (databricks-replicator,
+ *  workspace-migration); manual assumes a hand-rolled loop. */
 export const SECONDS_PER_TABLE_ACCELERATED = 45;
 export const SECONDS_PER_TABLE_MANUAL = 180;
 
-/** Unity Catalog and cloud storage APIs rate-limit per account, so worker count
- *  buys throughput linearly only until the limit binds, then flattens hard.
- *  Modelled as a saturating exponential rather than a linear speedup, with the
- *  ceiling set to databricks-replicator's own validated range for
- *  `concurrency.max_workers` (1-64, default 8 -- confirmed directly against
- *  config/models.py, not the README). "Scale worker count to the source
- *  cloud's actual per-account API rate limit, not to an arbitrary bigger-is-
- *  faster instinct" -- /execution/large-scale-data-transfer. Note this is a
- *  within-catalog ceiling only: the same tool processes catalogs strictly
- *  sequentially, so raising this past 64 buys nothing and adding catalogs
- *  does not add parallelism the way adding workers does. */
+/** UC/cloud-storage APIs rate-limit per account, so worker count saturates
+ *  (exponential, not linear). Ceiling = databricks-replicator's own
+ *  `concurrency.max_workers` range (1-64, default 8; confirmed against
+ *  config/models.py). Within-catalog only -- the tool processes catalogs
+ *  sequentially, so this doesn't compound across catalogs. */
 export const WORKER_SATURATION_CEILING = 64;
 
 /** Bulk migration runs in scheduled windows against a live source, not 24/7. */
 export const MIGRATION_HOURS_PER_WEEK = 60;
 
-/** Object listing, retries, and the small-file penalty. Same factor the
- *  transfer-time formula on /execution/large-scale-data-transfer uses. */
+/** Object listing, retries, small-file penalty -- same factor as the
+ *  transfer-time formula on /execution/large-scale-data-transfer. */
 export const TRANSFER_OVERHEAD_FACTOR = 1.35;
 
-/** Fixed ceremony per wave regardless of its size: scope freeze, reconciliation
- *  gate, owner sign-off. This is what makes a 50k-table estate a multi-quarter
- *  program even when the clone itself finishes in days. */
+/** Fixed per-wave ceremony (scope freeze, reconciliation gate, sign-off)
+ *  regardless of wave size. */
 export const WAVE_OVERHEAD_WEEKS_ACCELERATED = 0.6;
 export const WAVE_OVERHEAD_WEEKS_MANUAL = 1.0;
 
-/** Jobs deploy in bulk (Asset Bundles, Terraform exporter). What costs calendar
- *  time is the fraction that cannot be mechanically translated -- file-arrival
- *  triggers backed by cloud-native event sources, cross-cloud node types,
- *  hardcoded workspace ids. See /pipelines/workflows-jobs. */
+/** Jobs deploy in bulk; only the non-mechanical fraction (file-arrival
+ *  triggers, cross-cloud node types, hardcoded IDs) costs calendar time. */
 export const MANUAL_JOB_FRACTION_ACCELERATED = 0.12;
 export const MANUAL_JOB_FRACTION_MANUAL = 0.35;
 
@@ -490,22 +479,22 @@ const BOTTLENECK_COPY: Record<Bottleneck, { title: string; detail: string }> = {
   objects: {
     title: 'Per-object throughput is the constraint',
     detail:
-      'The window is set by how many tables per hour the pipeline can clone, grant and reconcile — not by bytes and not by headcount. Adding engineers does not move this number; adding accelerator workers does, until the API rate limit binds. Raise concurrency, and cut wave count before cutting scope.',
+      'Set by tables/hour the pipeline can clone, grant and reconcile — not bytes, not headcount. More accelerator workers help until the API rate limit binds. Cut wave count before cutting scope.',
   },
   bytes: {
     title: 'Raw transfer bandwidth is the constraint',
     detail:
-      'More tables per hour will not help — the bytes cannot move faster over this path. Fix the pipe before the schedule: a private interconnect or a transfer appliance, procured during Foundation, not Cutover.',
+      'The bytes cannot move faster over this path. Fix the pipe before the schedule — a private interconnect or transfer appliance, procured during Foundation, not Cutover.',
   },
   code: {
     title: 'Code conversion is the constraint',
     detail:
-      'The estate is small enough that machines finish before people do. This is the one bottleneck that responds to team size and to AI-assisted conversion — the data path has spare capacity.',
+      'The estate is small enough that machines finish before people do — the one bottleneck that responds to team size and AI-assisted conversion.',
   },
   waves: {
     title: 'Wave ceremony is the constraint',
     detail:
-      'The clone finishes fast; the program does not. Every wave carries a scope freeze, a reconciliation gate and an owner sign-off regardless of how many tables it holds. At this table count the fixed cost per wave outweighs the moving of data — widen the waves, or accept that the calendar is governance, not engineering.',
+      'The clone finishes fast; the program does not. Every wave carries a scope freeze, reconciliation gate and owner sign-off regardless of size — widen the waves, or accept the calendar is governance, not engineering.',
   },
   none: { title: 'No single constraint dominates', detail: 'Object throughput, bandwidth and code conversion are within range of each other.' },
 };
@@ -791,9 +780,8 @@ export default function TimelineEstimator() {
                     {calculated.scale.effectiveWorkers < parallelWorkers * 0.75 && (
                       <p className="mt-3 border-t border-[var(--border)] pt-3 text-xs leading-relaxed text-[var(--ink-muted)]">
                         Only {calculated.scale.effectiveWorkers} of the {parallelWorkers} requested
-                        workers do useful work — Unity Catalog and cloud storage APIs rate-limit per
-                        account, so past roughly {WORKER_SATURATION_CEILING} the extra workers earn
-                        retries, not throughput.
+                        workers do useful work — past roughly {WORKER_SATURATION_CEILING}, APIs
+                        rate-limit and extra workers just earn retries.
                       </p>
                     )}
                   </div>
@@ -834,24 +822,19 @@ export default function TimelineEstimator() {
 
       <p className="mt-6 text-xs leading-relaxed text-[var(--ink-subtle)]">
         <strong className="text-[var(--ink-muted)]">How the scale model works.</strong> Past a
-        table count, the window is the <em>worst</em> of three independent constraints — per-object
-        throughput, raw bandwidth, and code conversion — plus fixed ceremony per wave. Not their
-        sum: bytes move while people convert code. Only the code term responds to team size; a
-        clone-bound migration does not go faster because more engineers joined. Worker concurrency
-        saturates against Unity Catalog and cloud storage API rate limits rather than scaling
-        linearly. The transfer term uses the same formula published on{' '}
+        table count, the window is the <em>worst</em> of three constraints — object throughput,
+        raw bandwidth, code conversion — plus per-wave ceremony, not their sum. Only code
+        conversion speeds up with more people; workers saturate against real API limits. Transfer
+        uses the same formula as{' '}
         <a href="/execution/large-scale-data-transfer" className="underline hover:text-[var(--accent)]">
           large-scale data transfer
         </a>{' '}
-        (TB × 8 × 1024 × 1.35 ÷ Gbps ÷ 3600) so the tool and the runbook cannot drift apart. Jobs
-        are treated as bulk-deployable (Asset Bundles, Terraform exporter) with only a
-        non-mechanical fraction — file-arrival triggers, cross-cloud node types, hardcoded
-        workspace ids — costing calendar time. Per-table seconds, the worker ceiling, and per-wave
-        overhead are <strong className="text-[var(--ink-muted)]">planning defaults to replace with
-        your own pilot measurements</strong>; the runbook's own instruction is measure, don't
-        assume. Estates far outside the published benchmark range (tens of thousands of tables,
-        thousands of jobs) extrapolate beyond any cited case study — treat the traditional
-        comparison as a directional contrast, not a forecast.
+        (TB × 8 × 1024 × 1.35 ÷ Gbps ÷ 3600). Jobs are bulk-deployable; only the non-mechanical
+        fraction (triggers, node types, hardcoded IDs) costs calendar time. Per-table seconds, the
+        worker ceiling, and wave overhead are{' '}
+        <strong className="text-[var(--ink-muted)]">planning defaults — replace with your own
+        pilot measurements</strong>. Estates far outside published benchmarks (tens of thousands of
+        tables) extrapolate beyond any cited case study.
         <br /><br />
         Sources: Databricks —{' '}
         <a href="https://www.databricks.com/blog/introducing-lakebridge-free-open-data-migration-databricks-sql" target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--accent)]">
