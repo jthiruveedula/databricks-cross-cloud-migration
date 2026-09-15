@@ -1,6 +1,5 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import Card from '../components/Card.tsx';
 import MigrationPlanner from '../components/MigrationPlanner.tsx';
 import MigrationFlowDiagram from '../components/MigrationFlowDiagram.tsx';
 import Hero from '../components/Hero.tsx';
@@ -8,18 +7,31 @@ import MetricsBand from '../components/MetricsBand.tsx';
 import MigrationJourney from '../components/MigrationJourney.tsx';
 import RunbookStagesFlow from '../components/RunbookStagesFlow.tsx';
 import CtaBand from '../components/CtaBand.tsx';
-import { withBase } from '../lib/paths';
-import { ArrowRight, BookOpen, Cloud, Shield, Cpu, Workflow, ClipboardList, Activity, Wrench, Route } from 'lucide-react';
+import SectionGrid from '../components/SectionGrid.tsx';
+import { Route } from 'lucide-react';
 
+// icon is a string key into SectionGrid's own ICONS map, not an imported component --
+// a client:visible island can't accept a function reference as a prop (see SectionGrid.tsx).
 const sections = [
-  { title: 'Overview', description: 'Migration drivers, archetypes, and decision framework.', href: '/overview/what-is-cross-cloud-migration', icon: BookOpen },
-  { title: 'Discovery', description: 'Inventory workspaces, assets, dependencies, and risks.', href: '/discovery/workspace-inventory', icon: ClipboardList },
-  { title: 'Cloud mappings', description: 'Azure ↔ AWS ↔ GCP construct equivalency matrix.', href: '/cloud-mappings/cross-cloud-equivalency-matrix', icon: Cloud },
-  { title: 'Governance', description: 'Unity Catalog, metastore, grants, and legacy Hive.', href: '/governance/unity-catalog-strategy', icon: Shield },
-  { title: 'Compute', description: 'Clusters, warehouses, policies, runtimes, and libraries.', href: '/compute/cluster-migration', icon: Cpu },
-  { title: 'Pipelines', description: 'Workflows, DLT, orchestrators, and CI/CD promotion.', href: '/pipelines/workflows-jobs', icon: Workflow },
-  { title: 'Execution', description: 'Waves, cutover, rollback, and hypercare.', href: '/execution/wave-planning', icon: Activity },
-  { title: 'Validation', description: 'Technical, data, security, and business sign-off.', href: '/validation/technical-validation', icon: Activity },
+  { title: 'Overview', description: 'Migration drivers, archetypes, and decision framework.', href: '/overview/what-is-cross-cloud-migration', icon: 'BookOpen' },
+  { title: 'Discovery', description: 'Inventory workspaces, assets, dependencies, and risks.', href: '/discovery/workspace-inventory', icon: 'ClipboardList' },
+  { title: 'Cloud mappings', description: 'Azure ↔ AWS ↔ GCP construct equivalency matrix.', href: '/cloud-mappings/cross-cloud-equivalency-matrix', icon: 'Cloud' },
+  { title: 'Governance', description: 'Unity Catalog, metastore, grants, and legacy Hive.', href: '/governance/unity-catalog-strategy', icon: 'Shield' },
+  { title: 'Security', description: 'IAM mapping, identity federation, secrets, and network security.', href: '/security/iam-mapping', icon: 'Lock' },
+  { title: 'Compute', description: 'Clusters, warehouses, policies, runtimes, and libraries.', href: '/compute/cluster-migration', icon: 'Cpu' },
+  { title: 'Pipelines', description: 'Workflows, DLT, orchestrators, and CI/CD promotion.', href: '/pipelines/workflows-jobs', icon: 'Workflow' },
+  { title: 'Analytics', description: 'SQL queries, dashboards, alerts, and BI tool reconnection.', href: '/analytics/dashboards', icon: 'BarChart3' },
+  { title: 'ML', description: 'MLflow, model registry, feature assets, and serving.', href: '/ml/mlflow', icon: 'Brain' },
+  { title: 'Execution', description: 'Waves, cutover, rollback, and hypercare.', href: '/execution/wave-planning', icon: 'Activity' },
+  { title: 'Validation', description: 'Technical, data, security, and business sign-off.', href: '/validation/technical-validation', icon: 'Activity' },
+  { title: 'Accelerators', description: 'Ready-made tooling — UCX, Lakebridge, and the databricks-solutions stack.', href: '/accelerators/databricks-tooling', icon: 'Zap' },
+  { title: 'Templates', description: 'The dbxmig toolkit, Terraform patterns, checklists, and RACI.', href: '/templates/automation-toolkit', icon: 'FileText' },
+  { title: 'Collaboration', description: 'Delta Sharing, Lakehouse Federation, and dual-run CDC.', href: '/collaboration/cross-cloud-collaboration', icon: 'Share2' },
+  { title: 'Troubleshooting', description: 'Common errors, anti-patterns, and known limitations.', href: '/troubleshooting/faq', icon: 'AlertTriangle' },
+];
+
+const toolsSections = [
+  { title: 'Migration Tools', description: 'Interactive planners, calculators, and builders to support migration execution.', href: '/tools', icon: 'Wrench' },
 ];
 ---
 
@@ -42,12 +54,12 @@ const sections = [
     <MigrationPlanner client:load />
   </div>
 
-  <div class="card-grid my-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-    {sections.map((s) => <Card href={withBase(s.href)} title={s.title} description={s.description} icon={s.icon} />)}
+  <div class="my-16">
+    <SectionGrid client:visible sections={sections} />
   </div>
 
-  <div class="card-grid my-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-    <Card href={withBase('/tools')} title="Migration Tools" description="Interactive planners, calculators, and builders to support migration execution." icon={Wrench} />
+  <div class="my-12">
+    <SectionGrid client:visible sections={toolsSections} columns="sm:grid-cols-2 lg:grid-cols-3" />
   </div>
 
   <div class="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-6 md:p-8">
