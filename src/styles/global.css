@@ -529,17 +529,6 @@ html.theme-transitioning *::after {
   filter: brightness(1.18);
 }
 
-/* Scroll-aware card-grid stagger (replaces CSS-only stagger) */
-.card-grid > * {
-  opacity: 0;
-  transform: translateY(1rem);
-  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
-}
-.card-grid > *.is-visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 /* Scroll-reveal for article content — subtle fade-up as blocks enter view.
    .reveal-block starts hidden; .is-revealed (added by the IntersectionObserver
    in Layout.astro) animates it in. Reduced-motion users get everything shown
