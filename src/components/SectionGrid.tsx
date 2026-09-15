@@ -38,6 +38,10 @@ const item = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
 };
 
+// Animate Card directly, not a div wrapped around it -- see the comment on Card's
+// forwardRef for why a separate wrapper caused a CSS Grid row-height mismatch.
+const MotionCard = motion(Card);
+
 /**
  * Staggered scroll-reveal grid for the landing page's section cards. framer-motion's
  * variant propagation (parent staggerChildren -> child variants) does the stagger;
@@ -49,16 +53,21 @@ export default function SectionGrid({ sections, columns = 'sm:grid-cols-2 lg:gri
 
   return (
     <motion.div
-      className={`card-grid grid gap-6 ${columns}`}
+      className={`grid gap-6 ${columns}`}
       initial={reduceMotion ? false : 'hidden'}
       whileInView="visible"
       viewport={{ once: true, margin: '-60px' }}
       variants={reduceMotion ? undefined : container}
     >
       {sections.map((s) => (
-        <motion.div key={s.title} variants={reduceMotion ? undefined : item}>
-          <Card href={withBase(s.href)} title={s.title} description={s.description} icon={ICONS[s.icon]} />
-        </motion.div>
+        <MotionCard
+          key={s.title}
+          variants={reduceMotion ? undefined : item}
+          href={withBase(s.href)}
+          title={s.title}
+          description={s.description}
+          icon={ICONS[s.icon]}
+        />
       ))}
     </motion.div>
   );

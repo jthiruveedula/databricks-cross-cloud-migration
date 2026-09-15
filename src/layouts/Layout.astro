@@ -94,29 +94,6 @@ const pageTitle = title === siteName ? title : `${title} | ${siteName}`;
         <Footer />
       </div>
     </div>
-    <!-- Scroll-aware card-grid stagger -->
-    <script is:inline>
-      document.addEventListener('DOMContentLoaded', () => {
-        const cards = document.querySelectorAll('.card-grid > *');
-        if (!cards.length) return;
-        
-        const observer = new IntersectionObserver(
-          (entries) => {
-            entries.forEach((entry, i) => {
-              if (entry.isIntersecting) {
-                setTimeout(() => {
-                  entry.target.classList.add('is-visible');
-                }, i * 80);
-                observer.unobserve(entry.target);
-              }
-            });
-          },
-          { rootMargin: '-40px', threshold: 0.1 }
-        );
-        
-        cards.forEach((card) => observer.observe(card));
-      });
-    </script>
     <!-- Scroll-reveal for article content -->
     <script is:inline>
       (function () {
@@ -165,14 +142,6 @@ const pageTitle = title === siteName ? title : `${title} | ${siteName}`;
           return originalSetItem.apply(this, arguments);
         };
       })();
-    </script>
-    <script is:inline>
-      document.addEventListener('astro:after-swap', () => {
-        const cards = document.querySelectorAll('.card-grid > *');
-        cards.forEach((card, i) => {
-          setTimeout(() => card.classList.add('is-visible'), i * 80);
-        });
-      });
     </script>
     <!-- Copy buttons on code blocks -->
     <script is:inline>

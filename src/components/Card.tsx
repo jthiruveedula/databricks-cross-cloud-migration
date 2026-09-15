@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import { ArrowRight } from 'lucide-react';
 
 interface Props {
@@ -9,10 +9,20 @@ interface Props {
   className?: string;
 }
 
-export default function Card({ href, title, description, icon, className = '' }: Props) {
+// forwardRef so callers that need to animate this exact element (e.g. SectionGrid's
+// `motion(Card)`) can attach directly to it -- animating a wrapper div around a plain
+// Card left CSS Grid measuring the wrapper's auto-row height against the wrapper's own
+// box, which disagreed with the Card's actual content height once the two diverged
+// (grid stretch shrinks a box below its content's natural size unless something else
+// constrains it -- the wrapper had nothing to constrain it to besides the row track).
+const Card = forwardRef<HTMLAnchorElement | HTMLDivElement, Props>(function Card(
+  { href, title, description, icon, className = '' },
+  ref,
+) {
   const Wrapper = href ? 'a' : 'div';
   return (
     <Wrapper
+      ref={ref as never}
       href={href}
       className={`
         group relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-6
@@ -36,4 +46,6 @@ export default function Card({ href, title, description, icon, className = '' }:
       </div>
     </Wrapper>
   );
-}
+});
+
+export default Card;
