@@ -8,7 +8,11 @@
   --surface-hover: #f1f5f9;
   --ink: #1b3139;
   --ink-muted: #475569;
-  --ink-subtle: #94a3b8;
+  /* #94a3b8 (2.56:1 on white) failed WCAG AA for the label/caption/placeholder text this
+     token is actually used for in 28 files -- not just the decorative-icon cases contrast
+     rules exempt. #64748b clears 4.5:1 (4.76:1 measured) while staying in the same slate
+     family, so nothing using this token needs its own override. */
+  --ink-subtle: #64748b;
   --border: #e2e8f0;
   /* Databricks brand: Lava (#FF3621) accent on Navy (#1B3139) ink. */
   --accent: #ff3621;
@@ -30,7 +34,10 @@
   --surface-hover: #1e293b;
   --ink: #f8fafc;
   --ink-muted: #94a3b8;
-  --ink-subtle: #64748b;
+  /* Was #64748b (3.96:1 on #0b1120, fails 4.5:1). #7e8ea4 clears 5.64:1 while staying
+     visibly dimmer than --ink-muted -- reusing #94a3b8 here would pass contrast but
+     collapse the muted/subtle distinction into one shade. See the :root comment above. */
+  --ink-subtle: #7e8ea4;
   --border: #1e293b;
   --accent: #ff6a52;
   --accent-soft: rgba(255, 106, 82, 0.14);
